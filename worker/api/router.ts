@@ -1,24 +1,28 @@
-// Roteador da API de leitura. Cada módulo de rota mora no seu arquivo (market.ts, clock.ts, player.ts, alerts.ts).
+// Roteador da API de leitura. Contrato: shared/types.ts e roadmap/2026-10-29-guarita-fase1.md § Contrato.
+// Cada módulo mora no seu arquivo: market.ts e clock.ts (b), player.ts (c), alerts.ts (e).
 import type { Env } from '../env';
+import { routeMarket } from './market';
+import { routeClock } from './clock';
+import { routePlayer } from './player';
+import { routeAlerts } from './alerts';
+
+type Route = (request: Request, url: URL, env: Env, ctx: ExecutionContext) => Promise<Response | null>;
+const ROUTES: Route[] = [routeMarket, routeClock, routePlayer, routeAlerts];
 
 export async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === '/api/health') {
     let hub: unknown = null;
-    let core: unknown = null;
     try {
-      const stub = env.HUB.get(env.HUB.idFromName('main'));
-      hub = await (await stub.fetch('https://hub/health')).json();
+      hub = await (await env.HUB.get(env.HUB.idFromName('main')).fetch('https://hub/health')).json();
     } catch (e) {
       hub = { error: String(e) };
     }
-    try {
-      core = await (await env.CORE.fetch('https://core/internal/health')).json();
-    } catch (e) {
-      core = { error: String(e) };
-    }
-    return Response.json({ ok: true, hub, core, at: new Date().toISOString() });
+    return Response.json({ ok: true, hub, at: new Date().toISOString() });
   }
-  void ctx;
+  for (const route of ROUTES) {
+    const res = await route(request, url, env, ctx);
+    if (res) return res;
+  }
   return Response.json({ error: 'rota não encontrada' }, { status: 404 });
 }
