@@ -27,11 +27,13 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
 - **"Bolsa do Jornaleiro" não existe** → no PT-BR do jogo T1 é **Calouro**, T2 Novato, T3 **Iniciante**
   (`T3_BAG` = "Bolsa do Iniciante"), T4 Adepto, T5 Perito, T6 Mestre, T7 Grão-mestre, T8 Ancião. "jornaleiro"
   fica só como apelido de T3 na busca.
-- **Autocomplete do bot falha ("exceeded CPU") logo depois de um deploy** → preparar a busca completa
-  (`searchItems`) custa 50–80 ms de CPU, uma vez por isolate, e o plano grátis dá 10 ms. Por isso o bot usa
-  `workerSearch` (`worker/discord/interactions.ts`): isolate frio responde com `quickSearch` (1–3 ms) e agenda o
-  preparo no `waitUntil`. Se o painel mostrar "exceeded CPU" nesse preparo, trocar `WARM_SEARCH_IN_WORKER` para
-  `false` (o bot fica só com a busca rápida). No navegador não há limite: `loadIndex` prepara em momento ocioso.
+- **Autocomplete do bot falha ("Falha ao carregar opções") com o isolate frio** → só ler e dar `JSON.parse` no
+  `items-index.json` (1 MB) já passa dos 10 ms de CPU do plano grátis; o `quickSearch` não salvou (visto em
+  produção em 30/10/2026). Por isso o bot **não usa o índice inteiro**: `worker/lib/acIndex.ts` lê só a fatia
+  `public/data/ac/k-<3 primeiras letras>.json` (até ~160 KB; prefixo `k-` porque `con`, `aux`, `nul` e `prn` são
+  nomes reservados no Windows e o arquivo some sem erro) e `names/t<tier>.json` para id → rótulo, geradas por
+  `npm run data:items`. Nome de tier ("adepto", "elder's") vira `t<n>` e não gera fatia. No navegador não há
+  limite: `loadIndex` usa o índice inteiro.
 - **`tests/items.test.ts` falha com "arquivo não encontrado"** → lê `public/data/items-index.json`, que é gerado
   (`npm run data:items`) e precisa estar versionado.
 

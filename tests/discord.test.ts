@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../worker/env';
 import type { ClockResponse, ItemResponse, PlayerDossier, AlertRule, CityQuote } from '../shared/types';
 
@@ -14,8 +14,17 @@ const m = vi.hoisted(() => ({
   createAlert: vi.fn(),
   listAlerts: vi.fn(),
   deleteAlert: vi.fn(),
+  acSearch: vi.fn(),
+  acLabel: vi.fn(),
 }));
 vi.mock('../worker/lib/items', () => ({ loadItemsIndex: m.loadItemsIndex }));
+// O bot busca item só pelas fatias pequenas (worker/lib/acIndex.ts, teste próprio em acIndex.test.ts).
+vi.mock('../worker/lib/acIndex', () => ({ acSearch: m.acSearch, acLabel: m.acLabel }));
+const LABELS: Record<string, string> = { 'T4_BAG@1': 'Bolsa do Adepto (T4.1)', T4_BAG: 'Bolsa do Adepto (T4)' };
+function acDefaults() {
+  m.acLabel.mockImplementation(async (_env: unknown, id: string) => LABELS[id.toUpperCase()] ?? null);
+  m.acSearch.mockResolvedValue([]);
+}
 vi.mock('../shared/items', async (orig) => ({
   ...(await orig<typeof import('../shared/items')>()),
   searchItems: m.searchItems,
@@ -95,6 +104,7 @@ function mockFetch(): FetchCall[] {
   });
   return calls;
 }
+beforeEach(acDefaults);
 afterEach(() => {
   vi.unstubAllGlobals();
   Object.values(m).forEach((f) => f.mockReset());
@@ -178,15 +188,14 @@ describe('handleDiscord', () => {
 
 describe('autocomplete', () => {
   it('devolve até 25 opções com nome PT-BR e tier', async () => {
-    m.loadItemsIndex.mockResolvedValue(INDEX);
-    m.searchItems.mockReturnValue([{ id: 'T4_BAG@1', pt: 'Bolsa do Adepto', en: "Adept's Bag", tier: 4, ench: 1, score: 1 }]);
+    m.acSearch.mockResolvedValueOnce([{ id: 'T4_BAG@1', label: 'Bolsa do Adepto (T4.1)' }]);
     const i: Interaction = { ...cmd('preco', [{ name: 'item', type: 3, value: 'bolsa', focused: true }]), type: 4 };
     const r = await dispatch(i, env(), makeCtx().ctx);
     expect(r).toEqual({ type: 8, data: { choices: [{ name: 'Bolsa do Adepto (T4.1)', value: 'T4_BAG@1' }] } });
-    expect(m.searchItems).toHaveBeenCalledWith(INDEX, 'bolsa', 25);
+    expect(m.acSearch).toHaveBeenCalledWith(expect.anything(), 'bolsa', 25);
   });
   it('erro no índice vira lista vazia, nunca erro', async () => {
-    m.loadItemsIndex.mockRejectedValue(new Error('falhou'));
+    m.acSearch.mockRejectedValueOnce(new Error('falhou'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const i: Interaction = { ...cmd('preco', [{ name: 'item', type: 3, value: 'x', focused: true }]), type: 4 };
     expect(await dispatch(i, env(), makeCtx().ctx)).toEqual({ type: 8, data: { choices: [] } });

@@ -8,13 +8,12 @@ import {
   quickSearch,
   isSearchReady,
   warmItemsIndex,
-  itemName,
   tierLabel,
   type ItemHit,
   type ItemsIndex,
   type ItemTuple,
 } from '../../shared/items';
-import { loadItemsIndex } from '../lib/items';
+import { acLabel, acSearch } from '../lib/acIndex';
 import { getItem } from '../api/market';
 import { getClock } from '../api/clock';
 import { searchPlayers, getDossier, getAutopsy } from '../api/player';
@@ -155,17 +154,12 @@ export function itemLabel(t: ItemTuple | { pt: string; en: string; id: string; t
   return clamp(`${pt || en || id}${tl ? ` (${tl})` : ''}`, 100);
 }
 
-function nameResolver(index: ItemsIndex | null): NameOf {
-  return (id) => {
-    if (!index) return id;
-    const t = byId(index).get(id.toUpperCase());
-    if (t) return itemLabel(t);
-    try {
-      return itemName(index, id);
-    } catch {
-      return id;
-    }
-  };
+/** Resolve de antemão os rótulos dos ids pelas fatias names/ (barato) e devolve a função síncrona que o render usa. */
+async function labelsFor(env: Env, ids: string[]): Promise<NameOf> {
+  const uniq = [...new Set(ids.filter(Boolean).map((id) => id.toUpperCase()))].slice(0, 60);
+  const pairs = await Promise.all(uniq.map(async (id) => [id, await acLabel(env, id).catch(() => null)] as const));
+  const map = new Map(pairs);
+  return (id) => map.get(id.toUpperCase()) ?? id;
 }
 
 /**
@@ -189,21 +183,13 @@ export function workerSearch(index: ItemsIndex, q: string, limit: number, ctx?: 
 export async function resolveItem(env: Env, raw: string, ctx?: Pick<ExecutionContext, 'waitUntil'>): Promise<{ id: string; label: string }> {
   const q = raw.trim();
   if (!q) throw new UserError('Informe o item. Escolha uma opção da lista que aparece enquanto você digita.');
-  const index = await loadItemsIndex(env);
-  const exact = byId(index).get(q.toUpperCase());
-  if (exact) return { id: exact[0], label: itemLabel(exact) };
-  const hit = workerSearch(index, q, 1, ctx)[0];
+  // Só fatias pequenas (worker/lib/acIndex.ts): o índice inteiro estoura a CPU do plano grátis com isolate frio.
+  void ctx;
+  const label = await acLabel(env, q);
+  if (label) return { id: q.toUpperCase(), label };
+  const hit = (await acSearch(env, q, 1))[0];
   if (!hit) throw new UserError(`Não achei o item “${clamp(q, 60)}”. Escolha uma opção da lista que aparece enquanto você digita.`);
-  return { id: hit.id, label: itemLabel(hit) };
-}
-
-async function loadIndexOrNull(env: Env): Promise<ItemsIndex | null> {
-  try {
-    return await loadItemsIndex(env);
-  } catch (err) {
-    console.error('discord: índice de itens indisponível', err);
-    return null;
-  }
+  return { id: hit.id, label: hit.label };
 }
 
 // ---------- autocomplete ----------
@@ -215,14 +201,13 @@ async function autocomplete(i: Interaction, env: Env, ctx?: Pick<ExecutionContex
   const cmd = i.data?.name;
   if (f.name === 'item' && (cmd === 'preco' || cmd === 'alerta')) {
     if (!value.trim()) return [];
-    const index = await loadItemsIndex(env);
-    return workerSearch(index, value, 25, ctx).map((h) => ({ name: itemLabel(h), value: h.id.slice(0, 100) }));
+    return (await acSearch(env, value, 25)).map((h) => ({ name: clamp(h.label, 100), value: h.id.slice(0, 100) }));
   }
   if (cmd === 'alerta' && f.name === 'id') {
     const owner = ownerOf(i);
     if (!owner) return [];
-    const [rules, index] = await Promise.all([listAlerts(env, owner), loadIndexOrNull(env)]);
-    const nameOf = nameResolver(index);
+    const rules = await listAlerts(env, owner);
+    const nameOf = await labelsFor(env, rules.map((r) => r.itemId));
     const needle = value.trim().toLowerCase();
     return rules
       .map((r) => ({ name: alertChoiceLabel(r, nameOf), value: r.id.slice(0, 100) }))
@@ -260,8 +245,8 @@ async function command(i: Interaction, env: Env, ctx: ExecutionContext): Promise
       return deferred(i, ctx, async () => {
         const found = await resolvePlayer(env, ctx, name);
         if ('list' in found) return found.list;
-        const [autopsy, index] = await Promise.all([getAutopsy(env, ctx, found.id), loadIndexOrNull(env)]);
-        return renderAutopsy(found, autopsy, nameResolver(index));
+        const autopsy = await getAutopsy(env, ctx, found.id);
+        return renderAutopsy(found, autopsy, await labelsFor(env, autopsy.rebuy.map((r) => r.id)));
       });
     }
     case 'alerta':
@@ -335,8 +320,8 @@ async function alertCommand(
         i,
         ctx,
         async () => {
-          const [rules, index] = await Promise.all([listAlerts(env, owner), loadIndexOrNull(env)]);
-          return renderAlertList(rules, nameResolver(index));
+          const rules = await listAlerts(env, owner);
+          return renderAlertList(rules, await labelsFor(env, rules.map((r) => r.itemId)));
         },
         true,
       );
