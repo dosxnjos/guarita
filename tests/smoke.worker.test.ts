@@ -39,7 +39,8 @@ function fakeEnv(): Env {
     }),
   } as unknown as DurableObjectNamespace;
   const CORE = { fetch: async () => Response.json({ ok: true }) } as unknown as Fetcher;
-  return { ASSETS, HUB, CORE, DISCORD_PUBLIC_KEY: '', DISCORD_APP_ID: '', DISCORD_BOT_TOKEN: '', VAPID_PUBLIC: '' };
+  const TIMERS = HUB; // stub em memória serve aos dois na fumaça
+  return { ASSETS, HUB, CORE, TIMERS, DISCORD_PUBLIC_KEY: '', DISCORD_APP_ID: '', DISCORD_BOT_TOKEN: '', VAPID_PUBLIC: '' };
 }
 
 const env = fakeEnv();
