@@ -249,3 +249,103 @@ export interface AlertFire {
   seenAt: string | null;
   message: string;
 }
+
+// ---------- Fase 2 (roadmap/2026-10-30-guarita-fase2.md) ----------
+
+/** Itens mais perdidos no PvP do Americas (KillLog próprio, coletado desde 30/10/2026). */
+export interface LossItem {
+  id: string;
+  name: string;
+  count: number;
+  /** Preço unitário atual (menor venda entre Royal + Caerleon), null sem dado. */
+  price: number | null;
+  /** count × price: o tamanho da "demanda destruída" em prata. */
+  value: number | null;
+  ageMin: number | null;
+}
+
+export interface LossesResponse {
+  /** Janela em dias (1 = hoje UTC). */
+  days: number;
+  /** Primeiro dia com coleta (AAAA-MM-DD). */
+  since: string | null;
+  /** Kills que entraram na conta da janela. */
+  sampleKills: number;
+  items: LossItem[];
+  fetchedAt: string;
+}
+
+export interface GuildSummary {
+  name: string;
+  id: string | null;
+  alliance: string | null;
+  members: number | null;
+  killFame: number | null;
+  deathFame: number | null;
+  /** Por dia (AAAA-MM-DD), do KillLog. */
+  days: { date: string; kills: number; deaths: number }[];
+  topKillers: { name: string; id: string; kills: number }[];
+  weapons: { type: string; labelPt: string; count: number }[];
+  /** 24 posições: kills por hora do dia em horário de Brasília. */
+  hoursBrt: number[];
+  coverageSince: string | null;
+  fetchedAt: string;
+}
+
+export type ZoneKind = 'azul' | 'amarela' | 'vermelha' | 'preta' | 'avalon' | 'brumas';
+
+export interface RiskZone {
+  zone: ZoneKind;
+  labelPt: string;
+  /** O que acontece com o equipamento ao morrer nessa zona. */
+  lose: 'nada' | 'durabilidade' | 'tudo';
+  /** Prata em risco (estimada) nessa zona. */
+  amount: number;
+  note: string;
+}
+
+export interface RiskQuote {
+  items: { id: string; quality: Quality; price: number | null; city: City | null; ageMin: number | null }[];
+  total: number;
+  missing: number;
+  zones: RiskZone[];
+  fetchedAt: string;
+}
+
+export interface GoldResponse {
+  points: { at: string; price: number }[];
+  current: number | null;
+  p10: number | null;
+  p50: number | null;
+  p90: number | null;
+  verdict: 'barato' | 'normal' | 'caro' | 'sem dado';
+  fetchedAt: string;
+}
+
+export interface DataHealthCity {
+  city: City;
+  /** Idade mediana do menor preço de venda na cesta, em minutos. */
+  medianAgeMin: number | null;
+  fresh1h: number;
+  stale24h: number;
+  missing: number;
+}
+
+export interface DataHealthResponse {
+  basket: number;
+  cities: DataHealthCity[];
+  fetchedAt: string;
+}
+
+export type TimerKind = 'plantacao' | 'animal' | 'foco' | 'outro';
+
+export interface Timer {
+  id: string;
+  /** Dono: id da inscrição push deste aparelho. */
+  owner: string;
+  kind: TimerKind;
+  label: string;
+  endsAt: string;
+  createdAt: string;
+  firedAt?: string;
+}

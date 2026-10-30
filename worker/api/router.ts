@@ -5,9 +5,10 @@ import { routeMarket } from './market';
 import { routeClock } from './clock';
 import { routePlayer } from './player';
 import { routeAlerts } from './alerts';
+import { routeLossesGuild, routeRisk, routeGoldHealth, routeTimers } from './routesF2';
 
 type Route = (request: Request, url: URL, env: Env, ctx: ExecutionContext) => Promise<Response | null>;
-const ROUTES: Route[] = [routeMarket, routeClock, routePlayer, routeAlerts];
+const ROUTES: Route[] = [routeMarket, routeClock, routePlayer, routeAlerts, routeLossesGuild, routeRisk, routeGoldHealth, routeTimers];
 
 export async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);

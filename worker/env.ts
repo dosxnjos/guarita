@@ -5,6 +5,8 @@ export interface Env {
   HUB: DurableObjectNamespace;
   /** Worker guarita-core (rotas internas /internal/*). */
   CORE: Fetcher;
+  /** Durable Object Timers do guarita-core (despertador da ilha e do foco, Fase 2). */
+  TIMERS: DurableObjectNamespace;
   DISCORD_PUBLIC_KEY: string;
   DISCORD_APP_ID: string;
   DISCORD_BOT_TOKEN: string;

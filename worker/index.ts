@@ -3,12 +3,15 @@
 import type { Env } from './env';
 import { handleApi } from './api/router';
 import { handleDiscord } from './discord/interactions';
+import { handleMcp } from './mcp/server';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     try {
       if (url.pathname === '/discord') return await handleDiscord(request, env, ctx);
+      // MCP: POST (e OPTIONS do CORS) vão ao servidor; GET /mcp é a página que explica como ligar.
+      if (url.pathname === '/mcp' && request.method !== 'GET') return await handleMcp(request, env, ctx);
       if (url.pathname.startsWith('/api/')) return await handleApi(request, env, ctx);
     } catch (err) {
       console.error('erro não tratado', url.pathname, err);

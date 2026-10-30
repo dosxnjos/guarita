@@ -15,6 +15,18 @@ const TABLE: [name: string, pattern: RegExp, keys: string[]][] = [
   ['alertas', /^\/alertas$/, []],
   ['apoie', /^\/apoie$/, []],
   ['permitido', /^\/permitido$/, []],
+  // Fase 2
+  ['mais', /^\/mais$/, []],
+  ['perdas', /^\/perdas$/, []],
+  ['guilda', /^\/guilda\/([^/]+)$/, ['nome']],
+  ['guildas', /^\/guilda$/, []],
+  ['arriscar', /^\/arriscar$/, []],
+  ['golpes', /^\/golpes$/, []],
+  ['glossario', /^\/glossario$/, []],
+  ['ouro', /^\/ouro$/, []],
+  ['saude', /^\/saude$/, []],
+  ['mcp', /^\/mcp$/, []],
+  ['despertador', /^\/despertador$/, []],
 ];
 
 export function match(pathname: string): Match {

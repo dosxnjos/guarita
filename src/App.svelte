@@ -11,10 +11,24 @@
   import Apoie from './routes/Apoie.svelte';
   import Permitido from './routes/Permitido.svelte';
   import NaoEncontrado from './routes/NaoEncontrado.svelte';
+  // Fase 2
+  import Mais from './routes/Mais.svelte';
+  import Perdas from './routes/Perdas.svelte';
+  import Guilda from './routes/Guilda.svelte';
+  import Guildas from './routes/Guildas.svelte';
+  import Arriscar from './routes/Arriscar.svelte';
+  import Golpes from './routes/Golpes.svelte';
+  import Glossario from './routes/Glossario.svelte';
+  import Ouro from './routes/Ouro.svelte';
+  import Saude from './routes/Saude.svelte';
+  import McpInfo from './routes/McpInfo.svelte';
+  import Despertador from './routes/Despertador.svelte';
 
   const VIEWS: Record<string, any> = {
     inicio: Inicio, item: Item, relogio: Relogio, janela: Janela, jogadores: Jogadores, dossie: Dossie,
     autopsia: Autopsia, alertas: Alertas, apoie: Apoie, permitido: Permitido, 'nao-encontrado': NaoEncontrado,
+    mais: Mais, perdas: Perdas, guilda: Guilda, guildas: Guildas, arriscar: Arriscar, golpes: Golpes,
+    glossario: Glossario, ouro: Ouro, saude: Saude, mcp: McpInfo, despertador: Despertador,
   };
 
   let route = $state(match(location.pathname));
@@ -28,10 +42,13 @@
   // Item da navegação ativo para cada rota (aria-current).
   const SECTION: Record<string, string> = {
     inicio: '/', item: '/', relogio: '/relogio', jogadores: '/jogador', dossie: '/jogador', autopsia: '/jogador',
-    alertas: '/alertas', janela: '/janela',
+    alertas: '/alertas', janela: '/mais', perdas: '/perdas', mais: '/mais', guilda: '/mais', guildas: '/mais',
+    arriscar: '/mais', golpes: '/mais', glossario: '/mais', ouro: '/mais', saude: '/mais', mcp: '/mais',
+    despertador: '/mais',
   };
   const NAV: [href: string, label: string][] = [
-    ['/', 'Mercado'], ['/relogio', 'Relógio'], ['/jogador', 'Dossiê'], ['/alertas', 'Alertas'], ['/janela', 'Janela'],
+    ['/', 'Mercado'], ['/perdas', 'Perdas PvP'], ['/relogio', 'Relógio'], ['/jogador', 'Dossiê'], ['/alertas', 'Alertas'],
+    ['/mais', 'Mais'],
   ];
   const current = $derived(SECTION[route.name] ?? '');
 

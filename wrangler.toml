@@ -12,3 +12,8 @@ script_name = "guarita-core"
 [[services]]
 binding = "CORE"
 service = "guarita-core"
+
+[[durable_objects.bindings]]
+name = "TIMERS"
+class_name = "Timers"
+script_name = "guarita-core"
