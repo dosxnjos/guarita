@@ -1,6 +1,9 @@
 <script lang="ts">
   // Página /app: o app da Guarita para Windows (pasta app/ do repo). O que faz, o que não faz, requisitos,
   // download pelo GitHub Releases e o aviso do SmartScreen (app ainda sem certificado de assinatura).
+  // O botão de download consulta a última release (lib/appRelease.ts): sem release publicada, mostra "Em breve".
+  import { onMount } from 'svelte';
+  import { buscarInstalador, rotuloBaixar, RELEASES_URL, type EstadoDownload } from '../lib/appRelease';
   import { go } from '../lib/router';
   let { params: _params = {} }: { params?: Record<string, string> } = $props();
 
@@ -8,9 +11,15 @@
     document.title = 'App para PC · Guarita';
   });
 
-  const RELEASES = 'https://github.com/dosxnjos/guarita/releases/latest';
   const CODIGO = 'https://github.com/dosxnjos/guarita/tree/main/app';
   const AODP = 'https://www.albion-online-data.com/';
+
+  let download = $state<EstadoDownload>({ tipo: 'conferindo' });
+  onMount(() => {
+    let vivo = true;
+    void buscarInstalador().then((e) => vivo && (download = e));
+    return () => (vivo = false);
+  });
 
   const RECURSOS: [titulo: string, desc: string][] = [
     ['Preço rápido', 'Digite o item e veja a cidade mais barata, o preço, há quanto tempo foi visto e o selo de confiança.'],
@@ -18,7 +27,7 @@
     ['Alertas de preço no PC', 'Regras de preço conferidas pelo próprio app a cada 2 a 5 minutos, com notificação do Windows e voz.'],
     ['Despertador', 'Lembrete de colheita, animais e foco cheio, tocado pelo app.'],
     ['Dossiê', 'Histórico público de um jogador pelo nome, quando você pesquisa.'],
-    ['Lente de mercado (experimental)', 'Com o cliente oficial do Albion Data Project aberto, mostra o preço do item aberto no mercado nas outras cidades.'],
+    ['Lente de mercado (experimental)', 'Com o cliente do Albion Data Project (projeto comunitário) aberto, mostra o preço do item aberto no mercado nas outras cidades.'],
   ];
 
   const NAO_FAZ: string[] = [
@@ -32,15 +41,28 @@
 
   const FAQ: [pergunta: string, resposta: string][] = [
     ['Preciso do app e do site?', 'Não, cada um funciona sozinho e os dados são os mesmos. O site serve em qualquer aparelho, inclusive no celular. O app fica aberto no PC enquanto você joga, com janelas pequenas, voz e avisos do Windows.'],
-    ['O app fica rodando escondido?', 'Não. Ele só trabalha enquanto está aberto: fechou, parou. Não cria tarefa agendada nem serviço do Windows. Iniciar com o Windows e fechar para a bandeja são opções que vêm desligadas; se você ligar, o ícone aparece na bandeja.'],
+    ['O app fica rodando escondido?', 'Não. Ele só trabalha enquanto está aberto: fechou, parou. Não cria tarefa agendada nem serviço do Windows. O ícone da Guarita fica na bandeja, perto do relógio do Windows, enquanto o app está aberto. Iniciar com o Windows e fechar para a bandeja vêm desligados: no padrão, fechar o painel encerra tudo. Com fechar para a bandeja ligado, fechar a janela deixa o app lá; use “Sair da Guarita” no ícone para encerrar.'],
     ['Os alertas do app e os do site são iguais?', 'Os do site chegam pelo navegador, pelo celular ou pelo Discord mesmo com o computador desligado, porque quem confere é o servidor da Guarita. Os do app são conferidos pelo próprio app e só tocam com ele aberto.'],
-    ['Pode dar banimento?', 'O app não toca no jogo: lê só dados públicos, as mesmas fontes do site. A única zona cinza é deixar uma janela por cima da tela do jogo, e por isso essa opção vem desligada e só liga depois de você ler o aviso. O risco de usá-la é da sua conta.'],
+    ['Pode dar banimento?', 'O app não toca no jogo: lê só dados públicos, as mesmas fontes do site. No app, a única zona cinza é deixar uma janela por cima da tela do jogo, e por isso essa opção vem desligada e só liga depois de você ler o aviso. O risco de usá-la é da sua conta. A lente de mercado depende de outro programa, o cliente do Albion Data Project: ele é comunitário, sem ligação com a Sandbox Interactive, e lê o tráfego de rede do jogo no seu PC para registrar os preços do mercado. Instalar esse cliente é escolha sua; o resto do app funciona sem ele.'],
+    ['O jogo minimiza quando uso um atalho', 'Use o Albion em modo janela sem borda (nas configurações de vídeo do jogo). Em tela cheia exclusiva, o jogo cobre as janelas da Guarita, e o atalho, que passa o foco para a Guarita como um Alt+Tab, faz o jogo minimizar ou piscar.'],
     ['É pago? Precisa de conta?', 'É de graça, sem conta e sem cadastro. O código é aberto, sob a licença MIT.'],
     ['Funciona no Mac ou no Linux?', 'Por enquanto, só no Windows 10 e 11.'],
     ['Como atualizo?', 'Nesta versão não há atualização automática. Quando sair uma versão nova, baixe o instalador de novo por esta página; suas configurações continuam.'],
     ['Como desinstalo?', 'Em Configurações do Windows, Aplicativos, procure “Guarita” e escolha Desinstalar.'],
   ];
 </script>
+
+{#snippet botaoBaixar()}
+  {#if download.tipo === 'pronto'}
+    <a class="btn primary" href={download.instalador.url} rel="noopener">{rotuloBaixar(download.instalador)}</a>
+  {:else if download.tipo === 'pagina'}
+    <a class="btn primary" href={RELEASES_URL} target="_blank" rel="noopener">Baixar para Windows</a>
+  {:else if download.tipo === 'em-breve'}
+    <button type="button" class="btn primary" disabled>Em breve</button>
+  {:else}
+    <button type="button" class="btn primary" disabled>Conferindo a versão…</button>
+  {/if}
+{/snippet}
 
 <section class="page stack" style="max-width:860px">
   <header class="hero">
@@ -50,10 +72,13 @@
       português, atalhos e avisos do Windows. Usa os mesmos dados do site.
     </p>
     <div class="row">
-      <a class="btn primary" href={RELEASES} target="_blank" rel="noopener">Baixar para Windows</a>
+      {@render botaoBaixar()}
       <a class="btn" href={CODIGO} target="_blank" rel="noopener">Ver o código</a>
     </div>
     <p class="small muted" style="margin:8px 0 0">Windows 10 ou 11, 64 bits. Gratuito e de código aberto.</p>
+    {#if download.tipo === 'em-breve'}
+      <p class="small muted" style="margin:4px 0 0">O instalador ainda não foi publicado. Acompanhe em <a href={RELEASES_URL} target="_blank" rel="noopener">github.com/dosxnjos/guarita/releases</a>.</p>
+    {/if}
   </header>
 
   <figure class="ilustra" aria-labelledby="ilustra-legenda">
@@ -120,8 +145,10 @@
       {#each NAO_FAZ as t (t)}<li>{t}</li>{/each}
     </ul>
     <p class="small muted" style="margin:0">
-      A lente de mercado só escuta o cliente oficial do <a href={AODP} target="_blank" rel="noopener">Albion Data
-      Project</a>, se você instalar e ligar esse cliente. A Guarita não lê o mercado do jogo por conta própria.
+      A lente de mercado só escuta o cliente do <a href={AODP} target="_blank" rel="noopener">Albion Data Project</a>,
+      se você instalar e ligar esse cliente. Ele é um programa comunitário, sem ligação com a Sandbox Interactive, que lê
+      o tráfego de rede do jogo no seu PC para registrar os preços do mercado. Instalar é escolha sua. A Guarita não lê
+      o mercado do jogo por conta própria.
     </p>
   </div>
 
@@ -145,20 +172,47 @@
         <li>Windows 10 ou 11, 64 bits.</li>
         <li>Microsoft Edge WebView2, que já vem no Windows 11; no Windows 10, o instalador baixa se faltar.</li>
         <li>Internet, para buscar os preços e o relógio.</li>
+        <li>O Albion em modo janela sem borda, para ver as janelas da Guarita sobre o jogo.</li>
       </ul>
     </div>
     <div class="card stack">
-      <strong>Aviso do Windows na primeira vez</strong>
+      <strong>Qual arquivo baixar</strong>
       <p class="small" style="margin:0">
-        O app ainda não tem certificado de assinatura de código, então o Windows pode mostrar “O Windows protegeu o
-        computador” (SmartScreen). Clique em <strong>Mais informações</strong> e depois em
-        <strong>Executar assim mesmo</strong>.
+        Um arquivo só: o que termina em <span class="mono">-setup.exe</span> (por exemplo,
+        <span class="mono">Guarita_0.1.0_x64-setup.exe</span>). Os arquivos “Source code” são o código-fonte, não o app.
       </p>
-      <p class="small muted" style="margin:0">Baixe só pelo botão desta página, que leva ao GitHub oficial da Guarita.</p>
+      <p class="small muted" style="margin:0">
+        O único endereço oficial é <a href={RELEASES_URL} target="_blank" rel="noopener">github.com/dosxnjos/guarita/releases</a>.
+        Instalador recebido por Discord, vídeo ou outro site não é da Guarita.
+      </p>
     </div>
   </div>
+
+  <ol class="passos stack">
+    <li>
+      <strong>Ao baixar.</strong> O Edge pode avisar que o arquivo “não é baixado com frequência”. Clique nos três
+      pontos (<strong>…</strong>) ao lado do aviso, depois em <strong>Manter</strong>, em <strong>Mostrar mais</strong> e
+      em <strong>Manter assim mesmo</strong>. No Chrome, escolha <strong>Manter</strong>.
+    </li>
+    <li>
+      <strong>Confira o arquivo (opcional, recomendado).</strong> No PowerShell, rode
+      <span class="mono">Get-FileHash "$env:USERPROFILE\Downloads\{download.tipo === 'pronto' ? download.instalador.nome : 'Guarita_…-setup.exe'}"</span>
+      e compare o resultado com o SHA-256
+      {#if download.tipo === 'pronto' && download.instalador.sha256}
+        desta versão: <span class="mono hash">{download.instalador.sha256}</span>.
+      {:else}
+        publicado nas notas da versão, no GitHub.
+      {/if}
+      Se for diferente, não execute.
+    </li>
+    <li>
+      <strong>Ao abrir.</strong> O app ainda não tem certificado de assinatura de código, então o Windows pode mostrar
+      “O Windows protegeu o computador” (SmartScreen). Clique em <strong>Mais informações</strong> e depois em
+      <strong>Executar assim mesmo</strong>. O instalador não pede senha de administrador.
+    </li>
+  </ol>
   <div class="row">
-    <a class="btn primary" href={RELEASES} target="_blank" rel="noopener">Baixar para Windows</a>
+    {@render botaoBaixar()}
   </div>
 
   <h2>Perguntas frequentes</h2>
@@ -178,6 +232,8 @@
   .recurso { display: grid; gap: 4px; }
   .lista { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
   .faq summary { cursor: pointer; }
+  .passos { margin: 0; padding-left: 20px; gap: 8px; }
+  .hash { overflow-wrap: anywhere; font-size: 12px; }
   .ilustra { margin: 0; display: grid; gap: 6px; }
   .ilustra svg { width: 100%; height: auto; display: block; }
   .s-tela { fill: var(--surface-2); stroke: var(--line); }

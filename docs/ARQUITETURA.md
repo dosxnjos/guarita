@@ -2,7 +2,7 @@
 
 Dois repositórios, tudo no plano grátis da Cloudflare (conta pessoal):
 
-- **`guarita`** (este, público, MIT): site e PWA, API de leitura, bot do Discord.
+- **`guarita`** (este, público, MIT): site e PWA, API de leitura, bot do Discord e o app de PC (`app/`).
 - **`guarita-core`** (privado): Worker com dois crons de 5 em 5 minutos, cada um na sua invocação (motor de
   alertas nos minutos 0, 5, 10…; coletor do killboard 2 min depois, que também posta o killfeed das guildas no
   Discord) e os Durable Objects com SQLite `Hub`, `KillLog` e `Timers`.
@@ -84,6 +84,21 @@ O navegador também carrega os ícones direto de `render.albiononline.com` (com 
   e manda o push. Sem cron extra.
 - **Ordem de publicação:** core (migration v3 cria `Timers`; o Hub cria `guild_feeds` sozinho) → Pages →
   `npm run discord:register -- --global` (os comandos novos levam até 1 h para aparecer).
+
+### App no PC (30/10/2026)
+
+- **`app/`** (Tauri 2 + Svelte 5, `package.json` próprio): cliente da mesma API pública (`/api/*` e
+  `/data/items-index.json`), sem servidor novo. Painel + widgets em janelas próprias; o motor local (regras de
+  preço, despertador, avisos do relógio) roda só no painel, só com o app aberto. Nada de tarefa agendada ou serviço;
+  "iniciar com o Windows" é opção desligada. Como funciona: [app/README.md](../app/README.md).
+- **Lente de mercado** (opcional, desligada): só escuta o websocket local (`ws://localhost:8099/ws`) do cliente
+  do Albion Data Project (comunitário; ele lê o tráfego de rede do jogo no PC do usuário), se o usuário o rodar; a
+  Guarita não captura rede nem envia nada ao cliente.
+- **Página `/app`** do site: o botão de download consulta `api.github.com/.../releases/latest` no navegador
+  (`src/lib/appRelease.ts`) e oferece só o `*-setup.exe`; sem release, "Em breve"; GitHub fora ou limite de 60/h,
+  link para a página de releases.
+- **Distribuição:** instalador NSIS/MSI no GitHub Releases, sem assinatura (aviso do SmartScreen) e sem
+  atualização automática na v0.1.
 
 ## Limites que moldam o desenho
 

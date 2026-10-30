@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-widgets-show-all"
+description = "Enables the widgets_show_all command without any pre-configured scope."
+commands.allow = ["widgets_show_all"]
+
+[[permission]]
+identifier = "deny-widgets-show-all"
+description = "Denies the widgets_show_all command without any pre-configured scope."
+commands.deny = ["widgets_show_all"]

@@ -1,0 +1,7 @@
+/* Só o que é do app. Tokens e classes-base vêm do site (../../src/app.css) para o visual ser o mesmo. */
+html { background: var(--bg); }
+/* Widgets: janela transparente; a cor de fundo vem da moldura (WidgetChrome) com --janela-alpha. */
+html.widget, html.widget body { background: transparent; overflow: hidden; }
+body { font-size: 15px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }

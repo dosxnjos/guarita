@@ -1,0 +1,47 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "painel",
+  "description": "Janela principal: abre widgets, guarda configuração, registra atalhos globais, notifica e liga/desliga o iniciar com o Windows (só quando o usuário marca).",
+  "windows": ["painel"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "allow-widget-open",
+    "allow-widget-close",
+    "allow-widget-focus",
+    "allow-widget-toggle",
+    "allow-widget-list",
+    "allow-widget-set-on-top",
+    "allow-widgets-hide-all",
+    "allow-widgets-show-all",
+    "allow-set-close-to-tray",
+    "allow-tray-set-muted",
+    "store:default",
+    "notification:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-unregister-all",
+    "global-shortcut:allow-is-registered",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
+    "window-state:default",
+    "log:default",
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "https://guarita.pages.dev/*" }]
+    },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://guarita.pages.dev/*" },
+        { "url": "https://github.com/dosxnjos/guarita*" },
+        { "url": "https://www.albion-online-data.com/*" }
+      ]
+    }
+  ]
+}

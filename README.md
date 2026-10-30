@@ -31,6 +31,7 @@ Site: <https://guarita.pages.dev> · Isso é permitido? <https://guarita.pages.d
 | **Despertador** | Avisa no celular quando a plantação, os animais ou o foco ficam prontos. |
 | **Oráculo MCP** | Ligue a Guarita no Claude, no Cursor ou no VS Code e pergunte preço, relógio, dossiê e perdas. Só dado público. |
 | **Bot do Discord** | Os mesmos dados com comandos no teu servidor (preço, relógio, alertas, perdas) e o killfeed da tua guilda num canal, com botão de pedir regear. |
+| **App para PC** | Guarita no Windows: widgets pequenos ao lado do jogo (preço rápido, dossiê, relógio, alertas, despertador), voz em português, atalhos globais e avisos do Windows. Só funciona com o app aberto: sem tarefa agendada nem serviço. Detalhes em [app/README.md](app/README.md) e na página [/app](https://guarita.pages.dev/app). |
 | **Janela flutuante** | Uma janelinha que fica por cima das outras (Chrome). Vem **desligada**: leia o aviso antes de ligar. |
 | **Instalável** | Dá para instalar como aplicativo no celular ou no computador. |
 
@@ -119,6 +120,7 @@ guarita/
 │   ├── market.ts         taxas, cidades, conversões de data
 │   ├── items.ts          índice e busca de itens
 │   └── zones.ts, scams.ts, glossary.ts   conteúdo do novato (zonas, golpes, glossário)
+├── app/                  app de Windows (Tauri 2 + Svelte), package.json próprio: ver app/README.md
 ├── scripts/              build-worker.mjs, build-items.mjs, deploy.mjs…
 ├── tests/                testes vitest (*.test.ts)
 └── docs/                 ARQUITETURA.md, CONTRATO-API.md, ARMADILHAS.md

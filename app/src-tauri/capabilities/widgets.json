@@ -1,0 +1,28 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "widgets",
+  "description": "Widgets (janelas pequenas criadas pelo painel): arrastar, minimizar, fechar, fixar por cima, ler configuração e consultar a API pública da Guarita. Nada de criar janela, atalho global ou iniciar com o Windows.",
+  "windows": ["preco", "dossie", "relogio", "alertas", "despertador", "lente"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "allow-widget-close",
+    "allow-widget-set-on-top",
+    "store:default",
+    "log:default",
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "https://guarita.pages.dev/*" }]
+    },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://guarita.pages.dev/*" },
+        { "url": "https://www.albion-online-data.com/*" }
+      ]
+    }
+  ]
+}

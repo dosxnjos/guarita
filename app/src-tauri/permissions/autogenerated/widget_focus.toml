@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-widget-focus"
+description = "Enables the widget_focus command without any pre-configured scope."
+commands.allow = ["widget_focus"]
+
+[[permission]]
+identifier = "deny-widget-focus"
+description = "Denies the widget_focus command without any pre-configured scope."
+commands.deny = ["widget_focus"]
