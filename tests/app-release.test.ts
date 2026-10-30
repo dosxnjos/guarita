@@ -19,6 +19,14 @@ const release = (assets: unknown[], extra: Record<string, unknown> = {}) => ({
 });
 const H = 'a'.repeat(64);
 
+describe('fmtTamanho', () => {
+  it('MB com vírgula acima de 1 MB e KB abaixo (zip da extensão)', () => {
+    expect(fmtTamanho(2_563_343)).toBe('2,4 MB');
+    expect(fmtTamanho(24_777)).toBe('24 KB');
+    expect(fmtTamanho(0)).toBe('');
+  });
+});
+
 describe('escolherInstalador', () => {
   it('pega só o -setup.exe, com versão, tamanho e SHA-256 do GitHub', () => {
     const i = escolherInstalador(release([asset('Guarita_0.1.0_x64_pt-BR.msi'), asset('Guarita_0.1.0_x64-setup.exe', { digest: `sha256:${H}` })]));

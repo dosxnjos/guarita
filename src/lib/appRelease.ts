@@ -80,9 +80,10 @@ export function compararVersao(a: string, b: string): number {
 /** Versão do app a partir da qual existe a captura da sessão (widgets Sessão e Loot). */
 export const VERSAO_CAPTURA = '0.2.0';
 
-/** Tamanho em MB com vírgula, ex.: "2,4 MB". */
+/** Tamanho com vírgula, ex.: "2,4 MB"; abaixo de 1 MB em KB ("24 KB"), senão o zip da extensão viraria "0,0 MB". */
 export function fmtTamanho(bytes: number): string {
   if (!bytes) return '';
+  if (bytes < 1048576) return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString('pt-BR')} KB`;
   return `${(bytes / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} MB`;
 }
 
