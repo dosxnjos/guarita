@@ -13,8 +13,9 @@
 <section class="page stack">
   <header>
     <h1>Isso é permitido?</h1>
-    <p class="lead">Resposta curta: a Guarita só lê dados públicos fora do jogo. Ela não toca no cliente, não lê o tráfego
-      de rede e não te dá vantagem em tempo real dentro da partida.</p>
+    <p class="lead">Resposta curta: a Guarita lê dados públicos fora do jogo. Ela não toca no cliente e não te dá vantagem
+      em tempo real dentro da partida. A única leitura do tráfego de rede é opcional, fica no app de PC, vem desligada e
+      mostra só a sua própria sessão.</p>
   </header>
 
   <div class="grid">
@@ -25,7 +26,12 @@
         <li>Lê o <strong>killboard oficial</strong> (API pública do site do jogo) para dossiês e autópsias.</li>
         <li>Lê o <strong>status oficial do servidor</strong>.</li>
         <li>Mostra tudo no navegador, no Discord ou numa notificação, fora do jogo.</li>
-        <li>Nesta versão, <strong>não captura tráfego de rede</strong> e <strong>não toca no jogo</strong> de forma alguma.</li>
+        <li>O site, o bot e a extensão <strong>não leem o tráfego de rede</strong>, e nada da Guarita <strong>toca no jogo</strong>.</li>
+        <li>No app de PC (a partir da versão 0.2), uma função <strong>opcional e desligada por padrão</strong> lê de forma
+          passiva o tráfego do jogo no seu PC para mostrar a <strong>sua</strong> sessão: prata, fama, loot e mortes. Ela
+          descarta tudo sobre outros jogadores, não manda nada ao jogo e só liga depois de você ler o aviso. Ler o tráfego só
+          para análise é tolerado pela Sandbox Interactive desde 2017 (veja abaixo), mas não é permitido oficialmente: o
+          risco de usar é da sua conta.</li>
       </ul>
     </div>
     <div class="card no">

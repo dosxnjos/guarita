@@ -190,10 +190,11 @@ describe('initialize e métodos básicos', () => {
   it('ping → resultado vazio', async () => {
     expect((await rpc({ jsonrpc: '2.0', id: 3, method: 'ping' })).body).toEqual({ jsonrpc: '2.0', id: 3, result: {} });
   });
-  it('tools/list traz as 5 ferramentas com esquema e sem campos internos', async () => {
+  it('tools/list traz as 6 ferramentas com esquema e sem campos internos', async () => {
     const { body } = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const tools = body.result.tools;
-    expect(tools.map((t: { name: string }) => t.name)).toEqual(['buscar_item', 'preco_item', 'relogio', 'dossie_jogador', 'perdas_pvp']);
+    // o_que_fazer: Fase 3, módulo c (casos próprios em tests/hoje.test.ts)
+    expect(tools.map((t: { name: string }) => t.name)).toEqual(['buscar_item', 'preco_item', 'relogio', 'dossie_jogador', 'perdas_pvp', 'o_que_fazer']);
     for (const t of tools) {
       expect(t.inputSchema.type).toBe('object');
       expect(t.description.length).toBeGreaterThan(40);

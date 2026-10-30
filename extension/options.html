@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Opções da Guarita</title>
+    <link rel="stylesheet" href="ui.css" />
+    <style>
+      main { max-width: 640px; margin: 0 auto; padding: 24px 16px 40px; display: grid; gap: 16px; }
+      header { display: flex; align-items: center; gap: 10px; }
+      h1 { font-size: 20px; }
+      fieldset { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 12px 16px; margin: 0; display: grid; gap: 10px; }
+      legend { font-weight: 700; padding: 0 4px; }
+      .site { display: flex; gap: 10px; align-items: flex-start; }
+      .site input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--accent); }
+      .site span { display: grid; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="icons/icon-48.png" alt="" width="40" height="40" />
+        <h1>Opções da Guarita</h1>
+      </header>
+
+      <fieldset>
+        <legend>Cartão de preço nos sites</legend>
+        <p class="small muted" style="margin:0">
+          Ao passar o mouse num ícone de item nestes sites, a Guarita mostra o nome em português e o preço. Desligue onde
+          não quiser o cartão.
+        </p>
+        <div id="sites" class="stack"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Qualidade padrão</legend>
+        <p class="small muted" style="margin:0">
+          Usada quando o ícone não diz a qualidade do item, e como ponto de partida na busca do popup.
+        </p>
+        <div class="row">
+          <label for="qual" class="sr-only">Qualidade padrão</label>
+          <select id="qual">
+            <option value="1">Normal</option>
+            <option value="2">Bom</option>
+            <option value="3">Excepcional</option>
+            <option value="4">Excelente</option>
+            <option value="5">Obra-prima</option>
+          </select>
+        </div>
+      </fieldset>
+
+      <p id="salvo" class="small muted" role="status" aria-live="polite"></p>
+
+      <fieldset>
+        <legend>Privacidade</legend>
+        <p class="small" style="margin:0">
+          A extensão não coleta nada sobre você. Ela só lê o endereço da imagem do item embaixo do mouse e pede à Guarita o
+          preço daquele item (id e qualidade). Não há conta, rastreamento nem anúncio. Os preços vêm do
+          <a href="https://www.albion-online-data.com/" target="_blank" rel="noopener">Albion Data Project</a>, mantido por
+          jogadores.
+        </p>
+        <p class="small muted" style="margin:0">
+          Não afiliado à Sandbox Interactive. Mais em <a href="https://guarita.pages.dev/extensao" target="_blank" rel="noopener">guarita.pages.dev/extensao</a>.
+        </p>
+      </fieldset>
+    </main>
+    <script src="lib/core.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

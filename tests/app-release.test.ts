@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buscarInstalador, escolherInstalador, fmtTamanho, rotuloBaixar } from '../src/lib/appRelease';
+import {
+  VERSAO_CAPTURA, buscarExtensao, buscarInstalador, compararVersao, escolherExtensao, escolherInstalador, fmtTamanho, rotuloBaixar,
+} from '../src/lib/appRelease';
 
 const asset = (name: string, extra: Record<string, unknown> = {}) => ({
   name,
@@ -48,5 +50,31 @@ describe('buscarInstalador', () => {
   it('release com instalador = pronto', async () => {
     const e = await buscarInstalador(resp(200, release([asset('Guarita_0.1.0_x64-setup.exe')])) as typeof fetch);
     expect(e.tipo).toBe('pronto');
+  });
+});
+
+describe('extensão e versão da captura', () => {
+  const resp = (status: number, body: unknown = {}) => async () => new Response(JSON.stringify(body), { status });
+  it('acha o .zip da extensão na release mais nova que tem um, com a versão do nome do arquivo', () => {
+    const appSo = release([asset('Guarita_0.2.0_x64-setup.exe')], { tag_name: 'v0.2.0' });
+    const comZip = release([asset('guarita-extensao-0.1.0.zip', { size: 30_000 })], { tag_name: 'v0.1.0' });
+    const e = escolherExtensao([appSo, comZip]);
+    expect(e).toMatchObject({ nome: 'guarita-extensao-0.1.0.zip', versao: '0.1.0', tamanhoBytes: 30_000 });
+    expect(escolherExtensao([appSo])).toBeNull();
+    expect(escolherExtensao([release([asset('guarita-extensao-0.1.0.zip')], { prerelease: true })])).toBeNull();
+    expect(escolherExtensao([release([asset('outra-coisa.zip')])])).toBeNull();
+    expect(escolherExtensao({})).toBeNull();
+  });
+  it('sem zip publicado o botão diz "em breve"; com zip, pronto', async () => {
+    expect(await buscarExtensao(resp(200, []) as typeof fetch)).toEqual({ tipo: 'em-breve' });
+    expect(await buscarExtensao(resp(403) as typeof fetch)).toEqual({ tipo: 'pagina' });
+    const e = await buscarExtensao(resp(200, [release([asset('guarita-extensao-0.1.0.zip')])]) as typeof fetch);
+    expect(e.tipo).toBe('pronto');
+  });
+  it('compara versões para saber se a release já tem a captura (0.2)', () => {
+    expect(compararVersao('0.1.0', VERSAO_CAPTURA)).toBeLessThan(0);
+    expect(compararVersao('0.2.0', VERSAO_CAPTURA)).toBe(0);
+    expect(compararVersao('0.10.0', '0.2.0')).toBeGreaterThan(0);
+    expect(compararVersao('1', '0.9.9')).toBeGreaterThan(0);
   });
 });

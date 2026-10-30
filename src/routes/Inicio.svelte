@@ -14,6 +14,11 @@
   // A rota não usa parâmetros; a prop existe porque o App passa params para toda tela.
   let { params: _params = {} }: { params?: Record<string, string> } = $props();
 
+  // Mesmo título que o _worker.js injeta no primeiro carregamento (worker/seo.ts).
+  $effect(() => {
+    document.title = 'Guarita: companheiro do Albion Online em português';
+  });
+
   // Atalhos: nome de reserva caso o índice de itens ainda não tenha carregado.
   const GROUPS: { title: string; items: [id: string, fallback: string][] }[] = [
     {

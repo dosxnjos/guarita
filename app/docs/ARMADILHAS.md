@@ -107,3 +107,71 @@ Conferido no código de `ao-data/albiondata-client` (`client/dispatcher.go`, `cl
   escondida. Para "por cima", usar `open` (a janela existe); `retirarAceite` chama `setOnTop(false)` em todas.
 - **App abre com o Windows e a tela diz "desligado"** → a config se perdeu com a chave Run ainda no registro. O
   registro é a verdade: `reconciliarIniciarComWindows()` no painel desliga quando diverge (nunca liga).
+
+## Captura do próprio jogador (Npcap, Photon)
+
+Conferido em 30/10/2026 no `ao-data/albiondata-client` (MIT) e no `AlbionOnline-StatisticsAnalysis` (GPL, só os
+números). **Validação ao vivo ainda pendente**: nada abaixo foi visto com o jogo aberto nesta máquina.
+
+- **"Npcap não encontrado" com o Npcap instalado** → a carga procura `C:\Windows\System32\Npcap\wpcap.dll` (caminho
+  fixo). Instalado no "modo compatível com WinPcap" antigo ou em outra pasta, não acha. Reinstalar a versão atual de
+  https://npcap.com com as opções padrão.
+- **`wpcap.dll` existe, mas "Npcap com problema" (não carregou)** → o `wpcap.dll` depende do `Packet.dll` da mesma
+  pasta, que não está no caminho de busca do Windows. `npcap.rs` carrega o `Packet.dll` pelo caminho completo antes;
+  se mexer na carga, manter a ordem.
+- **"Sem acesso à rede" (nenhuma interface abriu)** → Npcap instalado com "Restrict Npcap driver's access to
+  Administrators only". Reinstalar sem a opção (rodar o app como administrador funciona, mas não é o caminho).
+  Interfaces de VPN (Wintun) e adaptadores virtuais recusam abrir: normal, a captura segue com as outras.
+- **Fica em "Troque de mapa uma vez" para sempre** → a identidade (objeto e nome) vem da resposta do `Join`, mandada
+  a cada troca de mapa. Ligar com o jogo já num mapa exige uma troca. Se nem trocando passa, o código do `Join` (2)
+  ou os campos (0, 2, 8) mudaram no patch: conferir no diagnóstico (`respostas` com contagem e nome).
+- **Números zerados depois de um patch do Albion** → os códigos de evento e operação mudam a cada patch (o enum do
+  jogo ganha itens no meio). Modo de diagnóstico ligado, jogar alguns minutos, comparar `captura-diagnostico.json`
+  com o enum atual do StatisticsAnalysis/albiondata-client, corrigir `app/capture-codes.json`, **subir `versao`** e
+  publicar no `main` (o app só troca para tabela de versão maior).
+- **Código de evento "errado" (o byte do evento é 1, 3...)** → o Albion põe o código real em `params[252]` (evento)
+  e `params[253]` (operação) como short; o byte do Photon é truncado. O albiondata-client também desinverte bytes
+  (`0xDA00` → `0x00DA`) quando o código lido é desconhecido; aqui não: se aparecer no diagnóstico código com o byte
+  baixo zerado, é esse caso.
+- **Mercado e outras mensagens não aparecem** → desde jan/2024 a SBI criptografa parte do tráfego de algumas contas
+  (tipo de mensagem com bit `0x80` ou pacote com flag 1). O parser descarta e conta em "criptografados". Se fama e
+  prata também vierem criptografadas, a captura não tem o que mostrar: não há contorno (e não deve haver).
+- **Mensagem grande nunca chega (fragmento)** → o Windows junta datagramas antes do Npcap (URO, ligado por padrão no
+  Windows 11): pacotes de até ~14 KB. Snaplen baixo corta e a remontagem nunca fecha. `SNAPLEN` é 262144; não baixar.
+- **Dois pacotes Photon num datagrama só** → também o URO. `photon.rs` segue lendo enquanto o próximo cabeçalho tiver
+  o mesmo `peerId` e `challenge`.
+- **Prata do corpo contada duas vezes** → pegar prata de um corpo gera `TakeSilver` e também `OtherGrabbedLoot` com
+  "é prata". A sessão soma só o `TakeSilver` (líquido de taxas); o loot ignora a linha de prata.
+- **Fama da primeira morte de mob menor que a do jogo** → a fama vem da diferença do total (`UpdateFame` campo 1)
+  entre dois eventos; no primeiro evento depois de ligar não há total anterior e vale o campo 2 (sem bônus de
+  Premium nem da bolsa de fama).
+- **Fama/h absurda depois de religar a captura** → a base do total sobrevivia ao desligar e a fama ganha com a
+  captura parada entrava de uma vez. `Interpretador::pausou()` zera a base em desligar, queda e sessão nova.
+- **Prata/h, fama/h e loot/h divididos por horas com o jogo fechado** → o tempo contava desde ligar (o app liga a
+  captura sozinho ao abrir). Agora conta do primeiro pacote do jogo e para no último quando passam 15 s sem tráfego
+  (`Nucleo::processar` e `conferir_silencio`).
+- **Widget parado em "Aguardando o tráfego" depois de suspender o PC** → as threads das interfaces saíam e a
+  captura seguia "ligada" sem ler nada. `captura_caiu` marca `sem-interface` com o motivo e "Tentar de novo" liga de
+  novo; `ligar()` também trata execução de threads mortas como desligada. Reabrir sozinho: pendência.
+- **Loot, prata e mapa de outra pessoa na sessão (Hotspot Móvel/ICS)** → tráfego do jogo de outro PC roteado por
+  este passa pelo Npcap. A identidade fica presa ao fluxo do `Join`: Join de outro personagem noutro fluxo só vale
+  depois de 10 s sem pacote no fluxo atual; Join do mesmo nome troca na hora (troca de mapa). Limite: se só o
+  outro estiver jogando, o primeiro Join é o dele (pendência: filtrar pelo endereço da interface).
+- **App aborta por falta de memória com pacote forjado na porta 5056** → `vec![0; total]` pelo total declarado no
+  fragmento e tipos "zero" de 0 byte multiplicando `Valor`. Remontagem guarda só os pedaços que chegaram (2 MB por
+  fluxo, 1 MB por mensagem) e o Protocol18 tem orçamento de valores por mensagem (`Leitor::gastar`).
+- **Tabela remota apontando outra porta ou campo** → `de_json` aceita só 5055/5056 e `de_json_remota` limita o
+  salto de `versao` (+1000); id de mapa só com formato de id e, com o `world.txt` carregado, só se existir nele. A
+  URL segue a `main` sem assinatura (pendência, decisão do Gabriel: chave de assinatura).
+- **Loot "sem preço" mesmo depois de a lista de itens chegar** → a marca que decide buscar preço só olhava
+  quantidades; agora inclui o id (`marcaDoLoot`).
+- **Loot como "Item nº 1234" e sem preço** → falta a lista `items.txt` do ao-bin-dumps (sem rede na primeira vez).
+  O índice numérico também muda entre patches: lista velha dá o item errado. A cópia local vale 24 h.
+- **Loot de coleta, refino ou mercado não aparece** → de propósito na v1: o "loot" é só o `OtherGrabbedLoot` do
+  próprio jogador (corpos, baús, chão). Itens que entram por outros caminhos não passam por esse evento.
+- **Nome do mapa em inglês** → o `world.txt` do ao-bin-dumps só tem inglês. Pendência: nomes PT-BR.
+- **Nome de outro jogador no diagnóstico ou na tela** → não pode acontecer (fronteira dos Termos): o interpretador
+  só olha a lista fechada e o diagnóstico guarda só código → contagem. Teste em `capture/albion.rs`
+  (`outros_jogadores_sao_descartados_e_nunca_expostos`) e em `capture/mod.rs` (do quadro ao retrato).
+- **Contador ao vivo de "outros jogadores descartados"** → subia quando alguém agia por perto: indicador de
+  presença. Saiu do `Estado` (tela); a contagem fica só no arquivo de diagnóstico.

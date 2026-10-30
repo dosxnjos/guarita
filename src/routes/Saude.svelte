@@ -131,10 +131,10 @@
   </p>
   <p>
     <strong>Saiba o que ele faz antes de instalar:</strong> o cliente lê o tráfego de rede do jogo no seu computador
-    para pegar os preços que aparecem no mercado. É a única coisa desse tipo que a Guarita menciona. A Sandbox
+    para pegar os preços que aparecem no mercado. A Sandbox
     Interactive disse em 2017 que ferramentas que só leem o tráfego para análise são aceitas ("enquanto você só olha e
     analisa"); a citação e a fonte estão em <a href="/permitido" onclick={go}>Isso é permitido?</a>. A decisão de
-    instalar é sua. A Guarita em si não lê o tráfego do jogo e continua funcionando sem o cliente.
+    instalar é sua. O site da Guarita não lê o tráfego do jogo e continua funcionando sem o cliente.
   </p>
   <p><a class="btn" href="https://www.albion-online-data.com/" target="_blank" rel="noopener noreferrer">Site do Albion Online Data Project</a></p>
   <p class="small muted">Baixe só pelo site oficial do projeto e leia lá como o cliente funciona. O cliente é do projeto, não da Guarita.</p>

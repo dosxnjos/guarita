@@ -384,7 +384,37 @@ export interface HojeOpcao {
   /** 0 a 100: quão confiável é a estimativa (idade do preço, volume, risco). */
   confianca: number;
   riscos: string[];
-  itens: { id: string; nome: string; qtd: number; compra: number | null; venda: number | null; cidadeCompra: City | null; cidadeVenda: City | null }[];
+  itens: HojeItem[];
+  /** Conta aberta do ciclo (compra, venda, taxas, lucro). */
+  conta?: HojeConta;
+  /** Motivos do selo de confiança ("visto há 2 h", "pouco volume", "zona vermelha"). */
+  motivos?: string[];
+  /** Minutos de deslocamento estimados (ida) no ciclo; estimativa, não medida. */
+  deslocamentoMin?: number;
+}
+
+export interface HojeItem {
+  id: string;
+  nome: string;
+  qtd: number;
+  compra: number | null;
+  venda: number | null;
+  cidadeCompra: City | null;
+  cidadeVenda: City | null;
+  /** Idade em minutos do preço de compra usado na conta (null = sem data). */
+  idadeCompraMin?: number | null;
+  /** Idade em minutos do preço de venda usado na conta. */
+  idadeVendaMin?: number | null;
+}
+
+export interface HojeConta {
+  /** Prata gasta comprando (no refino, já descontado o retorno médio de material). */
+  compra: number;
+  /** Prata bruta das vendas. */
+  venda: number;
+  /** Taxa de anúncio (2,5% na ordem de venda) + imposto sobre a venda (4% com Premium, 8% sem). */
+  taxas: number;
+  lucro: number;
 }
 
 export interface HojeResponse {
@@ -392,19 +422,25 @@ export interface HojeResponse {
   minutos: number;
   premium: boolean;
   opcoes: HojeOpcao[];
+  /** Avisos gerais: trilha sem opção, bônus do dia, fonte que falhou. */
+  notas?: string[];
+  /** true se algum dado veio da reserva porque o AODP falhou. */
+  stale?: boolean;
   fetchedAt: string;
 }
 
 export interface ForecastResponse {
   id: string;
   quality: Quality;
+  /** Cidade usada. Sem `city` no pedido, a API escolhe a de mais unidades vendidas em 14 dias (sem Black Market). */
   city: City;
   /** Histórico diário usado (média de venda e volume). */
   history: { date: string; avg: number; count: number }[];
-  /** Previsão para os próximos 1 a 3 dias com faixa P10–P90. */
+  /** Previsão para os próximos 1 a 3 dias com faixa P10–P90. Se `beatsNaive` não for true, é a previsão ingênua. */
   forecast: { date: string; p10: number; p50: number; p90: number }[];
-  /** Erro médio absoluto em backtest: modelo vs ingênuo (repetir o último valor). */
+  /** Erro médio absoluto em backtest: modelo vs ingênuo (repetir o último valor). `days` = rodadas do teste, não dias corridos. */
   backtest: { days: number; maeModel: number | null; maeNaive: number | null; beatsNaive: boolean | null };
+  /** Em texto: qual previsão foi publicada e por quê. */
   method: string;
   fetchedAt: string;
 }

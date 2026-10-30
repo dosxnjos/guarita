@@ -1590,8 +1590,9 @@ dependencies = [
 
 [[package]]
 name = "guarita"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "libloading",
  "log",
  "serde",
  "serde_json",

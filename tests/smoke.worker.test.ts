@@ -6,7 +6,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 import worker from '../worker/index';
 import type { Env } from '../worker/env';
 import type {
-  ClockResponse, DataHealthResponse, GoldResponse, GuildSearchResponse, GuildSummary, ItemResponse, LossesResponse, PlayerDossier, PlayerSearchResponse,
+  ClockResponse, DataHealthResponse, ForecastResponse, GoldResponse, GuildSearchResponse, GuildSummary, HojeResponse, ItemResponse, LossesResponse, PlayerDossier,
+  PlayerSearchResponse,
 } from '../shared/types';
 import { MCP_PROTOCOL_VERSIONS } from '../worker/mcp/catalog';
 import { mockCaches } from './helpers/net';
@@ -24,9 +25,14 @@ function fakeEnv(): Env {
   const ASSETS = {
     async fetch(input: RequestInfo | URL) {
       const path = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).pathname;
-      const file = new URL('../public' + path, import.meta.url);
+      // index.html não mora em public/: o do build (dist/, com a cabeça do Vite) ou, sem build, o da raiz.
+      let file = new URL('../public' + path, import.meta.url);
+      if (path === '/index.html') {
+        const built = new URL('../dist/index.html', import.meta.url);
+        file = fs?.existsSync(built) ? built : new URL('../index.html', import.meta.url);
+      }
       if (!fs || !fs.existsSync(file)) return new Response('not found', { status: 404 });
-      const type = path.endsWith('.json') ? 'application/json' : 'application/octet-stream';
+      const type = path.endsWith('.json') ? 'application/json' : path.endsWith('.html') ? 'text/html; charset=utf-8' : 'application/octet-stream';
       return new Response(fs.readFileSync(file) as BodyInit, { headers: { 'content-type': type } });
     },
   } as unknown as Fetcher;
@@ -315,7 +321,7 @@ describe.skipIf(!RUN)('fumaça do worker contra as APIs reais', () => {
 
     const list = await post('/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/list' }, { 'mcp-protocol-version': '2025-06-18' });
     const names = (list.body.result.tools as { name: string }[]).map((t) => t.name).sort();
-    expect(names).toEqual(['buscar_item', 'dossie_jogador', 'perdas_pvp', 'preco_item', 'relogio']);
+    expect(names).toEqual(['buscar_item', 'dossie_jogador', 'o_que_fazer', 'perdas_pvp', 'preco_item', 'relogio']);
 
     const clock = await post('/mcp', { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'relogio', arguments: {} } }, { 'mcp-protocol-version': '2025-06-18' });
     expect(clock.status).toBe(200);
@@ -348,6 +354,80 @@ describe.skipIf(!RUN)('fumaça do worker contra as APIs reais', () => {
     const v = await worker.fetch(new Request(ORIGIN + '/mcp', { headers: { 'mcp-protocol-version': '2025-06-18' } }), env, ctx);
     expect(v.status).toBe(405);
     await v.body?.cancel();
+  });
+
+  // ---------- Fase 3 ----------
+
+  it('/api/hoje (três trilhas com a conta aberta) e prata ausente dá 400', async () => {
+    const path = '/api/hoje?prata=2000000&minutos=60&premium=1';
+    const r = await call(path);
+    if (upstreamDown(r, path)) return;
+    expect(r.status).toBe(200);
+    const b = r.body as HojeResponse;
+    expect(b.prata).toBe(2_000_000);
+    expect(b.minutos).toBe(60);
+    expect(b.premium).toBe(true);
+    expect(isIsoOrNull(b.fetchedAt) && b.fetchedAt !== null).toBe(true);
+    expect(Array.isArray(b.opcoes)).toBe(true);
+    for (const o of b.opcoes) {
+      expect(['flip', 'refino', 'transporte']).toContain(o.trilha);
+      expect(o.confianca).toBeGreaterThanOrEqual(0);
+      expect(o.confianca).toBeLessThanOrEqual(100);
+      expect(o.passos.length).toBeGreaterThan(0);
+      expect(o.itens.length).toBeGreaterThan(0);
+      if (o.conta) expect(o.conta.venda - o.conta.taxas - o.conta.compra).toBeCloseTo(o.conta.lucro, -1);
+    }
+    console.log(`[fumaça] hoje: ${b.opcoes.length} opções (${b.opcoes.map((o) => `${o.trilha} ${Math.round(o.lucro)}`).join(', ')}); notas: ${(b.notas ?? []).length}`);
+    // segunda chamada: retrato em cache (sem fonte externa nova)
+    const again = await call(path);
+    expect(again.status).toBe(200);
+    const bad = await call('/api/hoje');
+    expect(bad.status).toBe(400);
+    expect(typeof bad.body.error).toBe('string');
+  }, 60_000);
+
+  it('/api/forecast/T4_BAG?city=Lymhurst (backtest publicado) e cidade automática', async () => {
+    const path = '/api/forecast/T4_BAG?city=Lymhurst';
+    const r = await call(path);
+    if (upstreamDown(r, path)) return;
+    expect(r.status).toBe(200);
+    const b = r.body as ForecastResponse;
+    expect(b.id).toBe('T4_BAG');
+    expect(b.city).toBe('Lymhurst');
+    expect(typeof b.method).toBe('string');
+    expect(b.method.length).toBeGreaterThan(10);
+    expect(Array.isArray(b.history)).toBe(true);
+    expect(typeof b.backtest.days).toBe('number');
+    expect(isNumOrNull(b.backtest.maeModel)).toBe(true);
+    expect(isNumOrNull(b.backtest.maeNaive)).toBe(true);
+    const today = new Date().toISOString().slice(0, 10);
+    for (const f of b.forecast) {
+      expect(f.date >= today).toBe(true);
+      expect(f.p10).toBeLessThanOrEqual(f.p50);
+      expect(f.p50).toBeLessThanOrEqual(f.p90);
+    }
+    console.log(`[fumaça] forecast T4_BAG Lymhurst: ${b.history.length} dias, ${b.forecast.length} previstos, MAE modelo ${b.backtest.maeModel} × ingênuo ${b.backtest.maeNaive}, bate: ${b.backtest.beatsNaive}`);
+    const auto = await call('/api/forecast/T4_BAG?city=');
+    if (!upstreamDown(auto, 'forecast auto')) {
+      expect(auto.status).toBe(200);
+      expect(typeof auto.body.city).toBe('string');
+      console.log(`[fumaça] forecast T4_BAG cidade automática: ${auto.body.city}`);
+    }
+    const bad = await call('/api/forecast/%3Cx%3E?city=Lymhurst');
+    expect(bad.status).toBe(400);
+  }, 60_000);
+
+  it('HTML de /item/T4_BAG sai com o título e o Open Graph do item', async () => {
+    const res = await worker.fetch(new Request(ORIGIN + '/item/T4_BAG', { headers: { accept: 'text/html' } }), env, ctx);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type') ?? '').toContain('text/html');
+    const html = await res.text();
+    const title = /<title>([^<]*)<\/title>/.exec(html)?.[1];
+    console.log(`[fumaça] /item/T4_BAG → <title>${title}</title>`);
+    expect(title).toBe('Bolsa do Adepto (T4) · Guarita');
+    expect(html.match(/<title>/g)?.length).toBe(1);
+    expect(html).toContain('<meta property="og:title" content="Bolsa do Adepto (T4) · Guarita"');
+    expect(html).toContain('<link rel="canonical" href="https://guarita.pages.dev/item/T4_BAG"');
   });
 
   it('/api/health e rota desconhecida', async () => {

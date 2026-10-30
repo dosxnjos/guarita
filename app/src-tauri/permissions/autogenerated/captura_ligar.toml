@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-captura-ligar"
+description = "Enables the captura_ligar command without any pre-configured scope."
+commands.allow = ["captura_ligar"]
+
+[[permission]]
+identifier = "deny-captura-ligar"
+description = "Denies the captura_ligar command without any pre-configured scope."
+commands.deny = ["captura_ligar"]

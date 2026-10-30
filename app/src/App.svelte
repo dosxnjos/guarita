@@ -10,6 +10,8 @@
   import Alertas from './widgets/Alertas.svelte';
   import Despertador from './widgets/Despertador.svelte';
   import Lente from './widgets/Lente.svelte';
+  import Sessao from './widgets/Sessao.svelte';
+  import Loot from './widgets/Loot.svelte';
   import { acompanharTema } from './lib/ui-janelas';
 
   let { label }: { label: WindowLabel } = $props();
@@ -17,7 +19,7 @@
   // Tema escolhido no painel (localStorage compartilhado pelas janelas; a troca chega às outras pelo evento storage).
   $effect(() => acompanharTema());
 
-  const WIDGETS: Record<WidgetLabel, Component> = { preco: Preco, dossie: Dossie, relogio: Relogio, alertas: Alertas, despertador: Despertador, lente: Lente };
+  const WIDGETS: Record<WidgetLabel, Component> = { preco: Preco, dossie: Dossie, relogio: Relogio, alertas: Alertas, despertador: Despertador, lente: Lente, sessao: Sessao, loot: Loot };
 </script>
 
 {#if label === PAINEL}

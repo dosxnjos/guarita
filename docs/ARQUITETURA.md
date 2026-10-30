@@ -19,7 +19,10 @@ Dois repositórios, tudo no plano grátis da Cloudflare (conta pessoal):
  │   arquivos estáticos (dist/) + /data/items-index.json        │
  │   dist/_worker.js  ← worker/index.ts                         │
  │     /api/*   → worker/api/router.ts (market, clock,          │
- │                player, alerts; Fase 2: routesF2.ts)          │
+ │                player, alerts; F2: routesF2.ts; F3: hoje,    │
+ │                forecast em routesF3.ts)                      │
+ │     páginas  → worker/seo.ts (título/OG por rota),           │
+ │                /sitemap.xml                                  │
  │     /discord → worker/discord/interactions.ts                │
  │     /mcp     → worker/mcp/server.ts (POST; GET de           │
  │                navegador = página)                           │
@@ -93,12 +96,39 @@ O navegador também carrega os ícones direto de `render.albiononline.com` (com 
   "iniciar com o Windows" é opção desligada. Como funciona: [app/README.md](../app/README.md).
 - **Lente de mercado** (opcional, desligada): só escuta o websocket local (`ws://localhost:8099/ws`) do cliente
   do Albion Data Project (comunitário; ele lê o tráfego de rede do jogo no PC do usuário), se o usuário o rodar; a
-  Guarita não captura rede nem envia nada ao cliente.
+  lente não envia nada ao cliente.
+- **Captura do próprio jogador** (v0.2, opcional, desligada por padrão): com o Npcap instalado, o Rust
+  (`app/src-tauri/src/capture/`) lê passivamente o UDP 5056 (Photon/Protocol18) e mostra só a sessão do próprio
+  jogador (prata, fama, loot com valor por `/api/prices`, mortes, mapa). Eventos de outros jogadores são descartados
+  no parser; nada é enviado ao jogo, nada toca o processo; o Rust recusa ligar sem o aceite do aviso. Códigos em
+  `app/capture-codes.json` (atualizável pelo GitHub sem versão nova). Detalhe: [app/README.md](../app/README.md).
 - **Página `/app`** do site: o botão de download consulta `api.github.com/.../releases/latest` no navegador
   (`src/lib/appRelease.ts`) e oferece só o `*-setup.exe`; sem release, "Em breve"; GitHub fora ou limite de 60/h,
   link para a página de releases.
 - **Distribuição:** instalador NSIS/MSI no GitHub Releases, sem assinatura (aviso do SmartScreen) e sem
   atualização automática na v0.1.
+
+### Fase 3 (30/10/2026)
+
+- **O que fazer hoje** (`/hoje`, `GET /api/hoje`, bot `/hoje`, MCP `o_que_fazer`; `worker/api/hoje.ts` + dado puro em
+  `shared/hoje.ts`): um retrato do mercado único para todos (lote de `/prices` da cesta, festividades, histórico de 9
+  itens) fica 5 min na Cache API; as três trilhas (flip para o Black Market, refino com bônus, transporte) são
+  calculadas por pedido sobre ele, com a conta aberta e o selo de confiança.
+- **Previsão** (`/previsao`, bloco na página de item, `GET /api/forecast/:id`; modelo puro em `shared/forecast.ts`):
+  divide com a página de item o pedido e o cache de 1 h do histórico; backtest walk-forward contra o ingênuo e só
+  publica o modelo quando ele erra menos.
+- **Painel de live** (`/live`, `src/lib/live/`): fonte de navegador do OBS (fundo transparente via classe
+  `live-obs` no `<html>`), configurada pela URL; `?config` monta o endereço. Só lê `/api/clock`, `/api/item`,
+  `/api/guild`; cada bloco falha sozinho e mantém o último valor bom.
+- **SEO e PWA** (`worker/seo.ts`): o `_worker.js` reescreve título, descrição, canonical e Open Graph de cada página
+  (HTMLRewriter no Workers; no Node, `applyMetaToHtml`) e gera `/sitemap.xml`; `public/og.png` sai de
+  `node scripts/make-og.mjs`. `public/sw.js` (registrado no `src/main.ts`) faz rede primeiro na navegação e cai na
+  `offline.html` sem rede; `/api/` nunca vem do cache.
+- **Extensão de navegador** (`extension/`, Manifest V3, JS puro): cartão com nome PT-BR e preço ao passar o mouse em
+  ícones de item nos sites de Albion, popup com busca e relógio. Só o `background.js` faz requisição, e só para
+  `guarita.pages.dev`. Pacote: `node extension/build.mjs`. Detalhe: [extension/README.md](../extension/README.md).
+- **App de PC v0.2**: captura passiva do próprio jogador (acima, em "App no PC").
+- Fora desta rodada: espanhol (`/es/...`) e a página de status/transparência de custos (entregas 5 e 6 do roadmap).
 
 ## Limites que moldam o desenho
 
@@ -125,5 +155,9 @@ Todos vêm do Doppler pessoal e são gravados pelo `npm run deploy` de cada repo
 
 ## Fronteira dos Termos
 
-Nenhuma parte do sistema lê a rede ou a memória do cliente, olha a tela, avisa sobre jogador avistado ou fala com
-o servidor do jogo. As únicas fontes são as APIs web públicas acima. Ver a página `/permitido`.
+Nenhuma parte do sistema lê a memória do cliente, olha a tela, toca no processo do jogo, avisa sobre jogador avistado
+ou fala com o servidor do jogo. O site, a API, o bot e a extensão só usam as APIs web públicas acima. A única exceção
+de leitura de rede é a captura do app de PC: passiva, opcional (desligada por padrão, com aviso aceito), só do
+próprio jogador, no PC do usuário, sem enviar nada ao jogo (para a Guarita só vão os ids dos itens, em `/api/prices`,
+para dar o valor do loot; prática tolerada pela SBI desde 2017, não
+permitida oficialmente). Ver a página `/permitido`.

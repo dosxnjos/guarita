@@ -16,6 +16,7 @@
   import VerdictTag from '../lib/ui/VerdictTag.svelte';
   import Sparkline from '../lib/ui/Sparkline.svelte';
   import HistoryChart from '../lib/ui/HistoryChart.svelte';
+  import ForecastCard from '../lib/forecast/ForecastCard.svelte';
   import RangeBar from '../lib/ui/RangeBar.svelte';
   import BookPanel from '../lib/ui/BookPanel.svelte';
   import FlipsTable from '../lib/ui/FlipsTable.svelte';
@@ -104,6 +105,10 @@
   const histByCity = $derived(new Map((data?.history ?? []).map((h) => [h.city, [...h.days].sort((a, b) => a.date.localeCompare(b.date))])));
   const stale = $derived(!!data && isStale(data.fetchedAt, 15));
   const title = $derived(meta ? `${meta.pt}${meta.tier ? ' ' + tierLabel(meta.tier, meta.ench) : ''}` : id);
+  // Mesmo formato do título que o _worker.js injeta (worker/seo.ts); só depois do nome carregar, para não piscar o id.
+  $effect(() => {
+    if (meta && meta.pt !== id) document.title = `${meta.pt}${meta.tier ? ` (${tierLabel(meta.tier, meta.ench)})` : ''} · Guarita`;
+  });
   const alertHref = $derived(`/alertas?item=${encodeURIComponent(id)}${quality === 1 ? '' : `&q=${quality}`}`);
   const discordCmd = $derived(`/preco item:${meta?.pt && meta.pt !== id ? meta.pt : id}${meta?.tier ? ' ' + tierLabel(meta.tier, meta.ench) : ''}`);
 
@@ -236,6 +241,9 @@
 
       <h2>Últimos 30 dias</h2>
       <div class="card"><HistoryChart history={data.history} /></div>
+
+      <h2>Previsão dos próximos dias</h2>
+      <ForecastCard {id} {quality} />
 
       <h2>Livro de ofertas</h2>
       <BookPanel {id} {quality} books={data.book} initialCity={best?.quote.city ?? null} />

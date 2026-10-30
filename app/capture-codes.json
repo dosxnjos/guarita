@@ -1,0 +1,36 @@
+{
+  "versao": 1,
+  "atualizadoEm": "2026-10-30",
+  "protocolo": "photon-protocol18",
+  "porta": 5056,
+  "parametroEvento": 252,
+  "parametroOperacao": 253,
+  "fontes": [
+    {
+      "nome": "ao-data/albiondata-client (MIT)",
+      "url": "https://github.com/ao-data/albiondata-client",
+      "conferidoEm": "2026-10-30",
+      "commitDe": "2026-10-12",
+      "usado": "porta 5056 (client/albion_watcher.go), Protocol18 e cabeçalho Photon (client/photon/*), código real do evento em params[252] e da operação em params[253] (client/decode.go), enum de eventos (client/events.go) e params da resposta de Join (client/operation_join.go)"
+    },
+    {
+      "nome": "Triky313/AlbionOnline-StatisticsAnalysis (GPL-3.0; só os números foram usados, nenhum código)",
+      "url": "https://github.com/Triky313/AlbionOnline-StatisticsAnalysis",
+      "conferidoEm": "2026-10-30",
+      "commitDe": "2026-10-25",
+      "usado": "valores do enum EventCodes e OperationCodes (Network/EventCodes.cs, OperationCodes.cs) e índice dos parâmetros de cada evento (Network/Events/*.cs, Operations/Responses/JoinResponse.cs, ChangeClusterResponse.cs)"
+    }
+  ],
+  "observacao": "Os códigos mudam a cada patch do Albion. Os dois projetos concordaram em todos os valores abaixo em 30/10/2026. Valores de prata e fama vêm multiplicados por 10000 (FixPoint).",
+  "eventos": {
+    "UpdateMoney": { "codigo": 81, "campos": { "objeto": 0, "saldo": 1 } },
+    "UpdateFame": { "codigo": 82, "campos": { "objeto": 0, "total": 1, "ganho": 2 } },
+    "TakeSilver": { "codigo": 62, "campos": { "objeto": 0, "bruto": 3, "taxaCluster": 4, "taxaGuilda": 5, "penalidadeAlianca": 6 } },
+    "OtherGrabbedLoot": { "codigo": 278, "campos": { "quemPegou": 2, "ehPrata": 3, "item": 4, "quantidade": 5 } },
+    "Died": { "codigo": 164, "campos": { "objeto": 1, "nome": 2 } }
+  },
+  "operacoes": {
+    "Join": { "codigo": 2, "campos": { "objeto": 0, "nome": 2, "mapa": 8 } },
+    "ChangeCluster": { "codigo": 41, "campos": { "mapa": 0 } }
+  }
+}

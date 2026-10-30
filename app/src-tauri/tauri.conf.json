@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Guarita",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.guarita.app",
   "build": {
     "beforeDevCommand": "npm run vite:dev",
@@ -63,7 +63,7 @@
     "publisher": "Guarita",
     "category": "Utility",
     "shortDescription": "Companheiro em PT-BR para Albion Online",
-    "longDescription": "Guarita no PC: preço rápido, relógio do servidor, dossiê, alertas e despertador locais com voz em português. Só funciona com o app aberto; não lê o jogo nem captura rede. Não afiliado à Sandbox Interactive.",
+    "longDescription": "Guarita no PC: preço rápido, relógio do servidor, dossiê, alertas e despertador locais com voz em português. Só funciona com o app aberto e não toca no processo do jogo. Opcional e desligada por padrão: captura passiva do tráfego do próprio jogador (com Npcap) para mostrar a sua sessão, sem enviar nada ao jogo. Não afiliado à Sandbox Interactive.",
     "copyright": "MIT",
     "icon": [
       "icons/32x32.png",

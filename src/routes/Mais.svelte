@@ -11,6 +11,8 @@
       items: [
         ['/', 'Preço de item', 'Preço por cidade com idade, selo de confiança, veredito e flip para o Black Market.'],
         ['/perdas', 'Perdas PvP', 'O que a guerra consome: os itens mais perdidos nas mortes e quanto valem.'],
+        ['/hoje', 'O que fazer hoje', 'Com a sua prata e o seu tempo: flip, refino e transporte com a conta aberta e o risco.'],
+        ['/previsao', 'Previsão de preço', 'Preço dos próximos dias com faixa de incerteza e o acerto do modelo publicado.'],
         ['/ouro', 'Ouro e Premium', 'Cotação do ouro, se está barato agora e se o Premium compensa.'],
         ['/saude', 'Saúde do dado', 'Quão frescos estão os preços de cada cidade agora.'],
       ],
@@ -37,7 +39,9 @@
         ['/despertador', 'Despertador da ilha', 'Lembrete de colheita, animais e foco cheio.'],
         ['/relogio', 'Relógio do Americas', 'Servidor, bônus do dia, festividades e temporada em horário de Brasília.'],
         ['/app', 'App para PC', 'A Guarita no Windows: janelas ao lado do jogo, voz, atalhos e avisos, só com o app aberto.'],
+        ['/extensao', 'Extensão de navegador', 'Nome em português e preço ao passar o mouse nos itens da wiki, do killboard e de outros sites.'],
         ['/janela', 'Janela flutuante', 'Painel pequeno que fica por cima do jogo (desligado por padrão).'],
+        ['/live', 'Painel de live', 'Relógio, preços e histórico da guilda por cima da transmissão no OBS.'],
         ['/mcp', 'Guarita no Claude (MCP)', 'Pergunte preço e dossiê em linguagem natural pelo seu assistente de IA.'],
       ],
     },

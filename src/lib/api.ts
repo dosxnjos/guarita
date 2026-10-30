@@ -46,6 +46,7 @@ export const api = {
   // Fase 3
   hoje: (prata: number, minutos: number, premium: boolean) =>
     get<HojeResponse>(`/api/hoje?prata=${prata}&minutos=${minutos}&premium=${premium ? 1 : 0}`),
-  forecast: (id: string, city: City, q: Quality = 1) =>
-    get<ForecastResponse>(`/api/forecast/${encodeURIComponent(id)}?city=${encodeURIComponent(city)}&q=${q}`),
+  /** `city` null = a API escolhe a cidade com mais unidades vendidas nos últimos 14 dias (sem Black Market). */
+  forecast: (id: string, city: City | null, q: Quality = 1) =>
+    get<ForecastResponse>(`/api/forecast/${encodeURIComponent(id)}?city=${encodeURIComponent(city ?? '')}&q=${q}`),
 };

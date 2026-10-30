@@ -12,13 +12,14 @@ export const MCP_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', 
 export const MCP_CALLS_PER_MIN = 60;
 
 export interface JsonSchemaProp {
-  type: 'string' | 'integer';
+  type: 'string' | 'integer' | 'boolean';
   description: string;
   minLength?: number;
   maxLength?: number;
   minimum?: number;
   maximum?: number;
-  default?: number;
+  enum?: number[];
+  default?: number | boolean;
 }
 
 export interface McpToolDef {
@@ -128,5 +129,27 @@ export const MCP_TOOLS: McpToolDef[] = [
     },
     annotations: annotations('Itens mais perdidos no PvP'),
     example: 'Quais itens mais se perderam no PvP esta semana? O que vale a pena craftar?',
+  },
+  {
+    name: 'o_que_fazer',
+    title: 'O que fazer hoje',
+    description:
+      'Sugere o que fazer com a prata e o tempo do jogador no Americas, com dado ao vivo do Albion Data Project: até 3 ' +
+      'opções por trilha (flip para o Black Market, refino na cidade com bônus e o bônus do dia, transporte entre ' +
+      'cidades), cada uma com passos, conta aberta (compra, venda, taxas, lucro), selo de confiança de 0 a 100, idade ' +
+      'dos preços e riscos de rota. É estimativa, não promessa de lucro: os preços vêm de jogadores e mudam rápido.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prata: { type: 'integer', description: 'Prata disponível (ex.: 1000000 para 1 milhão).', minimum: 1_000, maximum: 100_000_000_000 },
+        // Mesmas opções do site (/hoje) e do bot (/hoje): o link devolvido reproduz a mesma conta.
+        minutos: { type: 'integer', description: 'Tempo disponível em minutos: 30, 60 ou 120 (as mesmas opções do site e do bot). Padrão 60.', enum: [30, 60, 120], default: 60 },
+        premium: { type: 'boolean', description: 'Se o jogador tem Premium (imposto de venda de 4% em vez de 8%). Padrão false.', default: false },
+      },
+      required: ['prata'],
+      additionalProperties: false,
+    },
+    annotations: annotations('O que fazer hoje'),
+    example: 'Tenho 5 milhões de prata e uma hora, sem Premium. O que dá para fazer hoje?',
   },
 ];

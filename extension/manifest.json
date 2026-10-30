@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "Guarita para Albion Online",
+  "short_name": "Guarita",
+  "version": "0.1.0",
+  "description": "Nome em português e preço do mercado ao passar o mouse nos itens de Albion Online em sites como a wiki e o killboard.",
+  "homepage_url": "https://guarita.pages.dev/extensao",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Guarita: preço de item e relógio",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["lib/core.js", "background.js"]
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["https://guarita.pages.dev/*"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://wiki.albiononline.com/*",
+        "https://albiononline.com/killboard*",
+        "https://albiononline.com/*/killboard*",
+        "https://albionfreemarket.com/*",
+        "https://www.albionfreemarket.com/*",
+        "https://albiononline2d.com/*",
+        "https://www.albiononline2d.com/*",
+        "https://murderledger.com/*",
+        "https://www.murderledger.com/*",
+        "https://www.albion-online-data.com/*"
+      ],
+      "js": ["lib/core.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "extensao@guarita.pages.dev",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
+    }
+  }
+}

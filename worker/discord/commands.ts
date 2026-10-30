@@ -3,7 +3,12 @@
 // Sem import de runtime aqui: o script de registro empacota este arquivo isolado com esbuild.
 
 /** Tipos de opção da API do Discord. */
-export const OPT = { SUB_COMMAND: 1, SUB_COMMAND_GROUP: 2, STRING: 3, INTEGER: 4, CHANNEL: 7, NUMBER: 10 } as const;
+export const OPT = { SUB_COMMAND: 1, SUB_COMMAND_GROUP: 2, STRING: 3, INTEGER: 4, BOOLEAN: 5, CHANNEL: 7, NUMBER: 10 } as const;
+
+/** /hoje: limites da prata e escolhas de tempo (mesmos de worker/api/hoje.ts LIMITS e da tela /hoje). */
+export const HOJE_PRATA_MIN = 1_000;
+export const HOJE_PRATA_MAX = 100_000_000_000;
+export const HOJE_MINUTOS = [30, 60, 120] as const;
 
 // Cópia literal de shared/quality.ts (este arquivo não importa nada em runtime; tests/discord.test.ts confere
 // que as duas tabelas são iguais).
@@ -222,6 +227,32 @@ export const COMMANDS: CommandDef[] = [
         name: 'resumo',
         description: 'Kills, mortes, quem mais mata, armas e horários dos últimos dias',
         options: [{ ...GUILD_NAME, description: 'Nome exato da guilda (padrão: a configurada neste servidor)' }],
+      },
+    ],
+  },
+  {
+    ...base,
+    name: 'hoje',
+    description: 'O que fazer hoje com a sua prata e o seu tempo: flip, refino e transporte com a conta aberta',
+    options: [
+      {
+        type: OPT.INTEGER,
+        name: 'prata',
+        description: 'Quanta prata você quer usar (ex.: 1000000 para 1 milhão)',
+        required: true,
+        min_value: HOJE_PRATA_MIN,
+        max_value: HOJE_PRATA_MAX,
+      },
+      {
+        type: OPT.INTEGER,
+        name: 'minutos',
+        description: 'Quanto tempo você tem (padrão: 60 minutos)',
+        choices: HOJE_MINUTOS.map((m) => ({ name: `${m} minutos`, value: m })),
+      },
+      {
+        type: OPT.BOOLEAN,
+        name: 'premium',
+        description: 'Você tem Premium? Muda o imposto sobre a venda (padrão: não)',
       },
     ],
   },

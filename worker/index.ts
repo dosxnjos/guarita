@@ -1,9 +1,11 @@
 // Entrada do _worker.js do Pages: atende /api/* e /discord; o resto vai para os arquivos estáticos,
-// com fallback para index.html (o front roteia por caminho).
+// com fallback para index.html (o front roteia por caminho). Páginas saem com título, descrição e Open Graph da rota
+// (worker/seo.ts); /sitemap.xml é gerado aqui.
 import type { Env } from './env';
 import { handleApi } from './api/router';
 import { handleDiscord } from './discord/interactions';
 import { handleMcp } from './mcp/server';
+import { sitemapResponse, withPageMeta } from './seo';
 
 /** Pedido para o servidor MCP? Tudo que não é GET/HEAD, ou GET que pede SSE (spec: o servidor responde 405). Pura. */
 export function isMcpClientRequest(request: Request): boolean {
@@ -28,8 +30,11 @@ export default {
       console.error('erro não tratado', url.pathname, err);
       return Response.json({ error: 'erro interno' }, { status: 500 });
     }
+    if (url.pathname === '/sitemap.xml' && (request.method === 'GET' || request.method === 'HEAD')) {
+      return sitemapResponse(request.method);
+    }
     const asset = await env.ASSETS.fetch(request);
-    if (asset.status !== 404 || request.method !== 'GET' || url.pathname.includes('.')) return asset;
-    return env.ASSETS.fetch(new Request(new URL('/index.html', url), request));
+    if (asset.status !== 404 || request.method !== 'GET' || url.pathname.includes('.')) return withPageMeta(request, asset, env);
+    return withPageMeta(request, await env.ASSETS.fetch(new Request(new URL('/index.html', url), request)), env);
   },
 } satisfies ExportedHandler<Env>;

@@ -11,6 +11,15 @@ const COMMANDS: &[&str] = &[
     "widgets_show_all",
     "set_close_to_tray",
     "tray_set_muted",
+    // captura do próprio jogador (src/capture): painel liga/desliga; widgets só leem
+    "captura_estado",
+    "captura_sessao",
+    "captura_ligar",
+    "captura_desligar",
+    "captura_nova_sessao",
+    "captura_definir_codigos",
+    "captura_definir_dados",
+    "captura_diagnostico",
 ];
 
 fn main() {

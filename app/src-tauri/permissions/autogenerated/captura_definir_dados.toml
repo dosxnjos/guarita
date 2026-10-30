@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-captura-definir-dados"
+description = "Enables the captura_definir_dados command without any pre-configured scope."
+commands.allow = ["captura_definir_dados"]
+
+[[permission]]
+identifier = "deny-captura-definir-dados"
+description = "Denies the captura_definir_dados command without any pre-configured scope."
+commands.deny = ["captura_definir_dados"]

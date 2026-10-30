@@ -42,7 +42,8 @@ import {
 } from './guild';
 import { MEDIAN_PCT_MAX, MEDIAN_PCT_MIN } from '../../shared/alertLimits';
 import { verifyDiscordRequest } from './verify';
-import { ALERT_CITIES, CONDITIONS, type ConditionKey } from './commands';
+import { ALERT_CITIES, CONDITIONS, HOJE_MINUTOS, HOJE_PRATA_MAX, HOJE_PRATA_MIN, type ConditionKey } from './commands';
+import { getHoje, type HojeParams } from '../api/hoje';
 import {
   alertChoiceLabel,
   clamp,
@@ -58,6 +59,7 @@ import {
   renderGuildChoices,
   renderGuildSummary,
   renderHelp,
+  renderHoje,
   renderLosses,
   renderPlayerList,
   renderPreco,
@@ -321,11 +323,28 @@ async function command(i: Interaction, env: Env, ctx: ExecutionContext): Promise
     }
     case 'guilda':
       return guildCommand(i, sub, opts, env, ctx);
+    case 'hoje': {
+      const p = hojeParams(opts);
+      // Retrato em cache responde na hora; frio (várias chamadas ao AODP) vira resposta adiada.
+      return fastOrDeferred(i, ctx, async () => renderHoje(await getHoje(env, ctx, p)));
+    }
     case 'ajuda':
       return { type: R.MESSAGE, data: renderHelp() };
     default:
       return { type: R.MESSAGE, data: notice('Comando desconhecido. Use /ajuda para ver a lista.') };
   }
+}
+
+/** Opções do /hoje → parâmetros do getHoje. Prata fora da faixa vira erro amigável; minutos fora da lista, 60. */
+export function hojeParams(opts: InteractionOption[]): HojeParams {
+  const prata = Math.round(Number(opts.find((o) => o.name === 'prata')?.value));
+  if (!Number.isFinite(prata) || prata < HOJE_PRATA_MIN || prata > HOJE_PRATA_MAX) {
+    throw new UserError(`Informe a prata entre ${HOJE_PRATA_MIN.toLocaleString('pt-BR')} e ${HOJE_PRATA_MAX.toLocaleString('pt-BR')}.`);
+  }
+  const m = Number(opts.find((o) => o.name === 'minutos')?.value);
+  const minutos = (HOJE_MINUTOS as readonly number[]).includes(m) ? m : 60;
+  const premium = opts.find((o) => o.name === 'premium')?.value === true;
+  return { prata, minutos, premium };
 }
 
 export function parseQuality(v: unknown): Quality {

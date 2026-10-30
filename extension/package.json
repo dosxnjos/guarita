@@ -1,0 +1,12 @@
+{
+  "name": "guarita-extensao",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Extensão de navegador da Guarita (Manifest V3, JS puro, sem dependência).",
+  "license": "MIT",
+  "scripts": {
+    "icons": "node scripts/make-icons.mjs",
+    "build": "node build.mjs",
+    "test": "cd .. && npx vitest run tests/extension.test.ts"
+  }
+}

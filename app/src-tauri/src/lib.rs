@@ -1,8 +1,11 @@
 // Guarita no PC. Regras do produto (invioláveis, ver app/CLAUDE.md):
 // - só trabalha com o app aberto: nenhuma tarefa agendada, nenhum serviço; "iniciar com o Windows" existe só
 //   como opção desligada (o plugin autostart é registrado, mas `enable()` só é chamado pela tela de ajustes);
-// - nada lê o processo do jogo, captura rede ou manda tecla/clique ao jogo;
+// - nada lê o processo do jogo nem manda tecla/clique ao jogo; a única leitura de rede é a captura passiva do
+//   PRÓPRIO jogador (módulo `capture`), desligada por padrão, só com aviso aceito e o app aberto;
 // - "sempre por cima" nasce desligado e só liga depois do aviso da regra da SBI aceito (conferido aqui também).
+
+mod capture;
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -43,6 +46,8 @@ pub const WIDGETS: &[WidgetSpec] = &[
     WidgetSpec { label: "alertas", title: "Alertas", width: 360.0, height: 420.0, min_width: 280.0, min_height: 200.0 },
     WidgetSpec { label: "despertador", title: "Despertador", width: 320.0, height: 360.0, min_width: 240.0, min_height: 180.0 },
     WidgetSpec { label: "lente", title: "Lente de mercado", width: 380.0, height: 360.0, min_width: 280.0, min_height: 200.0 },
+    WidgetSpec { label: "sessao", title: "Sessão", width: 320.0, height: 320.0, min_width: 240.0, min_height: 180.0 },
+    WidgetSpec { label: "loot", title: "Loot", width: 360.0, height: 420.0, min_width: 260.0, min_height: 200.0 },
 ];
 
 #[derive(Default)]
@@ -329,6 +334,7 @@ pub fn run() {
         // Registrado, nunca ligado aqui: só `src/lib/autostart.ts` chama enable(), a partir da tela de ajustes.
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(AppState::default())
+        .manage(capture::CapturaState::default())
         .invoke_handler(tauri::generate_handler![
             widget_open,
             widget_close,
@@ -339,7 +345,15 @@ pub fn run() {
             widgets_hide_all,
             widgets_show_all,
             set_close_to_tray,
-            tray_set_muted
+            tray_set_muted,
+            capture::captura_estado,
+            capture::captura_sessao,
+            capture::captura_ligar,
+            capture::captura_desligar,
+            capture::captura_nova_sessao,
+            capture::captura_definir_codigos,
+            capture::captura_definir_dados,
+            capture::captura_diagnostico
         ])
         .setup(|app| {
             build_tray(app.handle())?;

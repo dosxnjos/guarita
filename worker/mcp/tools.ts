@@ -14,6 +14,9 @@ import { getLosses } from '../api/insights';
 import { minutesSince, PREMIUM_30D_GOLD } from '../../shared/market';
 import { qualityLabel } from '../../shared/quality';
 import { MCP_TOOLS, type McpToolDef } from './catalog';
+import { getHoje, LIMITS as HOJE_LIMITS } from '../api/hoje';
+import { HOJE_MINUTOS } from '../discord/commands';
+import type { HojeResponse as HojeResponseX } from '../../shared/types';
 
 export const SITE = 'https://guarita.pages.dev';
 
@@ -328,6 +331,45 @@ export function summarizeLosses(r: LossesResponse, now = Date.now()): ToolResult
   });
 }
 
+const TRILHA_TEXTO = { flip: 'Flip para o Black Market', refino: 'Refino com bônus', transporte: 'Transporte entre cidades' } as const;
+
+export function hojeLink(r: { prata: number; minutos: number; premium: boolean }): string {
+  return `${SITE}/hoje?prata=${Math.round(r.prata)}&minutos=${r.minutos}&premium=${r.premium ? 1 : 0}`;
+}
+
+export function summarizeHoje(r: HojeResponseX, now = Date.now()): ToolResult {
+  const out: string[] = [
+    `O que fazer hoje com ${fmtInt(r.prata)} de prata, ${r.minutos} min e ${r.premium ? 'Premium' : 'sem Premium'} (servidor Americas).`,
+    `Preços enviados por jogadores ao Albion Data Project, consultados ${ageOf(r.fetchedAt, now)}. Estimativa, não promessa de lucro; tempo de viagem é aproximado.`,
+  ];
+  for (const n of r.notas ?? []) out.push(`Nota: ${n}`);
+  if (!r.opcoes.length) out.push('', 'Nenhuma opção dá lucro com esses valores agora.');
+  r.opcoes.forEach((o, k) => {
+    const c = o.conta;
+    out.push('', `${k + 1}. [${TRILHA_TEXTO[o.trilha]}] ${o.titulo.replace(/^[^:]+:\s*/, '')} · confiança ${o.confianca}/100`);
+    out.push(
+      c
+        ? `   Conta: compra ${fmtInt(c.compra)}, venda ${fmtInt(c.venda)}, taxas ${fmtInt(c.taxas)}, lucro estimado ${fmtInt(c.lucro)} (capital no ciclo ${fmtInt(o.capital)}).`
+        : `   Lucro estimado ${fmtInt(o.lucro)} com ${fmtInt(o.capital)} investidos.`,
+    );
+    o.passos.forEach((p, j) => out.push(`   ${j + 1}) ${p}`));
+    if (o.riscos.length) out.push(`   Riscos: ${o.riscos.join(' ')}`);
+  });
+  out.push('', hojeLink(r));
+  return text(out.join('\n'), {
+    prata: r.prata,
+    minutos: r.minutos,
+    premium: r.premium,
+    consultadoEm: r.fetchedAt,
+    notas: r.notas ?? [],
+    opcoes: r.opcoes.map((o) => ({
+      trilha: o.trilha, titulo: o.titulo, lucro: o.lucro, capital: o.capital, minutos: o.minutos, confianca: o.confianca,
+      conta: o.conta ?? null, passos: o.passos, riscos: o.riscos, itens: o.itens,
+    })),
+    link: hojeLink(r),
+  });
+}
+
 function text(t: string, structured?: Record<string, unknown>): ToolResult {
   const res: ToolResult = { content: [{ type: 'text', text: t }] };
   if (structured) res.structuredContent = structured;
@@ -370,6 +412,15 @@ function int(args: Args, key: string, min: number, max: number, fallback: number
     throw new ToolUserError(`O argumento "${key}" precisa ser um número inteiro de ${min} a ${max}.`);
   }
   return n;
+}
+
+function bool(args: Args, key: string, fallback: boolean): boolean {
+  const v = args[key];
+  if (v === undefined || v === null || v === '') return fallback;
+  if (typeof v === 'boolean') return v;
+  if (v === 'true' || v === 1 || v === '1') return true;
+  if (v === 'false' || v === 0 || v === '0') return false;
+  throw new ToolUserError(`O argumento "${key}" precisa ser true ou false.`);
 }
 
 const ITEM_ID_RE = /^T\d_[A-Z0-9_]+(@[0-4])?$/i;
@@ -432,6 +483,17 @@ export async function callTool(name: string, rawArgs: unknown, deps: ToolDeps): 
       case 'perdas_pvp': {
         const dias = int(args, 'dias', 1, 7, 1);
         return summarizeLosses(await getLosses(env, ctx, dias, 20), now());
+      }
+      case 'o_que_fazer': {
+        const prata = int(args, 'prata', HOJE_LIMITS.prataMin, HOJE_LIMITS.prataMax, NaN);
+        if (Number.isNaN(prata)) throw new ToolUserError('Informe a prata disponível (argumento "prata").');
+        // Só as opções do site e do bot: com outro valor, o link "conta completa" abriria outra conta no site.
+        const minutos = int(args, 'minutos', HOJE_LIMITS.minutosMin, HOJE_LIMITS.minutosMax, HOJE_LIMITS.minutosPadrao);
+        if (!(HOJE_MINUTOS as readonly number[]).includes(minutos)) {
+          throw new ToolUserError(`O argumento "minutos" precisa ser ${HOJE_MINUTOS.slice(0, -1).join(', ')} ou ${HOJE_MINUTOS[HOJE_MINUTOS.length - 1]}.`);
+        }
+        const premium = bool(args, 'premium', false);
+        return summarizeHoje(await getHoje(env, ctx, { prata, minutos, premium }, now()), now());
       }
     }
   } catch (err) {

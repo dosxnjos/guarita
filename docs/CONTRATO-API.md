@@ -319,7 +319,80 @@ ignorado).
   `isError`, não HTTP 429.
 
 Ferramentas (`worker/mcp/catalog.ts`): `buscar_item {consulta}`, `preco_item {item, qualidade?}`, `relogio {}`,
-`dossie_jogador {nome}`, `perdas_pvp {dias?}`. Cada resposta traz resumo em texto PT-BR e `structuredContent`.
+`dossie_jogador {nome}`, `perdas_pvp {dias?}`, `o_que_fazer {prata, minutos?, premium?}` (Fase 3). Cada resposta
+traz resumo em texto PT-BR e `structuredContent`.
+
+## Fase 3
+
+Roadmap: [`../../roadmap/2026-10-30-guarita-fase3.md`](../../roadmap/2026-10-30-guarita-fase3.md).
+
+### `GET /api/hoje?prata=&minutos=&premium=0|1`
+
+"O que fazer hoje" (`worker/api/hoje.ts`; cesta, receitas, bônus e fontes em `shared/hoje.ts`). Até 3 opções por
+trilha (`flip` para o Black Market, `refino` com bônus de cidade e do dia, `transporte` entre cidades reais), cada
+uma com a conta aberta. É estimativa: a tela, o bot e o MCP dizem que não é promessa de lucro.
+
+- `prata`: 1.000 a 100.000.000.000 (aceita `1.000.000`, `1 000 000`); ausente ou fora → 400.
+- `minutos`: inteiro de 15 a 480, padrão 60; fora → 400. `premium`: `1`, `true` ou `sim` = Premium (imposto de
+  venda 4% em vez de 8%; anúncio 2,5% sempre).
+- Método ≠ GET/HEAD → 405. Um "retrato" do mercado único para todos (lote de `/prices` da cesta + festividades +
+  histórico de 9 itens) fica 5 min na Cache API; a conta por prata/tempo/Premium roda a cada pedido. Sem retrato e
+  com o AODP fora → 502; com retrato vencido e o AODP fora, responde com ele e `stale: true`. `Cache-Control` 300 s.
+- Orçamento: no pior caso (cache frio) 38 de 50 subrequests; com o retrato em cache, nenhum.
+
+```ts
+HojeResponse = { prata, minutos, premium, opcoes: HojeOpcao[], notas?: string[], stale?: boolean, fetchedAt }
+HojeOpcao = { trilha: 'flip'|'refino'|'transporte', titulo, passos: string[], lucro /* pode ser negativo */,
+              capital, minutos, confianca /* 0–100 */, riscos: string[], itens: HojeItem[],
+              conta?: { compra, venda, taxas, lucro } /* venda − taxas − compra = lucro */,
+              motivos?: string[] /* do selo */, deslocamentoMin?: number /* estimativa */ }
+HojeItem = { id, nome, qtd, compra: number|null, venda: number|null, cidadeCompra: City|null, cidadeVenda: City|null,
+             idadeCompraMin?: number|null, idadeVendaMin?: number|null }
+```
+
+Bot: `/hoje prata:<n> minutos:<30|60|120> premium:<sim/não>` (resposta adiada quando o retrato está frio). MCP:
+`o_que_fazer`, com `minutos` só 30, 60 ou 120 (enum no schema; outro valor → erro), as mesmas opções do site e do
+bot, para o link "conta completa" reproduzir a mesma conta. A API segue aceitando 15 a 480.
+
+### `GET /api/forecast/:id?city=&q=1`
+
+Previsão de 1 a 3 dias com acerto publicado (`shared/forecast.ts`, rota em `worker/api/forecast.ts`). Usa o
+histórico diário do AODP (~30 dias, o mesmo pedido e o mesmo cache de 1 h da página de item; o dia UTC de hoje fica
+de fora porque não fechou).
+
+- `city` vazio ou ausente: a API escolhe a cidade com mais unidades vendidas nos últimos 14 dias, sem o Black
+  Market (sem histórico em nenhuma: Caerleon) e devolve a escolhida em `city`. Cidade desconhecida → 400.
+- Id inválido ou qualidade fora de 1–5 → 400; método ≠ GET/HEAD → 405; AODP fora → 502.
+- `Cache-Control`: o que falta para o cache de 1 h do histórico vencer, mínimo 60 s. No máximo 3 subrequests.
+- Modelo: com 21+ dias de venda e cada dia da semana visto 2+ vezes, média móvel exponencial do log do preço com
+  ajuste por dia da semana; com menos, mediana dos últimos 7 dias com venda. Backtest walk-forward nos últimos 14
+  dias (1 a 3 dias à frente, só com o passado). Só publica o modelo se o MAE dele for **menor** que o do ingênuo
+  (repetir o último valor); empate ou derrota publica o ingênuo e `method` diz isso. Faixa P10–P90 das razões
+  real/previsto do próprio backtest.
+- Sem previsão (`forecast: []`): menos de 14 dias com venda, menos de 5 rodadas de backtest ou última venda há mais
+  de 2 dias. A tela explica o motivo.
+
+```ts
+ForecastResponse = { id, quality, city, history: { date, avg, count }[],
+                     forecast: { date /* hoje, amanhã, depois */, p10, p50, p90 }[],
+                     backtest: { days /* rodadas do teste, não dias corridos */, maeModel: number|null,
+                                 maeNaive: number|null, beatsNaive: boolean|null },
+                     method /* texto: qual previsão saiu e por quê */, fetchedAt }
+```
+
+Telas: `/previsao` (`?item=&city=&q=`, ou `/previsao/:id`) e o bloco "Previsão dos próximos dias" em `/item/:id`.
+
+### Páginas e arquivos públicos (sem JSON)
+
+- **HTML de página**: o `_worker.js` reescreve título, descrição, canonical, Open Graph, Twitter e `robots` por rota
+  (`worker/seo.ts`). `/item/:id` e `/previsao/:id` saem com o nome PT-BR do item (`Bolsa do Adepto (T4) · Guarita`),
+  lido da fatia `names/t<tier>.json` como texto. `noindex`: guilda, jogador, autópsia, `/live`, item sem nome e
+  caminho desconhecido. Resposta reescrita sai sem `etag` e sem `content-length`.
+- `GET /sitemap.xml` (gerado: rotas fixas indexáveis + itens da cesta), `/robots.txt` (fecha `/api/` e `/discord`),
+  `/offline.html` (o Pages também serve em `/offline`; tela do service worker sem rede), `/og.png` (1200×630).
+- `/live?blocos=relogio,precos,guilda&itens=A,B&cidade=&guilda=&tema=&tamanho=`: painel para o OBS, só leitura das
+  rotas acima (`/api/clock`, `/api/item`, `/api/guild`); `?config` abre o formulário que monta a URL.
+- Extensão de navegador (`extension/`): só lê `/api/item/:id?q=`, `/api/clock` e `/data/items-index.json`.
 
 ## Rotas internas (guarita-core, só por binding)
 

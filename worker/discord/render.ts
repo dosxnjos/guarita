@@ -15,7 +15,9 @@ import type {
   PlayerDossier,
   PlayerHit,
   Verdict,
+  HojeTrilha,
 } from '../../shared/types';
+import type { HojeOpcao as HojeOpcaoX, HojeResponse as HojeResponseX } from '../../shared/types';
 import { PREMIUM_30D_GOLD, RENDER_BASE, minutesSince } from '../../shared/market';
 import { QUALITY_NAMES } from './commands';
 
@@ -530,6 +532,7 @@ export function renderHelp(): MessageData {
         { name: '/morte nome', value: 'Autópsia da última morte: quem matou, lições e quanto custa repor o equipamento.' },
         { name: '/alerta criar · listar · apagar', value: 'Alerta de preço por mensagem direta, checado a cada 5 minutos.' },
         { name: '/perdas dias', value: 'Itens mais perdidos no PvP (hoje ou 7 dias) com preço atual e valor perdido.' },
+        { name: '/hoje prata minutos premium', value: 'O que fazer com a sua prata e o seu tempo: flip para o Black Market, refino com bônus e transporte, com a conta aberta e os riscos.' },
         {
           name: '/guilda configurar · feed · resumo',
           value:
@@ -729,4 +732,41 @@ export function renderRegear(r: RegearView, clickerId: string, nameOf: NameOf): 
     timestamp: r.time,
   });
   return { ...m, content: `<@${clickerId}> pediu regear.` };
+}
+
+// ---------- Fase 3: /hoje (módulo c) ----------
+
+const TRILHA_NOME: Record<HojeTrilha, string> = { flip: 'Flip para o Black Market', refino: 'Refino com bônus', transporte: 'Transporte' };
+
+export function hojeUrl(r: { prata: number; minutos: number; premium: boolean }): string {
+  return `${SITE}/hoje?prata=${Math.round(r.prata)}&minutos=${r.minutos}&premium=${r.premium ? 1 : 0}`;
+}
+
+/** Até 2 opções por trilha, cada uma com a conta aberta, os passos, o selo e o principal risco. */
+export function renderHoje(r: HojeResponseX, now = Date.now()): MessageData {
+  const shown: HojeOpcaoX[] = [];
+  for (const t of ['flip', 'refino', 'transporte'] as HojeTrilha[]) shown.push(...r.opcoes.filter((o) => o.trilha === t).slice(0, 2));
+  const fields: EmbedField[] = shown.map((o) => {
+    const c = o.conta;
+    const conta = c
+      ? `Compra ${fmtInt(c.compra)} · venda ${fmtInt(c.venda)} · taxas ${fmtInt(c.taxas)} → **lucro estimado ${fmtInt(c.lucro)}**`
+      : `**Lucro estimado ${fmtInt(o.lucro)}** com ${fmtInt(o.capital)} investidos`;
+    const passos = o.passos.slice(0, 5).map((p, k) => `${k + 1}. ${p}`).join('\n');
+    const risco = o.riscos[0] ? `\n⚠️ ${o.riscos[0]}` : '';
+    return {
+      name: clamp(`${TRILHA_NOME[o.trilha]} · confiança ${o.confianca}/100`, 256),
+      value: clamp(`${esc(o.titulo.replace(/^[^:]+:\s*/, ''))}\n${conta}\n${passos}${risco}`, 1024),
+    };
+  });
+  const notas = (r.notas ?? []).slice(0, 4);
+  const description = [
+    `Com **${fmtInt(r.prata)} de prata**, ${r.minutos} min e ${r.premium ? 'Premium' : 'sem Premium'}.`,
+    shown.length ? '' : 'Nenhuma opção dá lucro com esses valores agora.',
+    ...notas.map((n) => `• ${n}`),
+    `Preços enviados por jogadores (Albion Data Project), consultados ${ageOf(r.fetchedAt, now)}: mudam rápido e não são promessa de lucro. Tempo de viagem é estimativa.`,
+  ].filter(Boolean).join('\n');
+  return message(
+    { title: 'O que fazer hoje', url: hojeUrl(r), description, fields, timestamp: r.fetchedAt },
+    { link: { label: 'Ver a conta completa no site', url: hojeUrl(r) } },
+  );
 }

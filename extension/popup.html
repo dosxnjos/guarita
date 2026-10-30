@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Guarita</title>
+    <link rel="stylesheet" href="ui.css" />
+    <style>
+      body { width: 360px; max-width: 100%; }
+      main { padding: 12px; display: grid; gap: 12px; }
+      header { display: flex; align-items: center; gap: 8px; }
+      header img { border-radius: 6px; }
+      header .opts { margin-left: auto; font-size: 12.5px; }
+      #q { width: 100%; }
+      .hits { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 220px; overflow: auto; }
+      .hits button { width: 100%; text-align: left; font: inherit; color: var(--ink); background: transparent; border: 1px solid transparent;
+        border-radius: 8px; padding: 6px 8px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+      .hits button:hover, .hits button:focus-visible { background: var(--surface-2); border-color: var(--line); }
+      .hits .tag { margin-left: auto; flex: none; }
+      .price { font-size: 18px; font-weight: 700; color: var(--accent); }
+      .clock-time { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .fest { margin: -4px 0 0; padding-left: 18px; display: grid; gap: 2px; }
+      footer { padding: 0 12px 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="icons/icon-32.png" alt="" width="24" height="24" />
+        <h1>Guarita</h1>
+        <a class="opts" href="options.html" target="_blank" id="opts">Opções</a>
+      </header>
+
+      <div id="perm" class="card stack" hidden>
+        <p style="margin:0">Para consultar preços, a extensão precisa de acesso a <strong>guarita.pages.dev</strong>.</p>
+        <button type="button" class="btn primary" id="perm-btn">Permitir acesso</button>
+      </div>
+
+      <section class="stack" aria-labelledby="busca-titulo">
+        <h2 id="busca-titulo">Preço de item</h2>
+        <div class="row">
+          <label class="sr-only" for="q">Nome do item</label>
+          <input id="q" type="search" placeholder="Ex.: bolsa adepto, capa de thetford 4.1" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="row small">
+          <label for="qual">Qualidade</label>
+          <select id="qual">
+            <option value="1">Normal</option>
+            <option value="2">Bom</option>
+            <option value="3">Excepcional</option>
+            <option value="4">Excelente</option>
+            <option value="5">Obra-prima</option>
+          </select>
+        </div>
+        <p id="busca-status" class="small muted" role="status" aria-live="polite"></p>
+        <ul id="hits" class="hits" aria-label="Resultados"></ul>
+        <div id="item" class="card stack" hidden aria-live="polite"></div>
+      </section>
+
+      <section class="card stack" aria-labelledby="relogio-titulo">
+        <h2 id="relogio-titulo">Relógio do Americas</h2>
+        <div class="grid2">
+          <div>
+            <div class="small muted">Brasília</div>
+            <div class="clock-time" id="hora-br">--:--:--</div>
+          </div>
+          <div>
+            <div class="small muted">Servidor (UTC)</div>
+            <div class="clock-time" id="hora-utc">--:--</div>
+          </div>
+        </div>
+        <div id="clock-info" class="stack small" aria-live="polite"><span class="muted">Carregando o status do servidor…</span></div>
+      </section>
+    </main>
+    <footer class="small muted">
+      Preços do <a href="https://www.albion-online-data.com/" target="_blank" rel="noopener">Albion Data Project</a>.
+      Não afiliado à Sandbox Interactive.
+    </footer>
+    <script src="lib/core.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

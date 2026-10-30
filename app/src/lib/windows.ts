@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export const PAINEL = 'painel' as const;
-export const WIDGET_LABELS = ['preco', 'dossie', 'relogio', 'alertas', 'despertador', 'lente'] as const;
+export const WIDGET_LABELS = ['preco', 'dossie', 'relogio', 'alertas', 'despertador', 'lente', 'sessao', 'loot'] as const;
 export type WidgetLabel = (typeof WIDGET_LABELS)[number];
 export type WindowLabel = typeof PAINEL | WidgetLabel;
 
@@ -17,6 +17,8 @@ export const WIDGET_TITLES: Record<WidgetLabel, string> = {
   alertas: 'Alertas',
   despertador: 'Despertador',
   lente: 'Lente de mercado',
+  sessao: 'Sessão',
+  loot: 'Loot',
 };
 
 export interface WidgetInfo {

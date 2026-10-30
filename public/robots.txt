@@ -1,0 +1,9 @@
+# Guarita: companheiro do Albion Online em português (https://guarita.pages.dev)
+# Páginas que não devem ir para o buscador (dossiê, guilda, painel de live) levam <meta name="robots" content="noindex">
+# no HTML; não ficam bloqueadas aqui, senão o buscador nem vê o noindex.
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /discord
+
+Sitemap: https://guarita.pages.dev/sitemap.xml

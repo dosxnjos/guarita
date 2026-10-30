@@ -20,8 +20,10 @@
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Relógio do Americas", "short_name": "Relógio", "url": "/relogio", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Meus alertas", "short_name": "Alertas", "url": "/alertas", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Dossiê de jogador", "short_name": "Dossiê", "url": "/jogador", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Preço de item", "short_name": "Preço", "description": "Buscar o preço de um item nas cidades", "url": "/", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Perdas no PvP", "short_name": "Perdas", "description": "Itens que mais caem no PvP e quanto custam", "url": "/perdas", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Relógio do Americas", "short_name": "Relógio", "description": "Hora do servidor em horário de Brasília", "url": "/relogio", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Meus alertas", "short_name": "Alertas", "description": "Alertas de preço no celular", "url": "/alertas", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Dossiê de jogador", "short_name": "Dossiê", "description": "Kills, mortes e equipamento de um jogador", "url": "/jogador", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
   ]
 }

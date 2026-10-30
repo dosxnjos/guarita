@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-captura-sessao"
+description = "Enables the captura_sessao command without any pre-configured scope."
+commands.allow = ["captura_sessao"]
+
+[[permission]]
+identifier = "deny-captura-sessao"
+description = "Denies the captura_sessao command without any pre-configured scope."
+commands.deny = ["captura_sessao"]

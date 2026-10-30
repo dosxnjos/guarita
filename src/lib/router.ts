@@ -31,6 +31,7 @@ const TABLE: [name: string, pattern: RegExp, keys: string[]][] = [
   // Fase 3
   ['hoje', /^\/hoje$/, []],
   ['previsao', /^\/previsao$/, []],
+  ['previsao', /^\/previsao\/([^/]+)$/, ['id']],
   ['live', /^\/live$/, []],
   ['extensao', /^\/extensao$/, []],
 ];

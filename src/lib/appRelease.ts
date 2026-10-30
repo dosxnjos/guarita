@@ -31,9 +31,14 @@ function urlDoRepo(u: unknown): u is string {
 
 /** Escolhe o instalador `-setup.exe` da resposta de /releases/latest; null se não houver. Pura. */
 export function escolherInstalador(release: unknown): Instalador | null {
+  return escolherArquivo(release, /-setup\.exe$/i);
+}
+
+/** Primeiro arquivo da release cujo nome casa com `nome`, servido do próprio repositório; null se não houver. Pura. */
+function escolherArquivo(release: unknown, nome: RegExp): Instalador | null {
   if (!isObj(release) || release.draft === true || release.prerelease === true) return null;
   const assets = Array.isArray(release.assets) ? release.assets : [];
-  const a = assets.find((x) => isObj(x) && typeof x.name === 'string' && /-setup\.exe$/i.test(x.name) && urlDoRepo(x.browser_download_url));
+  const a = assets.find((x) => isObj(x) && typeof x.name === 'string' && nome.test(x.name) && urlDoRepo(x.browser_download_url));
   if (!isObj(a)) return null;
   const digest = typeof a.digest === 'string' ? /^sha256:([0-9a-f]{64})$/i.exec(a.digest) : null;
   const tag = typeof release.tag_name === 'string' ? release.tag_name : '';
@@ -47,6 +52,34 @@ export function escolherInstalador(release: unknown): Instalador | null {
   };
 }
 
+/** Releases recentes (a da extensão pode não ser a mais nova, se a do app sair depois). */
+export const RELEASES_LIST_API = 'https://api.github.com/repos/dosxnjos/guarita/releases?per_page=10';
+const ZIP_EXTENSAO = /^guarita-extensao-[0-9.]+\.zip$/i;
+
+/** O .zip da extensão na release mais nova que tem um (lista de /releases, mais nova primeiro); null se nenhuma. Pura. */
+export function escolherExtensao(releases: unknown): Instalador | null {
+  if (!Array.isArray(releases)) return null;
+  for (const r of releases) {
+    const a = escolherArquivo(r, ZIP_EXTENSAO);
+    if (a) return { ...a, versao: /([0-9]+(?:\.[0-9]+)*)\.zip$/i.exec(a.nome)?.[1] ?? a.versao };
+  }
+  return null;
+}
+
+/** Compara versões "0.2.0" (só números). Negativo se a < b. Pura. */
+export function compararVersao(a: string, b: string): number {
+  const pa = a.split('.').map((x) => Number.parseInt(x, 10) || 0);
+  const pb = b.split('.').map((x) => Number.parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+/** Versão do app a partir da qual existe a captura da sessão (widgets Sessão e Loot). */
+export const VERSAO_CAPTURA = '0.2.0';
+
 /** Tamanho em MB com vírgula, ex.: "2,4 MB". */
 export function fmtTamanho(bytes: number): string {
   if (!bytes) return '';
@@ -59,19 +92,28 @@ export function rotuloBaixar(i: Instalador): string {
   return extra ? `Baixar para Windows (${extra})` : 'Baixar para Windows';
 }
 
-/** Consulta o GitHub. 404 (nenhuma release) ou release sem instalador = em breve; outra falha = página de releases. */
-export async function buscarInstalador(fetcher: typeof fetch = fetch, timeoutMs = 8000): Promise<EstadoDownload> {
+async function buscar(url: string, escolher: (j: unknown) => Instalador | null, fetcher: typeof fetch, timeoutMs: number): Promise<EstadoDownload> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await fetcher(RELEASE_API, { headers: { accept: 'application/vnd.github+json' }, signal: ctrl.signal });
+    const r = await fetcher(url, { headers: { accept: 'application/vnd.github+json' }, signal: ctrl.signal });
     if (r.status === 404) return { tipo: 'em-breve' };
     if (!r.ok) return { tipo: 'pagina' };
-    const inst = escolherInstalador(await r.json());
+    const inst = escolher(await r.json());
     return inst ? { tipo: 'pronto', instalador: inst } : { tipo: 'em-breve' };
   } catch {
     return { tipo: 'pagina' };
   } finally {
     clearTimeout(t);
   }
+}
+
+/** Consulta o GitHub. 404 (nenhuma release) ou release sem instalador = em breve; outra falha = página de releases. */
+export function buscarInstalador(fetcher: typeof fetch = fetch, timeoutMs = 8000): Promise<EstadoDownload> {
+  return buscar(RELEASE_API, escolherInstalador, fetcher, timeoutMs);
+}
+
+/** Igual, para o .zip da extensão: nenhuma release com o zip = em breve (o botão não promete o que não existe). */
+export function buscarExtensao(fetcher: typeof fetch = fetch, timeoutMs = 8000): Promise<EstadoDownload> {
+  return buscar(RELEASES_LIST_API, escolherExtensao, fetcher, timeoutMs);
 }

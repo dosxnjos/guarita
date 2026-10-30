@@ -20,6 +20,14 @@
     "allow-widgets-show-all",
     "allow-set-close-to-tray",
     "allow-tray-set-muted",
+    "allow-captura-estado",
+    "allow-captura-sessao",
+    "allow-captura-ligar",
+    "allow-captura-desligar",
+    "allow-captura-nova-sessao",
+    "allow-captura-definir-codigos",
+    "allow-captura-definir-dados",
+    "allow-captura-diagnostico",
     "store:default",
     "notification:default",
     "global-shortcut:allow-register",
@@ -33,14 +41,20 @@
     "log:default",
     {
       "identifier": "http:default",
-      "allow": [{ "url": "https://guarita.pages.dev/*" }]
+      "allow": [
+        { "url": "https://guarita.pages.dev/*" },
+        { "url": "https://raw.githubusercontent.com/dosxnjos/guarita/main/app/capture-codes.json" },
+        { "url": "https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/formatted/items.txt" },
+        { "url": "https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/formatted/world.txt" }
+      ]
     },
     {
       "identifier": "opener:allow-open-url",
       "allow": [
         { "url": "https://guarita.pages.dev/*" },
         { "url": "https://github.com/dosxnjos/guarita*" },
-        { "url": "https://www.albion-online-data.com/*" }
+        { "url": "https://www.albion-online-data.com/*" },
+        { "url": "https://npcap.com/*" }
       ]
     }
   ]

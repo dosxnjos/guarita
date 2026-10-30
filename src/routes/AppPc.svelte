@@ -3,7 +3,7 @@
   // download pelo GitHub Releases e o aviso do SmartScreen (app ainda sem certificado de assinatura).
   // O botão de download consulta a última release (lib/appRelease.ts): sem release publicada, mostra "Em breve".
   import { onMount } from 'svelte';
-  import { buscarInstalador, rotuloBaixar, RELEASES_URL, type EstadoDownload } from '../lib/appRelease';
+  import { buscarInstalador, compararVersao, rotuloBaixar, RELEASES_URL, VERSAO_CAPTURA, type EstadoDownload } from '../lib/appRelease';
   import { go } from '../lib/router';
   let { params: _params = {} }: { params?: Record<string, string> } = $props();
 
@@ -29,10 +29,23 @@
     ['Dossiê', 'Histórico público de um jogador pelo nome, quando você pesquisa.'],
     ['Lente de mercado (experimental)', 'Com o cliente do Albion Data Project (projeto comunitário) aberto, mostra o preço do item aberto no mercado nas outras cidades.'],
   ];
+  const SESSAO_DESC =
+    'Prata, fama e loot por hora, com o valor estimado do loot, mortes e mapa, lidos de forma passiva do tráfego do jogo no seu PC. Precisa do Npcap, vem desligada e só liga depois do aviso.';
+  // A captura existe a partir da 0.2: com uma release mais antiga publicada, o recurso aparece como "em breve" em
+  // vez de prometer o que o download não traz.
+  const recursos = $derived<[string, string][]>([
+    ...RECURSOS,
+    [
+      download.tipo === 'pronto' && compararVersao(download.instalador.versao, VERSAO_CAPTURA) < 0
+        ? 'Sua sessão (experimental, em breve na versão 0.2)'
+        : 'Sua sessão (experimental, a partir da versão 0.2)',
+      SESSAO_DESC,
+    ],
+  ]);
 
   const NAO_FAZ: string[] = [
     'Não lê a memória nem o processo do jogo.',
-    'Não captura tráfego de rede por conta própria.',
+    'Não mostra nada sobre outros jogadores a partir do tráfego de rede: a captura opcional só lê a sua própria sessão.',
     'Não manda tecla nem clique ao jogo: nada de macro ou automação.',
     'Não desenha nada dentro do cliente do jogo; as janelas são do Windows, separadas.',
     'Não avisa quando um jogador aparece perto de você.',
@@ -43,7 +56,7 @@
     ['Preciso do app e do site?', 'Não, cada um funciona sozinho e os dados são os mesmos. O site serve em qualquer aparelho, inclusive no celular. O app fica aberto no PC enquanto você joga, com janelas pequenas, voz e avisos do Windows.'],
     ['O app fica rodando escondido?', 'Não. Ele só trabalha enquanto está aberto: fechou, parou. Não cria tarefa agendada nem serviço do Windows. O ícone da Guarita fica na bandeja, perto do relógio do Windows, enquanto o app está aberto. Iniciar com o Windows e fechar para a bandeja vêm desligados: no padrão, fechar o painel encerra tudo. Com fechar para a bandeja ligado, fechar a janela deixa o app lá; use “Sair da Guarita” no ícone para encerrar.'],
     ['Os alertas do app e os do site são iguais?', 'Os do site chegam pelo navegador, pelo celular ou pelo Discord mesmo com o computador desligado, porque quem confere é o servidor da Guarita. Os do app são conferidos pelo próprio app e só tocam com ele aberto.'],
-    ['Pode dar banimento?', 'O app não toca no jogo: lê só dados públicos, as mesmas fontes do site. No app, a única zona cinza é deixar uma janela por cima da tela do jogo, e por isso essa opção vem desligada e só liga depois de você ler o aviso. O risco de usá-la é da sua conta. A lente de mercado depende de outro programa, o cliente do Albion Data Project: ele é comunitário, sem ligação com a Sandbox Interactive, e lê o tráfego de rede do jogo no seu PC para registrar os preços do mercado. Instalar esse cliente é escolha sua; o resto do app funciona sem ele.'],
+    ['Pode dar banimento?', 'O app não toca no processo do jogo: não lê a memória, não manda tecla nem clique e não envia nada ao servidor do Albion. Há duas zonas cinzas, as duas desligadas por padrão e só ligadas depois de você ler o aviso: deixar uma janela por cima da tela do jogo e a captura passiva da sua sessão (versão 0.2), que lê no seu PC o tráfego de rede do jogo, só o seu. Ler esse tráfego é uma prática que a Sandbox Interactive tolera desde 2017, mas não permite oficialmente. O risco de ligar qualquer uma das duas é da sua conta. O resto do app usa dados públicos, as mesmas fontes do site. A lente de mercado depende de outro programa, o cliente do Albion Data Project: ele é comunitário, sem ligação com a Sandbox Interactive, e também lê o tráfego de rede do jogo no seu PC para registrar os preços do mercado. Instalar esse cliente é escolha sua; o resto do app funciona sem ele.'],
     ['O jogo minimiza quando uso um atalho', 'Use o Albion em modo janela sem borda (nas configurações de vídeo do jogo). Em tela cheia exclusiva, o jogo cobre as janelas da Guarita, e o atalho, que passa o foco para a Guarita como um Alt+Tab, faz o jogo minimizar ou piscar.'],
     ['É pago? Precisa de conta?', 'É de graça, sem conta e sem cadastro. O código é aberto, sob a licença MIT.'],
     ['Funciona no Mac ou no Linux?', 'Por enquanto, só no Windows 10 e 11.'],
@@ -119,7 +132,7 @@
 
   <h2>O que o app faz</h2>
   <div class="grid">
-    {#each RECURSOS as [titulo, desc] (titulo)}
+    {#each recursos as [titulo, desc] (titulo)}
       <div class="card recurso">
         <strong>{titulo}</strong>
         <span class="small muted">{desc}</span>
@@ -148,7 +161,7 @@
       A lente de mercado só escuta o cliente do <a href={AODP} target="_blank" rel="noopener">Albion Data Project</a>,
       se você instalar e ligar esse cliente. Ele é um programa comunitário, sem ligação com a Sandbox Interactive, que lê
       o tráfego de rede do jogo no seu PC para registrar os preços do mercado. Instalar é escolha sua. A Guarita não lê
-      o mercado do jogo por conta própria.
+      o mercado do jogo por conta própria; a captura opcional da versão 0.2 lê só a sua sessão (prata, fama, loot).
     </p>
   </div>
 

@@ -21,6 +21,8 @@
   import Carregando from '../lib/ui/Carregando.svelte';
   import ErroCaixa from '../lib/ui/ErroCaixa.svelte';
   import CampoAtalho from '../ui/CampoAtalho.svelte';
+  import CapturaAjustes from './CapturaAjustes.svelte';
+  import { iniciarCapturaNoPainel } from '../lib/capture/captura';
 
   const SITE = 'https://guarita.pages.dev';
   const REPO = 'https://github.com/dosxnjos/guarita';
@@ -33,6 +35,8 @@
     alertas: 'Regras de preço checadas por este app enquanto ele estiver aberto.',
     despertador: 'Lembretes de plantação, animais e foco, avisados com o app aberto.',
     lente: 'Experimental: preço nas outras cidades do item aberto no mercado, com o cliente do Albion Data Project.',
+    sessao: 'Experimental: prata, fama e loot por hora do seu personagem. Precisa da captura ligada em Ajustes.',
+    loot: 'Experimental: itens que você pegou nesta sessão, com valor estimado. Precisa da captura ligada em Ajustes.',
   };
   const ATALHO_DO_WIDGET: Partial<Record<WidgetLabel, AcaoAtalho>> = { preco: 'abrirPreco', dossie: 'abrirDossie' };
 
@@ -184,6 +188,9 @@
       await reconciliarIniciarComWindows().catch((e) => console.warn('iniciar com o Windows', e));
       for (const l of widgetsParaReabrir(c)) await openWidget(l).catch((e) => console.warn('reabrir', l, e));
       await atualizarWidgets();
+      // Captura do próprio jogador: entrega a tabela de códigos e as listas ao Rust; liga só se o usuário deixou
+      // ligada com o aviso aceito (lib/capture/captura.ts).
+      void iniciarCapturaNoPainel().catch((e) => console.warn('captura', e));
 
       const { listen } = await import('@tauri-apps/api/event');
       const un = await listen<boolean>(EV_VOZ_SILENCIADA, (e) => (silenciada = e.payload));
@@ -412,6 +419,8 @@
       <p class="small m0"><a href="{SITE}/permitido" onclick={(e) => abrirLink(e, `${SITE}/permitido`)}>O que é e o que não é permitido</a></p>
     </section>
 
+    <CapturaAjustes />
+
     <section class="card stack" aria-labelledby="aparencia-h">
       <h2 id="aparencia-h">Aparência</h2>
       <div class="seg" role="group" aria-label="Tema">
@@ -439,7 +448,8 @@
       <p class="small m0">Companheiro em português para quem joga Albion Online no servidor Americas. Usa os mesmos dados do site.</p>
       <ul class="small lista">
         <li>Só trabalha com o app aberto: nada de tarefa agendada ou serviço do Windows.</li>
-        <li>Não lê o jogo, não captura a rede e não manda tecla nem clique ao jogo.</li>
+        <li>Não lê o processo do jogo e não manda tecla nem clique ao jogo.</li>
+        <li>Captura do próprio jogador (experimental, desligada por padrão): só com o Npcap instalado e o aviso aceito, lê o tráfego que o jogo recebe e mostra apenas os seus números. Nada de outros jogadores é exibido; nada é enviado ao jogo.</li>
         <li>Preços do Albion Online Data Project; jogadores do killboard público oficial.</li>
       </ul>
       <div class="row">

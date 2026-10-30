@@ -42,7 +42,7 @@
     <h1>Guarita no seu assistente de IA</h1>
     <p class="lead">O MCP (Model Context Protocol) é um padrão aberto que deixa assistentes de IA, como o Claude e o
       Cursor, consultarem ferramentas externas. Ligando o servidor MCP da Guarita, você pergunta preço, relógio do
-      servidor, dossiê de jogador e perdas no PvP em português, e o assistente responde com o dado da Guarita.</p>
+      servidor, dossiê de jogador, perdas no PvP e o que fazer hoje com a sua prata em português, e o assistente responde com o dado da Guarita.</p>
   </header>
 
   <div class="card stack">

@@ -10,6 +10,9 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
 - **429 mesmo com gzip** → limite de 100 req/min e 300 req/5 min por IP (os Workers da Cloudflare dividem IP com
   outros). Juntar itens numa só URL (até 4096 caracteres), usar Cache API de 60 a 300 s e, no 429, esperar o que o
   cabeçalho `RateLimit-Reset` manda.
+- **Histórico diário com só ~30 dias, ou corte estranho ao pedir mais** → `/history` sem `date=` devolve uns 30 dias;
+  com `date=` devolve só 31 dias a partir dessa data. 60 dias custariam um segundo pedido com cache próprio; por isso
+  a previsão (`shared/forecast.ts`) usa 30 (conferido em 30/10/2026).
 - **Preço "de 3 horas no futuro" ou idade negativa** → as datas do AODP vêm sem fuso (`2026-10-29T04:10:00`) e são
   UTC. `new Date()` direto lê como hora local. Converter com `aodpDate()` de `shared/market.ts`, que acrescenta o `Z`.
 - **Preço com data no ano 1** → `0001-01-01T00:00:00` significa "sem dado". `aodpDate()` devolve `null`.
@@ -181,10 +184,74 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
 - **Página dizia "consultado agora" com o AODP fora** → `fetchedAt` era a hora da resposta. Agora é o carimbo do
   cache (`aodp*Meta`); quem mostra idade ao usuário usa as variantes `Meta`.
 
+## O que fazer hoje (`/api/hoje`)
+
+- **Tempo de viagem e lucro por hora parecem errados** → os deslocamentos são estimativa, não medida: ~10 min de
+  cidade real até Caerleon, ~20 min entre cidades reais, ~30 min até Brecilien (`travelMin` em `shared/hoje.ts`). A
+  tela e o bot avisam que é aproximado; ajustar ali se houver medida melhor.
+- **Lucro do refino diferente do que o jogador vê** → premissas: o retorno de material vale também para o refinado do
+  tier abaixo; o bônus do dia (festividade de produção, 0,10 COMMON ou 0,20 RARE) soma aos outros (0,18 em toda
+  cidade, 0,40 no recurso da cidade especializada, foco +0,59); o `time` do `items.xml` está em minutos; a taxa da
+  estação de refino fica de fora (o texto diz). Fontes datadas em `shared/hoje.ts`.
+- **`/api/hoje` gastando ~12 chamadas ao AODP por pedido** → o retrato de 5 min na Cache API não está acertando
+  (ver "Cache nunca acerta" acima). Com cache frio são até 38 subrequests de 50; olhar acerto e falha nos logs no
+  primeiro deploy.
+- **`/hoje` não aparece no Discord** → comando novo só depois de `npm run discord:register -- --global` (até 1 h).
+- **Volume diário ~14% acima do real** → o `/history` filtrado por `date >= hoje−7` traz até 8 datas (inclui o dia
+  em andamento). `avgDaily` soma só os 7 dias completos antes de hoje (UTC).
+- **Flip com "volume do Black Market desconhecido" quando o BM não vendeu nada** → histórico buscado e BM ausente é
+  0, não desconhecido (`s.volume[id] ? (s.volume[id][BM] ?? 0) : undefined`, igual ao transporte).
+- **Link do MCP abre outra conta no site** → o site só conhece 30/60/120 min (o resto cai em 60); o MCP aceita só
+  esses três (teste em `tests/hoje.test.ts`).
+
+## Previsão (`/api/forecast`)
+
+- **O modelo quase nunca aparece, só a previsão ingênua** → esperado: ele só é publicado se o MAE do backtest for
+  menor que o de repetir o último valor. Em T4_BAG (30/10/2026) só ganhou em Caerleon, por 5%. Não afrouxar a régua.
+- **`backtest.days` menor que os dias do gráfico** → são rodadas do teste (walk-forward), não dias corridos.
+- **Placar não mede o modelo publicado** → a regra do ajuste por dia da semana (≥ 21 dias e cada dia ≥ 2×) tem de
+  valer no teste e na previsão final: `weekdayReady` em `shared/forecast.ts`, e cada rodada do teste escolhe o modelo
+  só com o treino dela (`backtestPairs` sem `model`). Escolher com o histórico inteiro olha o futuro.
+
+## Front, SEO e PWA
+
+- **Lista saiu em duas colunas, com nome cortado** → o `app.css` tem `.chips`, `.chip` e `.chip-name` globais
+  (grid auto-fill); classe local com o mesmo nome herda esse grid. Prefixo próprio no componente (o `/live` usa `.li-*`).
+- **Tela offline falha com "redirected response"** → o Pages redireciona `/offline.html` → `/offline`, e resposta
+  redirecionada não pode responder a navegação; o `sw.js` guarda uma cópia limpa (`fetch` + `new Response(blob)`).
+- **`/offline` sem título de rota** → é a `offline.html`, não o `index.html`: exceção em `withPageMeta` (`worker/seo.ts`).
+- **Título da aba fica o da página anterior** → o `<title>` do servidor só vale no primeiro carregamento; cada tela
+  define `document.title` no mesmo formato do `worker/seo.ts` (Início e Item incluídos).
+- **Nome de item no `_worker.js` estoura a CPU** → nunca `acLabel`/`JSON.parse` da fatia inteira: `labelsFor` recorta.
+- **Tela offline não aparece** → o service worker é registrado no `src/main.ts` só em `https:` (no Vite local não);
+  o push reaproveita o mesmo registro.
+- **Leitor de tela lê a página de resultados inteira (ou nada)** → `aria-live` no contêiner dos resultados. Usar um
+  `<p class="sr-only" role="status" aria-live="polite">` curto, sempre montado (região criada junto com o texto não
+  é anunciada): `anuncioHoje` e `anuncioPrevisao`.
+- **Prévia de link com a marca da Guarita e texto de golpe** → `/guilda/:nome` punha o caminho no `og:title`. Só nome
+  com cara de guilda (`/^[\p{L}\p{N} ]{3,30}$/u`) entra; o resto vira "Guilda · Guarita" (`worker/seo.ts`).
+- **Botão de download promete arquivo que não existe** → `/app` e `/extensao` leem as releases do GitHub
+  (`src/lib/appRelease.ts`): sem o `-setup.exe` ou o `guarita-extensao-*.zip`, "Em breve"; a captura só aparece
+  como disponível com release ≥ 0.2.0.
+
+## Extensão de navegador (`extension/`)
+
+Detalhe em [`extension/README.md`](../extension/README.md) § Armadilhas.
+
+- **Elemento com `hidden` aparece no popup** → `.card` e `.stack` definem `display`; `ui.css` força
+  `[hidden] { display: none !important; }`.
+- **Chrome recusa pedir permissão de origem que o manifest não declara, nem com outro caminho** → `siteOrigins` usa os
+  padrões do manifest (`albiononline.com/killboard*`).
+- **`web-ext lint` avisa versão mínima** → `data_collection_permissions` exige Firefox 140 / Android 142.
+- **Firefox: opção "ligada" sem permissão, cartão não aparece** → `permissions.request` só vale na parte síncrona do
+  clique; um `await` antes (até `contains`) perde o gesto e o pedido lança erro. O `request` vem primeiro e erro =
+  `false` (`options.js`, teste em `tests/extension.test.ts`).
+
 ## Testes
 
 - **`SMOKE=1 npx vitest run tests/smoke.worker.test.ts`** chama as APIs reais (AODP, gameinfo); fora da suíte normal
-  de propósito. 502/504 da gameinfo é registrado no log, não falha o teste. O KillLog da fumaça é falso (amostra
+  de propósito. Inclui `/api/hoje`, `/api/forecast/T4_BAG?city=Lymhurst` e o HTML de `/item/T4_BAG` (o `ASSETS` falso
+  serve o `dist/index.html`, ou o da raiz sem build). Lista de ferramentas do MCP muda → atualizar aqui também. 502/504 da gameinfo é registrado no log, não falha o teste. O KillLog da fumaça é falso (amostra
   pequena em `fakeEnv().CORE`): perdas e guilda provam AODP, nomes e gameinfo reais, não o KillLog publicado.
 - **Hook `guarda-segredo` barra teste com token falso** → usar o valor `'dummy-bot'`, que o hook aceita; não mexer
   no hook.

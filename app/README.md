@@ -6,8 +6,10 @@ mesma API pública do site (`https://guarita.pages.dev/api/*`); não tem servido
 
 **Só trabalha com o app aberto.** Nenhuma tarefa agendada, nenhum serviço do Windows. "Iniciar com o Windows" é
 uma opção desligada por padrão (quando o usuário liga, o plugin usa a chave `Run` do registro do usuário, visível em
-Configurações > Aplicativos > Inicialização). O app não lê o processo do jogo, não captura rede e não manda tecla
-nem clique ao jogo. Plano e decisões: [../../roadmap/2026-10-30-guarita-app-pc.md](../../roadmap/2026-10-30-guarita-app-pc.md).
+Configurações > Aplicativos > Inicialização). O app não lê o processo do jogo e não manda tecla nem clique ao jogo.
+A única leitura de rede é a **captura do próprio jogador** (experimental, desligada por padrão, só com o Npcap
+instalado e o aviso aceito; seção abaixo). Plano e decisões: [../../roadmap/2026-10-30-guarita-app-pc.md](../../roadmap/2026-10-30-guarita-app-pc.md)
+e, para a captura, a entrega 0 de [../../roadmap/2026-10-30-guarita-fase3.md](../../roadmap/2026-10-30-guarita-fase3.md).
 
 ## Rodar
 
@@ -33,8 +35,9 @@ aponta para `C:\pt`, então o instalador sai em `C:\pt\release\bundle\`; sem a v
 `app/src-tauri/target/release/bundle/`. Sem certificado de assinatura, o Windows mostra o aviso do SmartScreen
 ("Mais informações" > "Executar assim mesmo"). v1 sem atualização automática: instalador novo no GitHub Releases.
 
-Arquivos gerados (v0.1.0): `nsis/Guarita_0.1.0_x64-setup.exe` (~2,4 MB, instala por usuário, sem pedir
-administrador) e `msi/Guarita_0.1.0_x64_pt-BR.msi` (~3,3 MB). Se faltar o WebView2 (Windows 10 antigo), o
+Arquivos gerados (v0.2.0, 30/10/2026): `nsis/Guarita_0.2.0_x64-setup.exe` (2.561.688 bytes, instala por usuário,
+sem pedir administrador) e `msi/Guarita_0.2.0_x64_pt-BR.msi` (3.522.560 bytes). A versão mora em três lugares que
+andam juntos: `package.json`, `src-tauri/tauri.conf.json` e `src-tauri/Cargo.toml`. Se faltar o WebView2 (Windows 10 antigo), o
 instalador NSIS baixa o instalador oficial da Microsoft (modo padrão `downloadBootstrapper`, precisa de internet).
 Nenhum dos dois cria tarefa agendada, serviço ou entrada de inicialização.
 
@@ -52,7 +55,7 @@ ficam fora de `releases/latest` e a página continua em "Em breve". Nas notas da
 - **Painel** (`painel`, declarado em `src-tauri/tauri.conf.json`): janela principal com moldura do Windows.
   Só nele rodam o motor local (alertas, despertador, relógio), os atalhos globais e a reabertura dos widgets.
 - **Widgets** criados sob demanda pelo Rust (`widget_open`), rótulos fixos: `preco`, `dossie`, `relogio`, `alertas`,
-  `despertador`, `lente`. Sem moldura do Windows (`decorations: false`), janela transparente, moldura fina própria
+  `despertador`, `lente`, `sessao`, `loot`. Sem moldura do Windows (`decorations: false`), janela transparente, moldura fina própria
   (`src/lib/ui/WidgetChrome.svelte`: barra de arrasto, opacidade rápida em degraus, fixar por cima, minimizar, fechar).
   Abrir um widget marca `janelas[l].aberta`; fechar por qualquer caminho (barra, Alt+F4, painel, atalho) desmarca
   (o Rust grava no `CloseRequested` do widget); sair do app mantém marcados os que estavam abertos, e o painel os
@@ -72,8 +75,9 @@ ficam fora de `releases/latest` e a página continua em "Em breve". Nas notas da
 ## Segurança
 
 - **Capabilities por janela** (`src-tauri/capabilities/`): `painel.json` (criar widgets, atalhos globais, notificação,
-  iniciar com o Windows, store, http) e `widgets.json` (arrastar, minimizar, fechar, fixar, store, http). Nada de
-  shell, nada de sistema de arquivos. Comandos do app também passam por permissão (`build.rs` + capability).
+  iniciar com o Windows, store, http, todos os comandos da captura) e `widgets.json` (arrastar, minimizar, fechar,
+  fixar, store, http, ler estado e sessão da captura). Nada de shell, nada de sistema de arquivos. O `http` do painel
+  também alcança três URLs exatas do `raw.githubusercontent.com` (tabela de códigos e listas do ao-bin-dumps). Comandos do app também passam por permissão (`build.rs` + capability).
 - **Rede**: dentro do app, a API sai pelo `tauri-plugin-http` com escopo só em `https://guarita.pages.dev/*` (a API
   do site não manda CORS para a origem do app). Links externos abrem no navegador (`tauri-plugin-opener`, escopo
   fechado).
@@ -82,9 +86,69 @@ ficam fora de `releases/latest` e a página continua em "Em breve". Nas notas da
 - **Lente de mercado** (desligada por padrão): o usuário instala o cliente do Albion Data Project (projeto
   comunitário, sem ligação com a SBI, que lê o tráfego de rede do jogo no PC dele; a tela e a página `/app` dizem
   isso) e põe no `config.yaml` da pasta do cliente `EnableWebsockets: true` e `AllowedWebsocketHosts: [tauri.localhost]`
-  (no `tauri dev`, `localhost`). A Guarita só escuta: nunca envia nada ao cliente nem captura rede.
+  (no `tauri dev`, `localhost`). A Guarita só escuta: nunca envia nada ao cliente.
 - **Iniciar com o Windows**: o registro (chave Run) é a verdade. Ao abrir, o painel chama
   `reconciliarIniciarComWindows()` (`src/lib/autostart.ts`): registro ligado com a config desligada → desliga; nunca liga.
+
+## Captura do próprio jogador (experimental)
+
+Liga em Ajustes › "Captura do próprio jogador". **Desligada por padrão**; ligar exige ler e aceitar o aviso ("ler o
+tráfego de rede só para análise é tolerado pela SBI desde 2017; não é permitido oficialmente; risco da sua conta").
+O aceite fica em `captura.json` (store, chave `captura`: `ligada`, `avisoAceitoEm`, `diagnostico`) e o Rust confere
+`avisoAceitoEm` antes de ligar (`captura_ligar` recusa sem ele), como o "sempre por cima".
+
+- **O que lê:** com o Npcap instalado, só os datagramas UDP que o servidor de jogo (porta **5056**) manda ao PC, sem
+  modo promíscuo (filtro BPF `udp port 5056`, origem 5056). Nada é enviado ao servidor; nada lê o processo do jogo.
+- **O que mostra:** só agregados do próprio personagem: prata recolhida (líquida de taxas), fama, itens pegos (corpos,
+  baús, chão) com quantidade, mortes, mapa atual e variação do saldo. Widgets **Sessão** (prata/h, fama/h, valor do
+  loot/h, duração, "Nova sessão") e **Loot** (lista com valor estimado: mediana do `sellMin` de qualidade normal nas
+  cidades comuns, via `/api/prices` em lote).
+- **O que descarta:** todo evento fora da lista fechada da tabela (personagem novo na área, movimento, equipamento,
+  chat, mob...) e, dos eventos da lista, o que for de outro jogador (loot pego por outro, morte de outro, prata de
+  outro membro do grupo). Descartado no interpretador Rust (`src-tauri/src/capture/albion.rs`), antes de chegar ao
+  front; o próprio nome do personagem só serve para comparar e também não sai do Rust. Teste:
+  `outros_jogadores_sao_descartados_e_nunca_expostos`.
+- **Quem é "eu":** a resposta da operação `Join` (objeto, nome e mapa), que o jogo manda a cada troca de mapa. Ligou a
+  captura com o jogo já num mapa → fase "Troque de mapa uma vez". `UpdateFame`/`UpdateMoney` só chegam para o próprio
+  jogador e contam mesmo antes disso.
+
+**Npcap em tempo de execução.** `src-tauri/src/capture/npcap.rs` carrega `C:\Windows\System32\Npcap\Packet.dll` e
+`wpcap.dll` (caminho completo, `libloading`); sem SDK no build e sem função de envio carregada. Sem o Npcap, a tela
+mostra "Npcap não encontrado", o porquê e o passo a passo (instalar de https://npcap.com sem a opção "só
+administradores"). Fases (`Fase` em `capture/mod.rs`): `desligada`, `sem-npcap`, `npcap-invalido`, `sem-interface`,
+`sem-permissao`, `aguardando-jogo` (sem tráfego há 15 s), `aguardando-mapa`, `capturando`.
+
+**Threads.** Uma por interface de rede (`pcap_next_ex` com espera de 500 ms, conferindo o sinal de parar) → canal
+limitado (4096) → uma de processamento (Photon → Protocol18 → interpretador → sessão), que emite
+`guarita://captura-sessao` (retrato, no máximo 2 por segundo, só quando muda) e `guarita://captura-estado` (a cada
+2 s). Desligar para tudo em até ~0,5 s; fechar o app encerra o processo. Comandos: `captura_estado`,
+`captura_sessao`, `captura_nova_sessao` (painel e widgets) e `captura_ligar`, `captura_desligar`,
+`captura_definir_codigos`, `captura_definir_dados`, `captura_diagnostico` (só painel). Tipos espelhados em
+`src/lib/capture/tipos.ts`.
+
+**Protocolo.** Photon com **Protocol18** (conferido em 30/10/2026 no `ao-data/albiondata-client`, MIT, e no
+`AlbionOnline-StatisticsAnalysis`, GPL, do qual só os números foram usados; código próprio). Cabeçalho e comandos em
+big-endian, valores do Protocol18 em little-endian com varint/zigzag; comandos 6 (confiável), 7 (não confiável) e 8
+(fragmento, remontado por `seqInicial`); mensagens 2/3/7/4; bit `0x80` = criptografada (descartada). O código real
+do evento vem em `params[252]` e o da operação em `params[253]`. Prata e fama em FixPoint (×10000).
+
+**Tabela de códigos** (`app/capture-codes.json`, fonte única): vai embutida no binário (`include_str!`) e o painel
+baixa a mesma de `https://raw.githubusercontent.com/dosxnjos/guarita/main/app/capture-codes.json`; se a de lá tiver
+`versao` maior e passar na validação (porta 5055/5056, no máximo 1000 versões acima da embutida, todos os eventos
+usados presentes), vale sem nova versão do app. Cada código tem a fonte e a data no próprio JSON.
+Depois de um patch do Albion: conferir os números (modo de diagnóstico), subir `versao`, publicar no `main`.
+
+**Dados de apoio** (`src/lib/capture/dados.ts`): `formatted/items.txt` (índice numérico do item → id) e
+`formatted/world.txt` (id do mapa → nome, em inglês) do `ao-data/ao-bin-dumps`, com cópia local de 24 h no Cache
+Storage, entregues ao Rust por `captura_definir_dados`. Sem eles, o loot aparece como "Item nº N" e sem preço.
+
+**Modo de diagnóstico** (Ajustes › Detalhes técnicos): grava a cada 30 s e ao desligar
+`<pasta de logs do app>/captura-diagnostico.json` com a contagem de eventos, respostas e requisições **por código**
+(com o nome que a tabela conhece), fatos próprios aceitos e descartes. Só números: nenhum conteúdo de mensagem.
+
+**Validação ao vivo: pendente.** Os testes (`cargo test --lib capture`, 43 testes, inclusive pacote hostil, dois fluxos e queda da rede) usam pacotes Photon montados
+pelo próprio teste (codificador em `protocol18::enc` e `photon::montar`). Falta abrir o jogo com a captura e o
+diagnóstico ligados e conferir: Join reconhecido, fama/prata batendo com o jogo, loot com os ids certos.
 
 ## Fronteira dos módulos (`src/lib/`)
 
@@ -105,6 +169,11 @@ ficam fora de `releases/latest` e a página continua em "Em breve". Nas notas da
 | `engine/clock.ts` | `/api/clock` a cada 2 min: servidor caiu/voltou, bônus começou, bônus acabando (30 min), temporada (7, 3 e 1 dia) | (b) motor local (pronto) |
 | `engine/motor.ts` | `iniciarMotorLocal()` (main.ts, só no painel) liga os três motores e os atalhos; `motorLocal()` dá às telas `checarAgora`, estado e leituras do relógio | (b) motor local (pronto) |
 | `lens/aodpWs.ts` | lente de mercado: escuta `ws://localhost:8099/ws` do cliente oficial do AODP, lê só `marketorders.ingest`, reconecta com espera crescente; widget em `widgets/Lente.svelte` | (c) lente (pronto) |
+| `capture/tipos.ts` | tipos dos eventos e comandos da captura (espelho de `src-tauri/src/capture`) | (a) captura (pronto) |
+| `capture/captura.ts` | comandos, eventos, escolha do usuário (`captura.json`) e `iniciarCapturaNoPainel` | (a) captura (pronto) |
+| `capture/dados.ts` | baixa tabela de códigos, `items.txt` e `world.txt` (cópia local de 24 h); parsers | (a) captura (pronto) |
+| `capture/sessao.ts`, `capture/precos.ts` | regras puras: ritmo por hora, valor do loot (mediana), textos; preço em lote | (a) captura (pronto) |
+| `painel/CapturaAjustes.svelte`, `widgets/{Sessao,Loot}.svelte` | bloco de ligar/desligar com aviso e Npcap; widgets da sessão | (a) captura (pronto) |
 | `painel/Painel.svelte` | abas Início (status da API e do servidor, widgets), Ajustes (atalhos, voz, avisos, opacidade, "por cima" com aviso SBI, tema, iniciar com o Windows, bandeja) e Sobre | (a) janelas e widgets (pronto) |
 | `widgets/{Preco,Dossie,Relogio,Alertas,Despertador}.svelte` | telas dos widgets; layout compacto até 280×200 (container queries no preço) | (a) janelas e widgets (pronto) |
 | `ui/ItemBusca.svelte`, `ui/CampoAtalho.svelte` | autocomplete de item (combobox) e captura de atalho | (a) janelas e widgets (pronto) |

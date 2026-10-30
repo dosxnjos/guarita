@@ -469,7 +469,8 @@ describe('commands', () => {
     };
     COMMANDS.forEach(walk);
     // guilda e perdas: Fase 2 (casos próprios em tests/discord-guild.test.ts).
-    expect(COMMANDS.map((c) => c.name).sort()).toEqual(['ajuda', 'alerta', 'dossie', 'guilda', 'morte', 'perdas', 'preco', 'relogio']);
+    // hoje: Fase 3, módulo c (casos próprios em tests/hoje.test.ts).
+    expect(COMMANDS.map((c) => c.name).sort()).toEqual(['ajuda', 'alerta', 'dossie', 'guilda', 'hoje', 'morte', 'perdas', 'preco', 'relogio']);
   });
   it('qualidades com os mesmos nomes do site (shared/quality.ts)', () => {
     expect(QUALITY_NAMES).toEqual(QUALITY_LABEL);

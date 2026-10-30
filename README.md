@@ -18,6 +18,8 @@ Site: <https://guarita.pages.dev> · Isso é permitido? <https://guarita.pages.d
 | **Veredito** | "barato", "normal" ou "caro" comparado com a faixa dos últimos dias (abaixo do 1º quartil, acima do 3º). |
 | **Livro de ofertas** | Quanto custa de verdade comprar ou vender N unidades, nível por nível. |
 | **Flip no Black Market** | Comprar numa cidade e vender na hora para o Black Market: lucro com e sem Premium. |
+| **O que fazer hoje** | Diga quanta prata e quanto tempo tem: três caminhos (flip para o Black Market, refino com o bônus do dia, transporte entre cidades) com a conta aberta, a confiança e o risco. Estimativa, nunca promessa de lucro. Também no bot (`/hoje`) e no MCP. |
+| **Previsão de preço** | Preço dos próximos 3 dias com faixa de incerteza e o acerto do modelo publicado: se ele não bater o "repetir o último preço", a tela diz isso e mostra o mais simples. |
 | **Relógio do Americas** | Servidor online ou em manutenção, festividades e bônus do dia, preço do ouro, Premium em prata, fim aproximado da temporada. |
 | **Dossiê** | Busca um jogador pelo nome: fama, guilda, armas mais usadas, se costuma matar sozinho ou em grupo. |
 | **Autópsia da morte** | Tua última morte explicada: quem te matou, o que dá para aprender e quanto custa recomprar o equipamento. |
@@ -29,9 +31,11 @@ Site: <https://guarita.pages.dev> · Isso é permitido? <https://guarita.pages.d
 | **Ouro e Premium** | Gráfico do ouro (7, 30 e 90 dias), se está barato agora e uma calculadora de "o Premium compensa?". |
 | **Saúde do dado** | Quão frescos estão os preços em cada cidade, para saber quando confiar e onde falta scan. |
 | **Despertador** | Avisa no celular quando a plantação, os animais ou o foco ficam prontos. |
-| **Oráculo MCP** | Ligue a Guarita no Claude, no Cursor ou no VS Code e pergunte preço, relógio, dossiê e perdas. Só dado público. |
-| **Bot do Discord** | Os mesmos dados com comandos no teu servidor (preço, relógio, alertas, perdas) e o killfeed da tua guilda num canal, com botão de pedir regear. |
-| **App para PC** | Guarita no Windows: widgets pequenos ao lado do jogo (preço rápido, dossiê, relógio, alertas, despertador), voz em português, atalhos globais e avisos do Windows. Só funciona com o app aberto: sem tarefa agendada nem serviço. Detalhes em [app/README.md](app/README.md) e na página [/app](https://guarita.pages.dev/app). |
+| **Oráculo MCP** | Ligue a Guarita no Claude, no Cursor ou no VS Code e pergunte preço, relógio, dossiê, perdas e o que fazer hoje. Só dado público. |
+| **Bot do Discord** | Os mesmos dados com comandos no teu servidor (preço, relógio, alertas, perdas, o que fazer hoje) e o killfeed da tua guilda num canal, com botão de pedir regear. |
+| **App para PC** | Guarita no Windows: widgets pequenos ao lado do jogo (preço rápido, dossiê, relógio, alertas, despertador), voz em português, atalhos globais e avisos do Windows. Desde a v0.2, opcional e desligada por padrão: a sua sessão (prata, fama e loot por hora, mortes) lida passivamente do tráfego do próprio jogador, com o Npcap. Só funciona com o app aberto: sem tarefa agendada nem serviço. Detalhes em [app/README.md](app/README.md) e na página [/app](https://guarita.pages.dev/app). |
+| **Extensão de navegador** | Nome em português e preço ao passar o mouse nos ícones de item da wiki, do killboard e de outros sites de Albion; popup com busca rápida e relógio. Chrome, Edge e Firefox. Ver [/extensao](https://guarita.pages.dev/extensao). |
+| **Painel de live** | Relógio, preços escolhidos e o histórico da guilda como fonte de navegador do OBS, com fundo transparente. Configure em [/live?config](https://guarita.pages.dev/live?config). |
 | **Janela flutuante** | Uma janelinha que fica por cima das outras (Chrome). Vem **desligada**: leia o aviso antes de ligar. |
 | **Instalável** | Dá para instalar como aplicativo no celular ou no computador. |
 
@@ -42,7 +46,9 @@ teu id do Discord.
 
 A Guarita respeita os Termos da Sandbox Interactive. Por isso:
 
-- não lê a rede nem a memória do jogo, não olha a tela e não manda nada para o servidor do jogo;
+- não lê a memória do jogo, não toca no processo dele, não olha a tela e não manda nada para o servidor do jogo;
+- o site, o bot e a extensão não leem a rede do jogo; no app de PC, a captura da própria sessão é opcional, vem
+  desligada, só lê passivamente o tráfego do próprio jogador e descarta tudo sobre outros jogadores;
 - não avisa quando um jogador aparece perto de você (isso é "auto-scouting", proibido pela SBI);
 - não compra, não vende e não intermedeia prata ou itens por dinheiro real.
 
@@ -108,10 +114,11 @@ guarita/
 │   ├── lib/              api.ts (cliente tipado), router.ts e utilitários do front
 │   └── routes/           uma tela por arquivo (Inicio, Item, Relogio, Dossie, Autopsia, Alertas, Janela…)
 ├── worker/               _worker.js do Pages
-│   ├── index.ts          entrada: /api/*, /discord, /mcp e estáticos com fallback para index.html
+│   ├── index.ts          entrada: /api/*, /discord, /mcp, /sitemap.xml e estáticos com fallback para index.html
+│   ├── seo.ts            título, descrição e Open Graph por rota no HTML; sitemap
 │   ├── env.ts            ligações e segredos
 │   ├── api/              router.ts e um arquivo por grupo de rotas (market, clock, player, alerts; Fase 2 em
-│   │                     routesF2.ts → insightsA, risk, goldHealth, timers)
+│   │                     routesF2.ts → insightsA, risk, goldHealth, timers; Fase 3 em routesF3.ts → hoje, forecast)
 │   ├── discord/          interactions.ts (entrada), verificação Ed25519, comandos e guild.ts (killfeed, regear)
 │   ├── mcp/              server.ts (JSON-RPC), tools.ts e catalog.ts (ferramentas do Oráculo MCP)
 │   └── lib/              aodp.ts (cliente do AODP) e apoio (itens, cache…)
@@ -119,9 +126,12 @@ guarita/
 │   ├── types.ts          contrato da API
 │   ├── market.ts         taxas, cidades, conversões de data
 │   ├── items.ts          índice e busca de itens
-│   └── zones.ts, scams.ts, glossary.ts   conteúdo do novato (zonas, golpes, glossário)
+│   ├── zones.ts, scams.ts, glossary.ts   conteúdo do novato (zonas, golpes, glossário)
+│   ├── hoje.ts           cesta, receitas e bônus do "O que fazer hoje" (com fontes)
+│   └── forecast.ts       modelo de previsão e backtest (puro)
 ├── app/                  app de Windows (Tauri 2 + Svelte), package.json próprio: ver app/README.md
-├── scripts/              build-worker.mjs, build-items.mjs, deploy.mjs…
+├── extension/            extensão de navegador (Manifest V3, JS puro): ver extension/README.md
+├── scripts/              build-worker.mjs, build-items.mjs, deploy.mjs, make-og.mjs (imagem de prévia)…
 ├── tests/                testes vitest (*.test.ts)
 └── docs/                 ARQUITETURA.md, CONTRATO-API.md, ARMADILHAS.md
 ```
@@ -150,7 +160,10 @@ ficam em [shared/types.ts](shared/types.ts); a versão completa e legível está
 | `POST /api/risk` | `RiskQuote` (custo do set e perda por zona) |
 | `/api/gold?days=7\|30\|90` · `/api/data-health` | `GoldResponse` · `DataHealthResponse` |
 | `GET/POST /api/timers`, `DELETE /api/timers/:id` | timers do despertador do dono (`owner`) |
-| `POST /mcp` | servidor MCP (JSON-RPC 2.0, 5 ferramentas, só dado público) |
+| `/api/hoje?prata=&minutos=&premium=` | `HojeResponse` (flip, refino e transporte com a conta aberta) |
+| `/api/forecast/:id?city=&q=` | `ForecastResponse` (1 a 3 dias, faixa P10–P90, backtest contra o ingênuo) |
+| `/sitemap.xml`, `/robots.txt` | mapa do site e regras para buscadores |
+| `POST /mcp` | servidor MCP (JSON-RPC 2.0, 6 ferramentas, só dado público) |
 | `POST /discord` | interações do Discord |
 
 A busca de itens acontece no navegador, sobre `/data/items-index.json`.
@@ -162,8 +175,9 @@ A busca de itens acontece no navegador, sobre `/data/items-index.json`.
 - Pull request é bem-vindo. Antes de abrir: `npm run check`, `npm test` e `npm run build` precisam passar.
 - Texto de interface em português do Brasil correto, com acento, direto e sem gíria.
 - Mudou um tipo em `shared/types.ts`? Então mudou o contrato: front, API e bot precisam acompanhar.
-- Contribuição que cruze a fronteira dos Termos (captura de rede, leitura do cliente, alerta de jogador avistado,
-  RMT) não entra, por melhor que seja.
+- Contribuição que cruze a fronteira dos Termos (tocar no processo do jogo, enviar algo ao servidor do jogo, macro,
+  alerta ou informação sobre jogador avistado, captura de rede além da sessão do próprio jogador no app, RMT) não
+  entra, por melhor que seja.
 
 ### Licença
 

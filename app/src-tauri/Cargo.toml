@@ -1,6 +1,6 @@
 [package]
 name = "guarita"
-version = "0.1.0"
+version = "0.2.0"
 description = "Guarita no PC: companheiro em PT-BR para quem joga Albion Online (Americas)"
 authors = ["Guarita"]
 license = "MIT"
@@ -28,6 +28,8 @@ tauri-plugin-opener = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-log = "2"
 tauri-plugin-http = "2"
+# Captura do próprio jogador: carrega o wpcap.dll do Npcap em tempo de execução (sem SDK no build).
+libloading = "0.7"
 
 [profile.release]
 codegen-units = 1
