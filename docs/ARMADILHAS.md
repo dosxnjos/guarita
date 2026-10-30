@@ -101,6 +101,10 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
   gameinfo ou ao AODP precisa de resposta adiada e edição depois.
 - **Alerta do Discord criado, mas a DM nunca chega** → o bot só manda DM para quem divide um servidor com ele e
   aceita DM de membros do servidor; 403 vira `blocked` no core.
+- **Cada comando aparece duas vezes no servidor de teste** → comandos globais (`npm run discord:register --
+  --global`, valem em todo servidor) somados aos do servidor de teste (registro sem flag). Desde 30/10/2026 os
+  comandos são globais e os do servidor de teste foram zerados (PUT `[]` em `/guilds/{id}/commands`). Registro sem
+  flag só para testar comando novo antes de publicar, e zerar depois.
 
 ## Push no navegador
 

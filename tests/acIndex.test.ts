@@ -30,6 +30,9 @@ describe('acIndex (busca barata do bot)', () => {
   it('aceita nome em inglês', async () => {
     expect((await acSearch(env, "elder's bag", 3))[0].id).toBe('T8_BAG');
   });
+  it('aceita o id digitado direto', async () => {
+    expect(await acSearch(env, 't4_bag@1', 5)).toEqual([{ id: 'T4_BAG@1', label: 'Bolsa do Adepto (T4.1)' }]);
+  });
   it('consulta curta demais não busca', async () => {
     expect(await acSearch(env, 'bo', 5)).toEqual([]);
   });

@@ -57,6 +57,11 @@ async function loadJson<T>(env: Env, path: string, cache: Map<string, Promise<T>
 
 /** Até `limit` itens que casam com todos os tokens. Precisa de pelo menos uma palavra com 3 letras. */
 export async function acSearch(env: Env, q: string, limit = 25): Promise<AcHit[]> {
+  // Id digitado direto (T4_BAG, T4_BAG@1): resolve pela fatia names/ sem passar pela busca de palavras.
+  if (/^T\d_[A-Z0-9_]+(@\d)?$/i.test(q.trim())) {
+    const label = await acLabel(env, q);
+    if (label) return [{ id: q.trim().toUpperCase(), label }];
+  }
   const { words, exact } = parseAcQuery(q);
   const key = words.filter((w) => w.length >= 3).sort((a, b) => b.length - a.length)[0];
   if (!key) return [];
