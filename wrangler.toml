@@ -1,0 +1,14 @@
+# Configuração do Pages (guarita.pages.dev). O dist/_worker.js atende /api/* e /discord;
+# o resto é estático. O estado (alertas, inscrições) mora no Durable Object Hub do guarita-core.
+name = "guarita"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-10-01"
+
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "Hub"
+script_name = "guarita-core"
+
+[[services]]
+binding = "CORE"
+service = "guarita-core"

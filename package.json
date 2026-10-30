@@ -1,0 +1,29 @@
+{
+  "name": "guarita",
+  "version": "0.1.0",
+  "description": "Guarita: companheiro em PT-BR para o jogador brasileiro de Albion Online. Não afiliado à Sandbox Interactive.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/build-worker.mjs",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "deploy": "doppler run --config-dir \"C:/Users/Gabriel dos Anjos/.doppler-pessoal\" -p pessoal -c prd -- node scripts/deploy.mjs",
+    "data:items": "node scripts/build-items.mjs",
+    "discord:register": "doppler run --config-dir \"C:/Users/Gabriel dos Anjos/.doppler-pessoal\" -p pessoal -c prd -- node scripts/register-commands.mjs"
+  },
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261030.1",
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "@tsconfig/svelte": "^5.0.8",
+    "esbuild": "^0.28.2",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.7",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.5",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.156.0"
+  },
+  "private": true
+}
