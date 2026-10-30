@@ -6,7 +6,7 @@
 // O Hub do core poderia contar de verdade, mas nesta fase o Hub é de outro módulo (ver docs/ARMADILHAS.md).
 import type { Env } from '../env';
 import { MCP_CALLS_PER_MIN, MCP_PROTOCOL_VERSIONS, MCP_SERVER_NAME, MCP_SERVER_VERSION } from './catalog';
-import { callTool, listTools, toolError, UnknownToolError, type ToolResult } from './tools';
+import { callTool, linguaOf, listTools, toolError, UnknownToolError, type ToolResult } from './tools';
 
 export const SUPPORTED_VERSIONS: readonly string[] = MCP_PROTOCOL_VERSIONS;
 export const LATEST_VERSION = MCP_PROTOCOL_VERSIONS[0];
@@ -25,7 +25,10 @@ export const INSTRUCTIONS =
   'Os preços vêm do Albion Data Project, enviados por jogadores, e podem ter minutos ou horas de atraso: ' +
   'sempre cite a idade do dado e recomende confirmar no jogo. O killboard é histórico, com minutos de atraso: ' +
   'nunca use para dizer onde um jogador está agora. Responda ao usuário em português do Brasil, com números ' +
-  'no formato 1.234 e datas no horário de Brasília. Não afiliado à Sandbox Interactive.';
+  'no formato 1.234 e datas no horário de Brasília. Se o usuário escrever em espanhol, passe lingua: "es" em ' +
+  'qualquer ferramenta: o texto, os nomes de item e as mensagens de erro voltam em espanhol. ' +
+  'Não afiliado à Sandbox Interactive. / ' +
+  'Si el usuario escribe en español, usa lingua: "es" en todas las herramientas y respóndele en español.';
 
 // ---------- JSON-RPC ----------
 
@@ -175,20 +178,26 @@ async function dispatch(msg: unknown, st: CallState): Promise<RpcResponse | null
         return rpcError(reqId, RPC.INVALID_PARAMS, 'Parâmetros inválidos: informe "name" com o nome da ferramenta.');
       }
       let result: ToolResult;
+      // Mensagens do servidor na língua pedida pela ferramenta (argumento `lingua`; inválido ou ausente = pt).
+      const es = linguaOf(params.arguments) === 'es';
       if (st.toolCalls >= MAX_TOOL_CALLS_PER_POST) {
-        result = toolError(`No máximo ${MAX_TOOL_CALLS_PER_POST} ferramentas por requisição. Envie as outras chamadas separadas.`);
+        result = toolError(es
+          ? `Como máximo ${MAX_TOOL_CALLS_PER_POST} herramientas por solicitud. Envía las demás llamadas por separado.`
+          : `No máximo ${MAX_TOOL_CALLS_PER_POST} ferramentas por requisição. Envie as outras chamadas separadas.`);
       } else if (!takeToken(st.key)) {
-        result = toolError(`Limite de ${MCP_CALLS_PER_MIN} consultas por minuto atingido. Espere um minuto e tente de novo.`);
+        result = toolError(es
+          ? `Se alcanzó el límite de ${MCP_CALLS_PER_MIN} consultas por minuto. Espera un minuto e inténtalo de nuevo.`
+          : `Limite de ${MCP_CALLS_PER_MIN} consultas por minuto atingido. Espere um minuto e tente de novo.`);
       } else {
         st.toolCalls++;
         try {
           result = await callTool(params.name, params.arguments, { env: st.env, ctx: st.ctx });
         } catch (err) {
           if (err instanceof UnknownToolError) {
-            return rpcError(reqId, RPC.INVALID_PARAMS, `Ferramenta desconhecida: ${params.name.slice(0, 60)}`);
+            return rpcError(reqId, RPC.INVALID_PARAMS, es ? `Herramienta desconocida: ${params.name.slice(0, 60)}` : `Ferramenta desconhecida: ${params.name.slice(0, 60)}`);
           }
           console.error('mcp: falha inesperada em tools/call', err);
-          return rpcError(reqId, RPC.INTERNAL, 'Erro interno ao executar a ferramenta.');
+          return rpcError(reqId, RPC.INTERNAL, es ? 'Error interno al ejecutar la herramienta.' : 'Erro interno ao executar a ferramenta.');
         }
       }
       return rpcResult(reqId, result);

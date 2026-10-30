@@ -11,6 +11,7 @@ import type { AlertCondition, AlertRule, City, Quality, Timer, TimerKind } from 
 import { MEDIAN_PCT_MAX, MEDIAN_PCT_MIN, sideAllowsCities } from '../../../shared/alertLimits';
 import { PAINEL, WIDGET_LABELS, clampOpacity, isTauri, type WindowLabel } from './windows';
 import { LENTE_URL_PADRAO, normalizarUrlLente } from './lens/aodpWs';
+import { normalizarPrefLingua, type PrefLingua } from './i18n.svelte';
 
 export const CONFIG_STORE = 'config.json';
 export const CONFIG_KEY = 'config';
@@ -91,6 +92,8 @@ export interface GuaritaConfig {
   lente: ConfigLente;
   /** Avisos do relógio já dados, para não repetir a cada abertura do app (engine/clock.ts). */
   avisosRelogio: AvisosRelogioDados;
+  /** Língua da interface: 'auto' (a do Windows, padrão), 'pt' ou 'es' (lib/i18n.svelte.ts). O Rust lê também. */
+  lingua: PrefLingua;
 }
 
 export interface AvisosRelogioDados {
@@ -124,6 +127,7 @@ export function defaultConfig(): GuaritaConfig {
     fecharParaBandeja: false,
     lente: { ligada: false, url: LENTE_URL_PADRAO },
     avisosRelogio: { temporada: null, bonus: [] },
+    lingua: 'auto',
   };
 }
 
@@ -295,6 +299,7 @@ export function normalizeConfig(raw: unknown): GuaritaConfig {
         .filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length < 300)
         .slice(0, MAX_BONUS_AVISADOS),
     },
+    lingua: normalizarPrefLingua(raw.lingua),
   };
 }
 

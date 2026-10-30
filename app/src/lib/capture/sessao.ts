@@ -1,6 +1,7 @@
 // Regras puras da sessão (testes em tests/captura.test.ts): ritmo por hora, valor estimado do loot e textos.
 // O Rust manda os agregados (RetratoSessao); aqui só se calcula o que depende de preço e de relógio.
 import type { City, PriceRow } from '../../../../shared/types';
+import { currentLocale, type Locale } from '../../../../src/lib/i18n/core';
 import type { FaseCaptura, ItemLoot, PrefCaptura, RetratoSessao } from './tipos';
 
 /** Abaixo disto o "por hora" engana (1 baú em 20 s viraria milhões por hora). */
@@ -120,6 +121,52 @@ export const ROTULO_FASE: Record<FaseCaptura, [texto: string, tom: '' | 'info' |
   'aguardando-mapa': ['Troque de mapa uma vez', 'info'],
   capturando: ['Capturando', 'good'],
 };
+
+export const ROTULO_FASE_ES: Record<FaseCaptura, string> = {
+  desligada: 'Desactivada',
+  'sem-npcap': 'Npcap no encontrado',
+  'npcap-invalido': 'Npcap con problemas',
+  'sem-interface': 'No se encontró ninguna red',
+  'sem-permissao': 'Sin acceso a la red',
+  'aguardando-jogo': 'Esperando el juego',
+  'aguardando-mapa': 'Cambia de mapa una vez',
+  capturando: 'Capturando',
+};
+
+/** Texto e tom da fase na língua pedida (padrão: a do app). */
+export function rotuloFase(f: FaseCaptura, loc: Locale = currentLocale()): [texto: string, tom: '' | 'info' | 'good' | 'warn' | 'bad'] {
+  const [pt, tom] = ROTULO_FASE[f];
+  return [loc === 'es' ? ROTULO_FASE_ES[f] : pt, tom];
+}
+
+// Mensagens que o Rust (src-tauri/src/capture, fora deste módulo) manda em português e chegam à tela: o erro de
+// `captura_ligar` sem aceite, `EstadoCaptura.mensagem` quando a rede cai e `TabelaInfo.recusa`. Em espanhol, a
+// tela traduz as conhecidas pelo texto exato; o resto (erro técnico do Npcap, nome de DLL) passa como veio.
+// tests/i18n.test.ts confere que os textos daqui continuam iguais aos do Rust.
+const MSG_RUST_ES: [RegExp, string][] = [
+  [
+    /^Para ligar a captura, leia e aceite o aviso sobre a leitura do tráfego de rede\.$/,
+    'Para activar la captura, lee y acepta el aviso sobre la lectura del tráfico de red.',
+  ],
+  [
+    /^A leitura da rede parou \(o computador suspendeu, o Wi-Fi reiniciou ou a placa de rede sumiu\)\. Ligue a captura de novo\.$/,
+    'La lectura de la red se detuvo (la computadora se suspendió, el Wi-Fi se reinició o la tarjeta de red desapareció). Activa la captura de nuevo.',
+  ],
+  [/^tabela remota recusada \(assinatura\)$/, 'tabla remota rechazada (firma)'],
+  [/^versão (\d+) da tabela de códigos fora do esperado$/, 'versión $1 de la tabla de códigos fuera de lo esperado'],
+  [/^protocolo "([^"]*)" não suportado por esta versão do app$/, 'protocolo "$1" no compatible con esta versión de la app'],
+  [/^porta (\d+) não é do Albion na tabela de códigos$/, 'el puerto $1 no es de Albion en la tabla de códigos'],
+  [/^parâmetro do código inválido na tabela de códigos$/, 'parámetro de código no válido en la tabla de códigos'],
+  [/^tabela de códigos sem o evento (.+)$/, 'tabla de códigos sin el evento $1'],
+  [/^tabela de códigos sem a operação (.+)$/, 'tabla de códigos sin la operación $1'],
+];
+
+/** Mensagem da captura vinda do Rust na língua pedida (as conhecidas; o resto passa igual). Pura. */
+export function mensagemCaptura(msg: string, loc: Locale = currentLocale()): string {
+  if (loc !== 'es') return msg;
+  for (const [re, es] of MSG_RUST_ES) if (re.test(msg)) return msg.replace(re, es);
+  return msg;
+}
 
 /** A fase é de "ligada" (threads rodando)? */
 export function faseLigada(f: FaseCaptura): boolean {

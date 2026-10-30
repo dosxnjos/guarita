@@ -7,7 +7,10 @@
 //     vazio −25), desvio contra a mediana de 7 dias (>15% −8, >30% −20, >50% −45: provável isca/outlier),
 //     compra acima da venda na mesma cidade (−30), volume diário médio baixo (<5/dia −20).
 //   Sinal ausente (sem livro, sem histórico) não pune: só não ajuda.
+//
+// Línguas: `lang` 'es' muda só o texto dos motivos (a régua, o score e o rótulo, que é código, são os mesmos).
 import type { BookLevel, Confidence, Verdict } from './types';
+import type { ApiLang } from './lang';
 
 export interface ConfidenceInput {
   /** Preço mostrado (normalmente o sellMin; buyMax quando a cidade só tem compra). */
@@ -35,45 +38,64 @@ export function ageFactor(ageMin: number | null): number {
   return 0.1;
 }
 
-/** "visto agora", "visto há 12 min", "visto há 3 h", "visto há 2 dias". */
-export function ageLabel(ageMin: number | null): string {
-  if (ageMin === null || !Number.isFinite(ageMin)) return 'sem data';
-  if (ageMin < 1) return 'visto agora';
-  if (ageMin < 60) return `visto há ${Math.round(ageMin)} min`;
-  if (ageMin < 48 * 60) return `visto há ${Math.round(ageMin / 60)} h`;
-  return `visto há ${Math.round(ageMin / 1440)} dias`;
+/** "visto agora", "visto há 12 min", "visto há 3 h", "visto há 2 dias" (es: "visto ahora", "visto hace 12 min"…). */
+export function ageLabel(ageMin: number | null, lang: ApiLang = 'pt'): string {
+  const es = lang === 'es';
+  if (ageMin === null || !Number.isFinite(ageMin)) return es ? 'sin fecha' : 'sem data';
+  if (ageMin < 1) return es ? 'visto ahora' : 'visto agora';
+  const ago = es ? 'visto hace' : 'visto há';
+  if (ageMin < 60) return `${ago} ${Math.round(ageMin)} min`;
+  if (ageMin < 48 * 60) return `${ago} ${Math.round(ageMin / 60)} h`;
+  return `${ago} ${Math.round(ageMin / 1440)} ${es ? 'días' : 'dias'}`;
 }
 
-export function confidence(input: ConfidenceInput): Confidence {
-  const { price, ageMin } = input;
-  if (price === null || !(price > 0)) return { score: 0, label: 'sem dado', reasons: ['sem preço registrado'] };
+/** Motivos do selo em espanhol (espanhol neutro; "livro de ofertas" = libro de órdenes, como no mercado do jogo). */
+const REASON_ES: Record<string, string> = {
+  'sem preço registrado': 'sin precio registrado',
+  'sem livro de ofertas': 'sin libro de órdenes',
+  'livro raso': 'libro de órdenes escaso',
+  'muito abaixo da mediana': 'muy por debajo de la mediana',
+  'muito acima da mediana': 'muy por encima de la mediana',
+  'bem abaixo da mediana': 'bastante por debajo de la mediana',
+  'bem acima da mediana': 'bastante por encima de la mediana',
+  'compra acima da venda (suspeito)': 'compra por encima de la venta (sospechoso)',
+  'pouco volume': 'poco volumen',
+};
 
-  const reasons: string[] = [ageLabel(ageMin)];
+/** Todos os motivos fixos do selo (sem a idade), pt → es. Exportado para o teste de cobertura. */
+export const CONFIDENCE_REASONS_ES: Readonly<Record<string, string>> = REASON_ES;
+
+export function confidence(input: ConfidenceInput, lang: ApiLang = 'pt'): Confidence {
+  const { price, ageMin } = input;
+  const r = (pt: string) => (lang === 'es' ? REASON_ES[pt] ?? pt : pt);
+  if (price === null || !(price > 0)) return { score: 0, label: 'sem dado', reasons: [r('sem preço registrado')] };
+
+  const reasons: string[] = [ageLabel(ageMin, lang)];
   let quality = 100;
 
   const depth = input.depth;
   if (depth !== null && depth !== undefined) {
-    if (depth <= 0) { quality -= 25; reasons.push('sem livro de ofertas'); }
-    else if (depth < 3) { quality -= 20; reasons.push('livro raso'); }
-    else if (depth < 10) { quality -= 10; reasons.push('livro raso'); }
+    if (depth <= 0) { quality -= 25; reasons.push(r('sem livro de ofertas')); }
+    else if (depth < 3) { quality -= 20; reasons.push(r('livro raso')); }
+    else if (depth < 10) { quality -= 10; reasons.push(r('livro raso')); }
   }
 
   const med = input.median7d;
   if (med && med > 0) {
     const dev = price / med - 1;
     const abs = Math.abs(dev);
-    if (abs > 0.5) { quality -= 45; reasons.push(dev < 0 ? 'muito abaixo da mediana' : 'muito acima da mediana'); }
-    else if (abs > 0.3) { quality -= 20; reasons.push(dev < 0 ? 'bem abaixo da mediana' : 'bem acima da mediana'); }
+    if (abs > 0.5) { quality -= 45; reasons.push(r(dev < 0 ? 'muito abaixo da mediana' : 'muito acima da mediana')); }
+    else if (abs > 0.3) { quality -= 20; reasons.push(r(dev < 0 ? 'bem abaixo da mediana' : 'bem acima da mediana')); }
     else if (abs > 0.15) { quality -= 8; }
   }
 
   if (input.sellMin && input.buyMax && input.buyMax > input.sellMin) {
     quality -= 30;
-    reasons.push('compra acima da venda (suspeito)');
+    reasons.push(r('compra acima da venda (suspeito)'));
   }
 
   const vol = input.avgDailyVolume;
-  if (vol !== null && vol !== undefined && vol < 5) { quality -= 20; reasons.push('pouco volume'); }
+  if (vol !== null && vol !== undefined && vol < 5) { quality -= 20; reasons.push(r('pouco volume')); }
 
   const score = Math.max(1, Math.min(100, Math.round(ageFactor(ageMin) * Math.max(0, quality))));
   return { score, label: scoreLabel(score), reasons };

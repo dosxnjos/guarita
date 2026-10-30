@@ -5,9 +5,10 @@
   import type { KillEvent, PlayerDossier, PlayerHit } from '../../../shared/types';
   import Patient from '../../../src/lib/player/Patient.svelte';
   import {
-    dangerHeadline, dangerTone, fmtAgo, fmtCompact, fmtDateBR, fmtDec, fmtNum, fmtPct, isStale, playerQuery,
+    dangerHeadline, dangerTone, fmtAgo, fmtCompact, fmtDateBR, fmtDec, fmtNum, fmtPct, isStale, playerQuery, weaponLabel,
   } from '../../../src/lib/player/format';
   import { api } from '../lib/api';
+  import { brasilia, getLocale, tx } from '../lib/i18n.svelte';
   import { abrirUrl } from '../lib/links';
   import { urlJogadorNoSite } from '../lib/ui-preco';
   import ErroCaixa from '../lib/ui/ErroCaixa.svelte';
@@ -28,7 +29,7 @@
     e?.preventDefault();
     const { q, ok } = playerQuery(termo);
     if (!ok) {
-      erroBusca = 'Digite pelo menos 3 letras do nome.';
+      erroBusca = tx('Digite pelo menos 3 letras do nome.', 'Escribe al menos 3 letras del nombre.');
       return;
     }
     const meu = ++seq;
@@ -97,54 +98,54 @@
 <div class="dossie stack">
   {#if !idAtual}
     <form class="busca" onsubmit={buscar}>
-      <label class="sr-only" for="dossie-nome">Nome do jogador</label>
-      <input id="dossie-nome" bind:this={campo} class="input" type="search" autocomplete="off" spellcheck="false" placeholder="Nome do jogador" bind:value={termo} />
-      <button type="submit" class="btn primary" disabled={buscando}>{buscando ? 'Buscando…' : 'Buscar'}</button>
+      <label class="sr-only" for="dossie-nome">{tx('Nome do jogador', 'Nombre del jugador')}</label>
+      <input id="dossie-nome" bind:this={campo} class="input" type="search" autocomplete="off" spellcheck="false" placeholder={tx('Nome do jogador', 'Nombre del jugador')} bind:value={termo} />
+      <button type="submit" class="btn primary" disabled={buscando}>{buscando ? tx('Buscando…', 'Buscando…') : tx('Buscar', 'Buscar')}</button>
     </form>
-    <p class="small muted m0">O killboard oficial às vezes leva até 1 minuto para responder. A busca só acontece quando você pede.</p>
+    <p class="small muted m0">{tx('O killboard oficial às vezes leva até 1 minuto para responder. A busca só acontece quando você pede.', 'El killboard oficial a veces tarda hasta 1 minuto en responder. La búsqueda solo ocurre cuando tú la pides.')}</p>
 
     {#if erroBusca}
       <ErroCaixa mensagem={erroBusca} ontentar={termo.trim().length >= 3 ? () => buscar() : undefined} />
     {:else if buscando}
-      <Patient lines={3} what="jogadores no killboard oficial" />
+      <Patient lines={3} what={tx('jogadores no killboard oficial', 'jugadores en el killboard oficial')} />
     {:else if achados}
       {#if achados.length}
-        <ul class="plain-list achados" aria-label="Jogadores encontrados">
+        <ul class="plain-list achados" aria-label={tx('Jogadores encontrados', 'Jugadores encontrados')}>
           {#each achados.slice(0, 10) as p (p.id)}
             <li>
               <button type="button" class="achado" onclick={() => abrir(p.id)}>
                 <strong>{p.name}</strong>
-                <span class="small muted">{p.guild ? `[${p.guild}]` : 'sem guilda'} · fama de kill {fmtCompact(p.killFame)}</span>
+                <span class="small muted">{p.guild ? `[${p.guild}]` : tx('sem guilda', 'sin gremio')} · {tx('fama de kill', 'fama por asesinatos')} {fmtCompact(p.killFame)}</span>
               </button>
             </li>
           {/each}
         </ul>
       {:else}
-        <p class="small muted m0">Nenhum jogador com esse nome no Americas. Confira a grafia.</p>
+        <p class="small muted m0">{tx('Nenhum jogador com esse nome no Americas. Confira a grafia.', 'Ningún jugador con ese nombre en Americas. Revisa cómo se escribe.')}</p>
       {/if}
     {/if}
   {:else}
     <div class="row topo">
-      <button type="button" class="linkbtn small" onclick={voltar}>← Nova busca</button>
+      <button type="button" class="linkbtn small" onclick={voltar}>← {tx('Nova busca', 'Nueva búsqueda')}</button>
       {#if d}
         <span class="row">
-          <button type="button" class="btn mini-btn" onclick={() => idAtual && abrir(idAtual, true)}>Atualizar</button>
-          <button type="button" class="btn mini-btn" onclick={() => idAtual && abrirUrl(urlJogadorNoSite(idAtual))}>Abrir no site</button>
+          <button type="button" class="btn mini-btn" onclick={() => idAtual && abrir(idAtual, true)}>{tx('Atualizar', 'Actualizar')}</button>
+          <button type="button" class="btn mini-btn" onclick={() => idAtual && abrirUrl(urlJogadorNoSite(idAtual))}>{tx('Abrir no site', 'Abrir en el sitio')}</button>
         </span>
       {/if}
     </div>
 
     {#if carregando}
-      <Patient lines={4} what="o dossiê no killboard oficial" />
+      <Patient lines={4} what={tx('o dossiê no killboard oficial', 'el dosier en el killboard oficial')} />
     {:else if erro}
       <ErroCaixa mensagem={erro} ontentar={() => idAtual && abrir(idAtual, true)} />
     {:else if d}
       <header class="cab">
         <div class="cab-nome">
           <strong class="nome">{d.name}</strong>
-          <span class="small muted">{d.guild ? `Guilda ${d.guild}` : 'Sem guilda'}{d.alliance ? ` · [${d.alliance}]` : ''}</span>
+          <span class="small muted">{d.guild ? tx(`Guilda ${d.guild}`, `Gremio ${d.guild}`) : tx('Sem guilda', 'Sin gremio')}{d.alliance ? ` · [${d.alliance}]` : ''}</span>
         </div>
-        <span class="perigo tag {dangerTone(d.danger.label)}" title="Perigo de 0 a 100, só pelas últimas lutas públicas">
+        <span class="perigo tag {dangerTone(d.danger.label)}" title={tx('Perigo de 0 a 100, só pelas últimas lutas públicas', 'Peligro de 0 a 100, solo por las últimas peleas públicas')}>
           {d.danger.label === 'sem dado' ? dangerHeadline(d.danger.label) : `${dangerHeadline(d.danger.label)} · ${Math.round(d.danger.score)}`}
         </span>
       </header>
@@ -154,41 +155,47 @@
       {/if}
 
       <dl class="numeros small">
-        <div><dt>Kill/morte</dt><dd class="num">{fmtDec(d.ratio)}</dd></div>
-        <div><dt>Sozinho</dt><dd class="num">{fmtPct(d.soloRate)}</dd></div>
-        <div><dt>Grupo médio</dt><dd class="num">{fmtDec(d.avgGroup)}</dd></div>
-        <div><dt>IP médio</dt><dd class="num">{fmtNum(d.avgIp)}</dd></div>
+        <div><dt>{tx('Kill/morte', 'Asesinatos/muertes')}</dt><dd class="num">{fmtDec(d.ratio)}</dd></div>
+        <div><dt>{tx('Sozinho', 'En solitario')}</dt><dd class="num">{fmtPct(d.soloRate)}</dd></div>
+        <div><dt>{tx('Grupo médio', 'Grupo medio')}</dt><dd class="num">{fmtDec(d.avgGroup)}</dd></div>
+        <div><dt>{tx('IP médio', 'IP medio')}</dt><dd class="num">{fmtNum(d.avgIp)}</dd></div>
       </dl>
 
       {#if d.weapons.length}
-        <p class="small m0"><span class="muted">Armas:</span> {d.weapons.slice(0, 3).map((w) => `${w.labelPt || w.type} (${w.count})`).join(', ')}</p>
+        <p class="small m0"><span class="muted">{tx('Armas:', 'Armas:')}</span> {d.weapons.slice(0, 3).map((w) => `${getLocale() === 'es' && w.labelPt ? weaponLabel(w.labelPt) : w.labelPt || w.type} (${w.count})`).join(', ')}</p>
       {/if}
 
       <div class="stack eventos">
-        <span class="kpi-label">Últimas lutas</span>
+        <span class="kpi-label">{tx('Últimas lutas', 'Últimas peleas')}</span>
         {#if eventos.length}
           <ul class="plain-list">
             {#each eventos as { ev, tipo } (tipo + ev.id)}
               {@const outro = tipo === 'kill' ? ev.victim : ev.killer}
               {@const eu = tipo === 'kill' ? ev.killer : ev.victim}
               <li class="ev">
-                <span class="tag {tipo === 'kill' ? 'good' : 'bad'}">{tipo === 'kill' ? 'Kill' : 'Morte'}</span>
+                <span class="tag {tipo === 'kill' ? 'good' : 'bad'}">{tipo === 'kill' ? tx('Kill', 'Asesinato') : tx('Morte', 'Muerte')}</span>
                 <span class="ev-txt small">
-                  {tipo === 'kill' ? 'matou' : 'morto por'} <strong>{outro.name || 'desconhecido'}</strong>{#if outro.guild} <span class="muted">[{outro.guild}]</span>{/if}
-                  <span class="muted">· IP {fmtNum(eu.ip)} vs {fmtNum(outro.ip)} · grupo {fmtNum(ev.participants)}</span>
+                  {tipo === 'kill' ? tx('matou', 'mató a') : tx('morto por', 'murió ante')} <strong>{outro.name || tx('desconhecido', 'desconocido')}</strong>{#if outro.guild} <span class="muted">[{outro.guild}]</span>{/if}
+                  <span class="muted">· IP {fmtNum(eu.ip)} vs {fmtNum(outro.ip)} · {tx('grupo', 'grupo')} {fmtNum(ev.participants)}</span>
                 </span>
-                <time class="small muted" datetime={ev.time} title="{fmtDateBR(ev.time)} (Brasília)">{fmtAgo(ev.time)}</time>
+                <time class="small muted" datetime={ev.time} title="{fmtDateBR(ev.time)} ({brasilia()})">{fmtAgo(ev.time)}</time>
               </li>
             {/each}
           </ul>
         {:else}
-          <p class="small muted m0">Nenhuma kill ou morte pública recente.</p>
+          <p class="small muted m0">{tx('Nenhuma kill ou morte pública recente.', 'Ningún asesinato ni muerte pública reciente.')}</p>
         {/if}
       </div>
 
-      <p class="small muted m0">
-        Atualizado {fmtAgo(d.fetchedAt)}{#if isStale(d.fetchedAt)} <span class="tag warn">dado antigo</span>{/if}. Leitura das últimas lutas públicas; não é previsão.
-      </p>
+      {#if getLocale() === 'es'}
+        <p class="small muted m0">
+          Actualizado {fmtAgo(d.fetchedAt)}{#if isStale(d.fetchedAt)} <span class="tag warn">datos antiguos</span>{/if}. Lectura de las últimas peleas públicas; no es una predicción.
+        </p>
+      {:else}
+        <p class="small muted m0">
+          Atualizado {fmtAgo(d.fetchedAt)}{#if isStale(d.fetchedAt)} <span class="tag warn">dado antigo</span>{/if}. Leitura das últimas lutas públicas; não é previsão.
+        </p>
+      {/if}
     {/if}
   {/if}
 </div>

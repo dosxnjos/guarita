@@ -73,6 +73,15 @@ describe('extensão e versão da captura', () => {
     expect(escolherExtensao([release([asset('outra-coisa.zip')])])).toBeNull();
     expect(escolherExtensao({})).toBeNull();
   });
+  it('release v0.2.2 com o app e a extensão 0.2.0: oferece o zip 0.2.0 (versão do nome do arquivo, não da tag)', () => {
+    const v022 = release(
+      [asset('Guarita_0.2.2_x64-setup.exe'), asset('Guarita_0.2.2_x64_pt-BR.msi'), asset('guarita-extensao-0.2.0.zip', { size: 31_583 })],
+      { tag_name: 'v0.2.2' },
+    );
+    const antiga = release([asset('guarita-extensao-0.1.0.zip')], { tag_name: 'v0.2.0' });
+    expect(escolherExtensao([v022, antiga])).toMatchObject({ nome: 'guarita-extensao-0.2.0.zip', versao: '0.2.0', tamanhoBytes: 31_583 });
+    expect(escolherInstalador(v022)).toMatchObject({ nome: 'Guarita_0.2.2_x64-setup.exe', versao: '0.2.2' });
+  });
   it('sem zip publicado o botão diz "em breve"; com zip, pronto', async () => {
     expect(await buscarExtensao(resp(200, []) as typeof fetch)).toEqual({ tipo: 'em-breve' });
     expect(await buscarExtensao(resp(403) as typeof fetch)).toEqual({ tipo: 'pagina' });

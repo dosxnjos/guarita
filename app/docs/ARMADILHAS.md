@@ -49,6 +49,34 @@ Formato: **sintoma** → causa e o que fazer.
   `src-tauri/src/lib.rs`). Sair do app (`app.exit`) destrói as janelas sem esse evento, e é isso que mantém marcado
   o que estava aberto. A gravação do Rust chega às janelas pelo `store://change` (um `resourceId` por arquivo).
 
+## Línguas (português e espanhol)
+
+- **Componente do site (Patient, AgeDot) em português com o app em espanhol** → eles leem o estado de
+  `src/lib/i18n/index.svelte.ts`, que no site vem do caminho (`/es`) e no app é sempre `/`. `aplicarLingua` (em
+  `src/lib/i18n.svelte.ts`) chama `syncLocale('/es')` para mexer nesse estado sem navegar. Não usar `setLocale` do
+  site aqui: ele faz `pushState('/es')`, e recarregar a janela pediria `/es` ao Tauri.
+- **Texto de função pura sai em português com o app em espanhol** → o padrão do `loc` é o espelho de
+  `src/lib/i18n/core.ts` (`currentLocale()`), que só muda por `aplicarLingua`. Teste que chama sem `loc` depende da
+  língua aplicada por outro teste: passar `loc` explícito ou voltar para `pt` no `afterEach`.
+- **Rótulo calculado no `<script>` não troca de língua** → só troca porque a tela remonta (`{#key getLocale()}` em
+  `App.svelte`). Constante em módulo `.ts` (fora de componente) roda uma vez: vira função com `loc`.
+- **Trocar de língua joga o painel para a aba Início ou reabre os widgets** → efeito da remontagem. A aba e o "já
+  reabriu" moram no `<script module>` do `Painel.svelte`; o que só pode rodar uma vez por execução vai para lá.
+- **Bandeja em português com o app em espanhol** → com "Automático", o Rust só sabe a língua quando o painel chama
+  `definir_lingua` (logo ao abrir); até lá vale português. Espanhol escolhido explicitamente já vem da config no
+  `setup`. Comando novo de língua precisa de `build.rs` e da capability do painel.
+- **Fala em espanhol com sotaque português (ou o contrário)** → a voz guardada nos ajustes é um nome só. Em espanhol
+  ela só vale se for espanhola (`escolherVozEs`), e em português só se não for espanhola (escolhida com o app em
+  espanhol e o app voltou ao português: cai na Francisca/Maria); sem voz espanhola instalada, o Windows lê com a voz
+  padrão e a tela avisa. Cada fala guarda a língua em que entrou na fila: trocar de língua no meio não troca a voz da fila.
+- **Nome de item em português na regra ou no lembrete com o app em espanhol** → o nome é guardado na criação. A busca
+  e o loot usam o índice da língua atual (`items-index-es.json`), mas o que já está na config não é traduzido.
+- **Mensagem da captura em português com o app em espanhol** → o Rust da captura manda texto em português; a tela
+  traduz pelo texto exato (`mensagemCaptura`). Mudou a frase em `src-tauri/src/capture`, mude a tabela em
+  `capture/sessao.ts` (o teste `tests/i18n.test.ts` acusa).
+- **Cidade aparece "Black Market" em espanhol** → usar `cityName(c)` de `format.ts` na tela (em espanhol, "Mercado
+  Negro"); o valor da API e da config continua o nome em inglês.
+
 ## Lente de mercado (websocket do cliente AODP)
 
 Conferido no código de `ao-data/albiondata-client` (`client/dispatcher.go`, `client/ws_client.go`) em 30/10/2026.

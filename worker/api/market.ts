@@ -8,7 +8,9 @@ import type {
 import { ALL_CITIES, ROYAL_CITIES, flipProfit, minutesSince } from '../../shared/market';
 import { bookDepth, confidence, median, verdict, weightedQuantile } from '../../shared/confidence';
 import { AodpError, aodpBook, aodpBookMeta, aodpHistoryMeta, aodpPricesMeta, oldestAt, type HistoryPoint } from '../lib/aodp';
-import { badRequest, json, upstreamError } from '../lib/respond';
+import { badRequest, json } from '../lib/respond';
+import { apiLang, tl, type ApiLang } from '../../shared/lang';
+import { aodpMessageEs, upstreamErrorL } from './langErrors';
 
 const BM: City = 'Black Market';
 /** Cidades com mercado "de verdade": entram na faixa de preço e são origem de flip. */
@@ -53,6 +55,8 @@ export function buildItem(
   now: number,
   /** Quando o dado foi buscado no AODP (o carimbo mais antigo do cache); padrão `now`. */
   fetchedAt: string = new Date(now).toISOString(),
+  /** Língua dos motivos do selo de confiança (o resto da resposta é número ou código). */
+  lang: ApiLang = 'pt',
 ): ItemResponse {
   const range = priceRange(history, REAL_CITIES, now);
   const bmRange = priceRange(history, [BM], now);
@@ -84,7 +88,7 @@ export function buildItem(
 
     return {
       city, sellMin, sellMinAt, buyMax, buyMaxAt, ageMin,
-      confidence: confidence({ price, ageMin, depth, median7d: ref, sellMin, buyMax, avgDailyVolume: vol }),
+      confidence: confidence({ price, ageMin, depth, median7d: ref, sellMin, buyMax, avgDailyVolume: vol }, lang),
       verdict: isBM ? verdict(buyMax, bmRange.p25, bmRange.p75) : verdict(sellMin, range.p25, range.p75),
     };
   });
@@ -155,7 +159,8 @@ export async function getPrices(_env: Env, ctx: ExecutionContext, ids: string[],
   return { fetchedAt: r.at, rows: r.data };
 }
 
-export async function getItem(_env: Env, ctx: ExecutionContext, rawId: string, quality: Quality = 1): Promise<ItemResponse> {
+/** `lang` 'es': motivos do selo em espanhol (mesmo dado em cache do AODP, mesmos subrequests). */
+export async function getItem(_env: Env, ctx: ExecutionContext, rawId: string, quality: Quality = 1, lang: ApiLang = 'pt'): Promise<ItemResponse> {
   const id = rawId.toUpperCase();
   const [rows, hist, book] = await Promise.allSettled([
     aodpPricesMeta([id], ALL_CITIES, [quality], ctx),
@@ -171,7 +176,7 @@ export async function getItem(_env: Env, ctx: ExecutionContext, rawId: string, q
     id, quality, rows.value.data,
     hist.status === 'fulfilled' ? hist.value.data : [],
     book.status === 'fulfilled' ? book.value.data : [],
-    Date.now(), oldestAt(ats),
+    Date.now(), oldestAt(ats), lang,
   );
 }
 
@@ -212,56 +217,72 @@ function list(s: string | null): string[] {
 
 // ---------- rotas ----------
 
+/**
+ * /api/prices, /api/item/:id e /api/book/:id. `?lang=es` devolve em espanhol os motivos do selo de confiança (só
+ * /api/item tem texto) e as mensagens de erro; sem ele (ou com outro valor), tudo igual a antes.
+ */
 export async function routeMarket(request: Request, url: URL, env: Env, ctx: ExecutionContext): Promise<Response | null> {
   const p = url.pathname;
   const isPrices = p === '/api/prices';
   const itemM = /^\/api\/item\/([^/]+)\/?$/.exec(p);
   const bookM = /^\/api\/book\/([^/]+)\/?$/.exec(p);
   if (!isPrices && !itemM && !bookM) return null;
+  const lang = apiLang(url.searchParams.get('lang'));
+  const t = (pt: string, es: string) => tl(lang, pt, es);
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return json({ error: 'método não permitido' }, 405, 0, { Allow: 'GET, HEAD' });
+    return json({ error: t('método não permitido', 'método no permitido') }, 405, 0, { Allow: 'GET, HEAD' });
   }
 
   try {
     if (isPrices) {
       const ids = [...new Set(list(url.searchParams.get('ids')))];
-      if (!ids.length) return badRequest('Informe ao menos um item em "ids" (ex.: ids=T4_BAG,T5_BAG).');
-      if (ids.length > MAX_IDS) return badRequest(`No máximo ${MAX_IDS} itens por consulta.`);
+      if (!ids.length) return badRequest(t('Informe ao menos um item em "ids" (ex.: ids=T4_BAG,T5_BAG).', 'Indica al menos un objeto en "ids" (ej.: ids=T4_BAG,T5_BAG).'));
+      if (ids.length > MAX_IDS) return badRequest(t(`No máximo ${MAX_IDS} itens por consulta.`, `Como máximo ${MAX_IDS} objetos por consulta.`));
       const bad = ids.find((i) => !ID_RE.test(i));
-      if (bad) return badRequest(`Id de item inválido: "${bad.slice(0, 80)}".`);
+      if (bad) return badRequest(t(`Id de item inválido: "${bad.slice(0, 80)}".`, `Id de objeto no válido: "${bad.slice(0, 80)}".`));
       const cityNames = list(url.searchParams.get('cities'));
       const cities: City[] = [];
       for (const c of cityNames) {
         const city = parseCity(c);
-        if (!city) return badRequest(`Cidade desconhecida: "${c.slice(0, 40)}".`);
+        if (!city) return badRequest(t(`Cidade desconhecida: "${c.slice(0, 40)}".`, `Ciudad desconocida: "${c.slice(0, 40)}".`));
         if (!cities.includes(city)) cities.push(city);
       }
       const qualities: Quality[] = [];
       for (const q of list(url.searchParams.get('q'))) {
         const v = parseQuality(q);
-        if (v === null) return badRequest(`Qualidade inválida: "${q.slice(0, 10)}" (use de 1 a 5).`);
+        if (v === null) return badRequest(t(`Qualidade inválida: "${q.slice(0, 10)}" (use de 1 a 5).`, `Calidad no válida: "${q.slice(0, 10)}" (usa de 1 a 5).`));
         if (!qualities.includes(v)) qualities.push(v);
       }
       return json(await getPrices(env, ctx, ids, cities.length ? cities : ALL_CITIES, qualities.length ? qualities : [1]), 200, 60);
     }
 
     const id = safeDecode((itemM ?? bookM)![1]);
-    if (!id || !ID_RE.test(id)) return badRequest('Id de item inválido.');
+    if (!id || !ID_RE.test(id)) return badRequest(t('Id de item inválido.', 'Id de objeto no válido.'));
     const quality = parseQuality(url.searchParams.get('q'));
-    if (quality === null) return badRequest('Qualidade inválida (use de 1 a 5).');
+    if (quality === null) return badRequest(t('Qualidade inválida (use de 1 a 5).', 'Calidad no válida (usa de 1 a 5).'));
 
-    if (itemM) return json(await getItem(env, ctx, id, quality), 200, 60);
+    if (itemM) return json(await getItem(env, ctx, id, quality, lang), 200, 60);
 
     const city = parseCity(url.searchParams.get('city'));
-    if (!city) return badRequest('Informe uma cidade válida em "city" (ex.: city=Caerleon).');
+    if (!city) return badRequest(t('Informe uma cidade válida em "city" (ex.: city=Caerleon).', 'Indica una ciudad válida en "city" (ej.: city=Caerleon).'));
     const sideRaw = url.searchParams.get('side') ?? 'sell';
-    if (sideRaw !== 'sell' && sideRaw !== 'buy') return badRequest('"side" deve ser "sell" (comprar das ofertas de venda) ou "buy" (vender para as ofertas de compra).');
+    if (sideRaw !== 'sell' && sideRaw !== 'buy') {
+      return badRequest(t(
+        '"side" deve ser "sell" (comprar das ofertas de venda) ou "buy" (vender para as ofertas de compra).',
+        '"side" debe ser "sell" (comprar de las órdenes de venta) o "buy" (vender a las órdenes de compra).',
+      ));
+    }
     const nRaw = url.searchParams.get('n') ?? '1';
     const n = Number(nRaw);
-    if (!Number.isInteger(n) || n < 1 || n > MAX_FILL) return badRequest(`"n" deve ser um número inteiro de 1 a ${MAX_FILL.toLocaleString('pt-BR')}.`);
+    if (!Number.isInteger(n) || n < 1 || n > MAX_FILL) {
+      return badRequest(t(
+        `"n" deve ser um número inteiro de 1 a ${MAX_FILL.toLocaleString('pt-BR')}.`,
+        `"n" debe ser un número entero de 1 a ${MAX_FILL.toLocaleString('es-419')}.`,
+      ));
+    }
     return json(await getBookFill(env, ctx, id, city, sideRaw, n, quality), 200, 60);
   } catch (err) {
-    if (err instanceof AodpError && err.status === 400) return badRequest(err.message);
-    return upstreamError(err);
+    if (err instanceof AodpError && err.status === 400) return badRequest(lang === 'es' ? aodpMessageEs(err) : err.message);
+    return upstreamErrorL(err, lang);
   }
 }

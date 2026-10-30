@@ -1,0 +1,18 @@
+{
+  "extName": {
+    "message": "Guarita para Albion Online",
+    "description": "Nome da extensão na loja e na lista de extensões."
+  },
+  "extShortName": {
+    "message": "Guarita",
+    "description": "Nome curto (até 12 caracteres)."
+  },
+  "extDescription": {
+    "message": "Nome em português e preço do mercado ao passar o mouse nos itens de Albion Online em sites como a wiki e o killboard.",
+    "description": "Descrição na loja (até 132 caracteres)."
+  },
+  "actionTitle": {
+    "message": "Guarita: preço de item e relógio",
+    "description": "Dica do botão da extensão na barra do navegador."
+  }
+}

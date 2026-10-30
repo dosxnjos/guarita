@@ -2,6 +2,7 @@
   // Campo de atalho global: clica em "Gravar", aperta a combinação, e o texto vai para a config. O motor
   // (engine/motor.ts) registra os atalhos quando a config muda; aqui ninguém registra nada.
   import { partesAtalho, capturarAtalho } from '../lib/ui-atalhos';
+  import { tx } from '../lib/i18n.svelte';
 
   let {
     rotulo,
@@ -76,19 +77,19 @@
       onblur={() => (gravando = false)}
     >
       {#if gravando}
-        <span class="muted">{parcial || 'Aperte a combinação…'}</span>
+        <span class="muted">{parcial || tx('Aperte a combinação…', 'Presiona la combinación…')}</span>
       {:else if valor}
         {#each partesAtalho(valor) as p, i (i)}{#if i}<span class="mais">+</span>{/if}<kbd>{p}</kbd>{/each}
       {:else}
-        <span class="muted">Sem atalho</span>
+        <span class="muted">{tx('Sem atalho', 'Sin atajo')}</span>
       {/if}
     </button>
     {#if valor && !gravando}
-      <button type="button" class="linkbtn small" onclick={async () => (erro = (await onmudar(null)) ?? '')}>Remover</button>
+      <button type="button" class="linkbtn small" onclick={async () => (erro = (await onmudar(null)) ?? '')}>{tx('Remover', 'Quitar')}</button>
     {/if}
   </div>
   <span id="{uid}-d" class="small" class:bad-text={!!erro} class:muted={!erro}>
-    {erro || (gravando ? 'Esc cancela. Use Ctrl, Alt ou Win junto com a tecla.' : '')}
+    {erro || (gravando ? tx('Esc cancela. Use Ctrl, Alt ou Win junto com a tecla.', 'Esc cancela. Usa Ctrl, Alt o Win junto con la tecla.') : '')}
   </span>
 </div>
 

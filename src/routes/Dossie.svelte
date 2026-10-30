@@ -3,11 +3,11 @@
   import { api } from '../lib/api';
   import { go } from '../lib/router';
   import type { PlayerDossier } from '../../shared/types';
-  import { cached } from '../lib/player/cache';
+  import { cacheKey, cached } from '../lib/player/cache';
   import {
     famBars, fmtAgo, fmtCompact, fmtDateBR, fmtDec, fmtNum, fmtPct, gatherLabel, isStale, playerHref, pveLabel, weaponLabel,
   } from '../lib/player/format';
-  import { href, tx } from '../lib/i18n/index.svelte';
+  import { getLocale, href, tx } from '../lib/i18n/index.svelte';
   import DangerMeter from '../lib/player/DangerMeter.svelte';
   import BarList from '../lib/player/BarList.svelte';
   import EventList from '../lib/player/EventList.svelte';
@@ -26,7 +26,8 @@
     const my = ++seq;
     loading = true; error = null; data = null;
     try {
-      const d = await cached(`dossie:${pid}`, () => api.dossier(pid), fresh);
+      const loc = getLocale();
+      const d = await cached(cacheKey(`dossie:${pid}`, loc), () => api.dossier(pid, loc), fresh);
       if (my === seq) data = d;
     } catch (e) {
       if (my === seq) error = e instanceof Error ? e.message : String(e);

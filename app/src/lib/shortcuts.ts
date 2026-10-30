@@ -6,6 +6,7 @@
 //
 // Formato: o mesmo que a tela de captura monta (ui-atalhos.ts) e o plugin entende: "Ctrl+Shift+P", "Alt+F2",
 // "Ctrl+Numpad1". Modificadores na ordem Ctrl, Alt, Shift, Super; depois uma tecla só.
+import { currentLocale, type Locale } from '../../../src/lib/i18n/core';
 import type { AcaoAtalho } from './config';
 import { isTauri } from './windows';
 
@@ -15,6 +16,20 @@ export const ROTULO_ACAO: Record<AcaoAtalho, string> = {
   alternarWidgets: 'Mostrar e esconder os widgets',
   silenciarVoz: 'Silenciar ou religar a voz',
 };
+
+export const ROTULO_ACAO_ES: Record<AcaoAtalho, string> = {
+  abrirPreco: 'Abrir el precio rápido',
+  abrirDossie: 'Abrir el dosier',
+  alternarWidgets: 'Mostrar y ocultar los widgets',
+  silenciarVoz: 'Silenciar o reactivar la voz',
+};
+
+/** Rótulo da ação na língua pedida (padrão: a do app). */
+export function rotuloAcao(a: AcaoAtalho, loc: Locale = currentLocale()): string {
+  return (loc === 'es' ? ROTULO_ACAO_ES : ROTULO_ACAO)[a];
+}
+
+const L = (loc: Locale, pt: string, es: string) => (loc === 'es' ? es : pt);
 
 export interface FalhaAtalho {
   acao: AcaoAtalho;
@@ -95,17 +110,30 @@ const RESERVADOS = new Set([
  * Regras: uma tecla só; precisa de Ctrl, Alt ou Win (Shift sozinho não basta), menos F13 a F24, que nenhum jogo
  * usa; atalhos do Windows e de edição (Ctrl+C, Alt+F4...) ficam de fora.
  */
-export function validarAtalho(atalho: string): string | null {
-  if (!atalho.trim()) return 'Escolha uma combinação de teclas.';
+export function validarAtalho(atalho: string, loc: Locale = currentLocale()): string | null {
+  if (!atalho.trim()) return L(loc, 'Escolha uma combinação de teclas.', 'Elige una combinación de teclas.');
   const n = normalizarAtalho(atalho);
-  if (!n) return 'Atalho inválido. Use modificadores e uma tecla, por exemplo Ctrl+Shift+P.';
+  if (!n) {
+    return L(
+      loc,
+      'Atalho inválido. Use modificadores e uma tecla, por exemplo Ctrl+Shift+P.',
+      'Atajo no válido. Usa modificadores y una tecla, por ejemplo Ctrl+Shift+P.',
+    );
+  }
   const partes = n.split('+');
   const key = partes[partes.length - 1];
   const forte = partes.some((p) => p === 'Ctrl' || p === 'Alt' || p === 'Super');
   if (!forte && !/^F(1[3-9]|2[0-4])$/.test(key)) {
-    return 'Use Ctrl, Alt ou Win junto com a tecla, para o atalho não roubar uma tecla do jogo.';
+    return L(
+      loc,
+      'Use Ctrl, Alt ou Win junto com a tecla, para o atalho não roubar uma tecla do jogo.',
+      'Usa Ctrl, Alt o Win junto con la tecla, para que el atajo no le quite una tecla al juego.',
+    );
   }
-  if (RESERVADOS.has(n)) return `${n.replace('Super', 'Win')} é um atalho do Windows ou de edição. Escolha outra combinação.`;
+  if (RESERVADOS.has(n)) {
+    const w = n.replace('Super', 'Win');
+    return L(loc, `${w} é um atalho do Windows ou de edição. Escolha outra combinação.`, `${w} es un atajo de Windows o de edición. Elige otra combinación.`);
+  }
   return null;
 }
 
@@ -154,11 +182,12 @@ export async function aplicarAtalhos(
   const falhas: FalhaAtalho[] = [];
   const registrados: AcaoAtalho[] = [];
   if (!p) return { falhas, registrados };
+  const loc = currentLocale();
   await p.unregisterAll();
   const usados = new Map<string, AcaoAtalho>();
   for (const [acao, bruto] of Object.entries(atalhos) as [AcaoAtalho, string | null][]) {
     if (!bruto) continue;
-    const erro = validarAtalho(bruto);
+    const erro = validarAtalho(bruto, loc);
     if (erro) {
       falhas.push({ acao, atalho: bruto, erro });
       continue;
@@ -166,7 +195,8 @@ export async function aplicarAtalhos(
     const n = normalizarAtalho(bruto)!;
     const dono = usados.get(n);
     if (dono) {
-      falhas.push({ acao, atalho: bruto, erro: `Esse atalho já está em "${ROTULO_ACAO[dono]}".` });
+      const r = rotuloAcao(dono, loc);
+      falhas.push({ acao, atalho: bruto, erro: L(loc, `Esse atalho já está em "${r}".`, `Ese atajo ya está en "${r}".`) });
       continue;
     }
     try {
@@ -177,7 +207,12 @@ export async function aplicarAtalhos(
       registrados.push(acao);
     } catch (e) {
       console.warn('atalho recusado', n, e);
-      falhas.push({ acao, atalho: bruto, erro: `O Windows não liberou ${n.replace('Super', 'Win')}: outro programa já usa essa combinação.` });
+      const w = n.replace('Super', 'Win');
+      falhas.push({
+        acao,
+        atalho: bruto,
+        erro: L(loc, `O Windows não liberou ${w}: outro programa já usa essa combinação.`, `Windows no liberó ${w}: otro programa ya usa esa combinación.`),
+      });
     }
   }
   return { falhas, registrados };

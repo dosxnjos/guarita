@@ -1,7 +1,7 @@
 [package]
 name = "guarita"
-version = "0.2.1"
-description = "Guarita no PC: companheiro em PT-BR para quem joga Albion Online (Americas)"
+version = "0.2.2"
+description = "Guarita no PC: companheiro em PT-BR e espanhol para quem joga Albion Online (Americas)"
 authors = ["Guarita"]
 license = "MIT"
 edition = "2021"

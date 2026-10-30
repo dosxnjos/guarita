@@ -7,6 +7,19 @@ o bot (`worker/discord/`) e a API (`worker/api/`) importam de lá. Mudou um tipo
 
 - JSON em todas as respostas. Leitura em `GET` com `Cache-Control` público curto.
 - Erro: `{ "error": "mensagem em PT-BR" }` com status 4xx ou 5xx. Rota inexistente: 404 `{ "error": "rota não encontrada" }`.
+- **Língua (`lang=pt|es`)**: toda rota com texto montado no servidor aceita `?lang=es` (só o valor `es`, sem
+  diferenciar maiúsculas; ausente ou outro valor = pt, idêntico ao de antes) e devolve esse texto e as mensagens de
+  erro em espanhol neutro latino (es-419, "tú", termos de [glossario-es.md](glossario-es.md)). Números, códigos
+  (`danger.label`, `confidence.label`, `verdict`, `zone`, `labelPt`) e a forma da resposta são os mesmos nas duas
+  línguas; campos novos só aparecem em espanhol e são opcionais (`zones[].label`, `festivities[].label`). O cache
+  interno (Cache API) guarda o dado bruto sem língua e o texto é montado depois: pedir em espanhol não gasta
+  subrequest a mais. A resposta HTTP varia pela URL, que já leva o `lang`. Rotas: `/api/item`, `/api/prices`,
+  `/api/book` (erros), `/api/clock`, `/api/player/*`, `/api/losses`, `/api/guild/:nome`, `/api/guilds` (erros),
+  `POST /api/risk?lang=es`, `/api/hoje`, `/api/forecast`. Sem `lang` ainda: `/api/gold`, `/api/data-health` (só
+  números e códigos), alertas e despertador (erros de formulário, que a tela valida antes). Lógica comum em
+  `shared/lang.ts` (`apiLang`, `tl`, números) e `worker/api/langErrors.ts` (erro do AODP em espanhol). O site passa
+  `lang` pela língua da página (`src/lib/api.ts`, padrão `currentLocale()`; em pt a URL é a de antes), o bot pela
+  locale da interação e o MCP pelo argumento `lingua`.
 - Datas em ISO 8601 UTC (`2026-10-29T14:05:00Z`). Quem mostra ao usuário converte para horário de Brasília.
 - Preço ausente é `null`, nunca `0`.
 - Cidades (`City`): `Bridgewatch`, `Caerleon`, `Fort Sterling`, `Lymhurst`, `Martlock`, `Thetford`, `Brecilien`,
@@ -45,9 +58,10 @@ PriceRow = { id, city: City, quality: Quality,
              buyMax: number|null,  buyMaxAt: string|null }
 ```
 
-### `GET /api/item/:id?q=1`
+### `GET /api/item/:id?q=1&lang=pt|es`
 
-Página de item agregada.
+Página de item agregada. `lang=es`: `confidence.reasons` em espanhol ("visto hace 3 h", "libro de órdenes escaso",
+"poco volumen"); score, rótulo e o resto iguais.
 
 ```ts
 ItemResponse = {
@@ -86,13 +100,16 @@ BookFillResponse = { city, side: 'buy'|'sell', n, avgPrice: number|null, filled,
 
 ## Relógio
 
-### `GET /api/clock`
+### `GET /api/clock?lang=pt|es`
+
+`lang=es`: cada festividade ganha `label` (rótulo em espanhol, `festivityLabelEs`) e a mensagem de falha do status
+sai em espanhol; `labelPt` e a mensagem que vem do próprio servidor do jogo não mudam.
 
 ```ts
 ClockResponse = {
   now: string,
   server: { status: 'online'|'offline'|'manutenção'|'desconhecido', message, checkedAt },
-  festivities: { kind: number, category, name, labelPt, start, end }[],
+  festivities: { kind: number, category, name, labelPt, label? /* só com lang=es */, start, end }[],
   gold: { price: number|null, at: string|null, p30: number|null,
           trend: 'subindo'|'caindo'|'estável'|'sem dado' },
   premiumSilver: number|null, // Premium de 30 dias (3750 gold) em prata pelo ouro atual
@@ -108,7 +125,11 @@ ClockResponse = {
 PlayerSearchResponse = { players: { id, name, guild, alliance, killFame, deathFame }[] }
 ```
 
-### `GET /api/player/:id`
+### `GET /api/player/:id?lang=pt|es`
+
+`lang=es`: `danger.reasons` em espanhol ("fama por asesinatos alta (12 M)", "mata solo con IP alto…"); o resto,
+inclusive `danger.label` (código) e `weapons[].labelPt`, igual. Mesmo cache da gameinfo: o espanhol depois do
+português não chama a gameinfo de novo. Erros (400/404/502/504) também em espanhol.
 
 ```ts
 PlayerDossier = {
@@ -127,7 +148,9 @@ KillEvent = { id: number, time, killer: EventSide, victim: EventSide,
 EventSide = { id, name, guild, alliance, ip, gear: { slot, id, quality }[] }
 ```
 
-### `GET /api/player/:id/autopsy`
+### `GET /api/player/:id/autopsy?lang=pt|es`
+
+`lang=es`: `lessons` e `killerDossier.danger.reasons` em espanhol (mesmas regras, mesma ordem e mesmo corte em 5).
 
 ```ts
 AutopsyResponse = {
@@ -201,7 +224,9 @@ Comandos: `preco`, `relogio`, `dossie`, `morte`, `alerta`, `perdas`, `guilda`, `
 
 Tipos em `shared/types.ts` (seção "Fase 2"). Cliente do front em `src/lib/api.ts`.
 
-### `GET /api/losses?days=1..7&limit=1..50`
+### `GET /api/losses?days=1..7&limit=1..50&lang=pt|es`
+
+`lang=es`: `name` vem das fatias `names-es/` (nome do cliente em espanhol); KillLog e preço saem do mesmo cache.
 
 Itens mais perdidos no PvP do Americas, do KillLog próprio (amostra coletada desde 30/10/2026). `days` (padrão 1 =
 hoje UTC) e `limit` (padrão 50) fora da faixa ou tortos caem no padrão/limite. Preço atual: menor venda entre as
@@ -210,7 +235,7 @@ cidades reais e Caerleon, qualidade 1, um lote só ao AODP; AODP fora → lista 
 
 ```ts
 LossesResponse = { days, since: string|null /* AAAA-MM-DD do 1º dia coletado */, sampleKills, items: LossItem[], fetchedAt }
-LossItem = { id, name /* rótulo PT-BR; o próprio id quando não acha o nome */, count,
+LossItem = { id, name /* rótulo PT-BR (ES com lang=es); o próprio id quando não acha o nome */, count,
              price: number|null, value: number|null /* count × price */, ageMin: number|null }
 ```
 
@@ -250,10 +275,13 @@ lista vazia ou grande demais, id mal formado ou inexistente → 400; outro méto
 RiskQuote = { items: { id, quality, price: number|null, city: City|null, ageMin: number|null }[],
               total, missing /* peças sem preço */, zones: RiskZone[], fetchedAt }
 RiskZone = { zone: 'azul'|'amarela'|'vermelha'|'preta'|'avalon'|'brumas', labelPt,
-             lose: 'nada'|'durabilidade'|'tudo', amount /* prata em risco; 0 quando só perde durabilidade */, note }
+             lose: 'nada'|'durabilidade'|'tudo', amount /* prata em risco; 0 quando só perde durabilidade */, note,
+             label? /* só com lang=es: rótulo em espanhol */ }
 ```
 
 Regras das zonas em `shared/zones.ts` (fontes secundárias datadas no comentário; a tela pede para conferir no jogo).
+`POST /api/risk?lang=es`: `note` e `label` em espanhol (`ZONE_TEXT_ES`, fonte única; a cópia do front em
+`src/lib/novato/arriscar.ts` é conferida em `tests/api-i18n.test.ts`) e erros 400 em espanhol.
 
 ### `GET /api/gold?days=7|30|90`
 
@@ -312,7 +340,8 @@ ignorado).
 - `OPTIONS /mcp` → 204 com CORS `*`. `GET` sem `text/html` no `Accept` (cliente MCP tentando SSE) e `DELETE` → 405
   com `Allow: POST, OPTIONS`. `GET /mcp` de navegador é a página que explica como ligar.
 - Erros: -32700 JSON inválido; -32600 mensagem malformada/lote vazio; -32601 método desconhecido; -32602 ferramenta
-  inexistente ou `params` torto. Argumento inválido ou fonte fora → `result.isError: true` com texto em PT-BR.
+  inexistente ou `params` torto. Argumento inválido ou fonte fora → `result.isError: true` com texto em PT-BR (em
+  espanhol com `lingua: "es"`; `lingua` fora de pt/es vira `pt`, sem erro).
 - `MCP-Protocol-Version` desconhecido → 400; corpo > 64 KB → 413; `Cache-Control: no-store`.
 - Limites: até 10 mensagens por lote e 2 `tools/call` por requisição (50 subrequests do plano grátis); 60
   `tools/call` por minuto por IP (contado na memória do isolate pelo hash do IP; aproximado). Passou do limite →
@@ -321,6 +350,18 @@ ignorado).
 Ferramentas (`worker/mcp/catalog.ts`): `buscar_item {consulta}`, `preco_item {item, qualidade?}`, `relogio {}`,
 `dossie_jogador {nome}`, `perdas_pvp {dias?}`, `o_que_fazer {prata, minutos?, premium?}` (Fase 3). Cada resposta
 traz resumo em texto PT-BR e `structuredContent`.
+
+Língua (servidor 0.3.0): toda ferramenta aceita `lingua?: 'pt' | 'es'` (padrão `pt`; aceita também `pt-BR`, `es-419`,
+`es-ES`). Em `es`: texto e erros em espanhol, nomes de item das fatias ES (busca e preço), motivos do perigo, nomes
+nas perdas e passos do "o que fazer" pedidos em espanhol à API, links em `/es/...` e `qualidadeNome` em espanhol; as
+chaves do `structuredContent` e os códigos (`confianca`, `veredito`, `perigo.label`) não mudam. Em `pt`, resposta e
+chamadas internas idênticas às de antes. Valor fora de pt/es (ex.: `"en"`, número) vale `pt`, sem erro, como quando
+o argumento era ignorado.
+
+Mudança visível ao cliente em português (0.2.0 → 0.3.0), fora do `tools/call`: o `tools/list` manda a descrição
+"português / español" (`description` + `descriptionEs` do catálogo), cada propriedade ganhou " / texto ES" e entrou a
+propriedade `lingua`; o `instructions` do `initialize` ganhou a frase sobre `lingua: "es"` (em PT e ES). A página
+`/mcp` em português segue mostrando só `description`.
 
 ## Fase 3
 
@@ -392,7 +433,9 @@ ForecastResponse = { id, quality, city, history: { date, avg, count }[],
 
 Telas: `/previsao` (`?item=&city=&q=`, ou `/previsao/:id`) e o bloco "Previsão dos próximos dias" em `/item/:id`.
 Em `/es/...` as telas pedem `lang=es` (`api.hoje(..., lang)` e `api.forecast(..., lang)` em `src/lib/api.ts`; em pt a
-URL não leva `lang`, a mesma de antes).
+URL não leva `lang`, a mesma de antes). Desde a rodada 3, `api.item`, `api.clock`, `api.searchPlayers`, `api.dossier`,
+`api.autopsy`, `api.losses`, `api.guild`, `api.searchGuilds` e `api.risk` também levam `lang` (último argumento,
+padrão a língua atual do site).
 
 ### Páginas e arquivos públicos (sem JSON)
 

@@ -323,6 +323,18 @@ describe('/perdas', () => {
     expect(e.description).toContain('2. **Espada Larga** · perdido 3× · sem preço');
     expect(e.description).toContain('Amostra de 54.321 mortes');
   });
+  it('em espanhol pede à API os nomes em espanhol (fatias names-es) e usa o nome que veio', async () => {
+    const base = losses();
+    m.getLosses.mockResolvedValue({ ...base, items: base.items.map((it, k) => (k === 0 ? { ...it, name: 'Pastel de carne (T7)' } : it)) });
+    const r = await dispatch(
+      { id: '1', application_id: 'app1', type: 2, token: 'tok', locale: 'es-419', data: { name: 'perdas', options: [{ name: 'dias', type: 4, value: 7 }] }, user: { id: USER } },
+      env(),
+      makeCtx().ctx,
+    );
+    expect(m.getLosses.mock.calls[0].slice(2)).toEqual([7, 10, 'es']);
+    const e = (r.data as { embeds: { description: string }[] }).embeds[0];
+    expect(e.description).toContain('1. **Pastel de carne (T7)**');
+  });
 });
 
 // ---------- botão "Pedir regear" ----------

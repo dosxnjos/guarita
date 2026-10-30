@@ -3,13 +3,14 @@
 // Fora do Tauri (vite:dev no navegador), o rótulo vem de ?w=<rótulo> para desenvolver a tela.
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { currentLocale, type Locale } from '../../../src/lib/i18n/core';
 
 export const PAINEL = 'painel' as const;
 export const WIDGET_LABELS = ['preco', 'dossie', 'relogio', 'alertas', 'despertador', 'lente', 'sessao', 'loot'] as const;
 export type WidgetLabel = (typeof WIDGET_LABELS)[number];
 export type WindowLabel = typeof PAINEL | WidgetLabel;
 
-/** Mesmos títulos do WIDGETS em lib.rs (o menu da bandeja usa os de lá). */
+/** Mesmos títulos do WIDGETS em lib.rs (o menu da bandeja usa os de lá). Português. */
 export const WIDGET_TITLES: Record<WidgetLabel, string> = {
   preco: 'Preço rápido',
   dossie: 'Dossiê',
@@ -20,6 +21,23 @@ export const WIDGET_TITLES: Record<WidgetLabel, string> = {
   sessao: 'Sessão',
   loot: 'Loot',
 };
+
+/** Os mesmos em espanhol (title_es do WIDGETS em lib.rs). Loot = "Botín" (termo do cliente, docs/glossario-es.md). */
+export const WIDGET_TITLES_ES: Record<WidgetLabel, string> = {
+  preco: 'Precio rápido',
+  dossie: 'Dosier',
+  relogio: 'Reloj',
+  alertas: 'Alertas',
+  despertador: 'Despertador',
+  lente: 'Lente de mercado',
+  sessao: 'Sesión',
+  loot: 'Botín',
+};
+
+/** Título do widget na língua pedida (padrão: a atual). */
+export function tituloWidget(l: WidgetLabel, loc: Locale = currentLocale()): string {
+  return (loc === 'es' ? WIDGET_TITLES_ES : WIDGET_TITLES)[l];
+}
 
 export interface WidgetInfo {
   label: WidgetLabel;
@@ -60,7 +78,7 @@ export const toggleWidget = (label: WidgetLabel) => invoke<boolean>('widget_togg
 export const listWidgets = () => invoke<WidgetInfo[]>('widget_list');
 /**
  * "Sempre por cima". Ligar exige `config.avisoSbiAceitoEm` preenchido: o Rust confere e recusa com mensagem
- * em PT-BR se o aviso não foi aceito. Só a tela (AvisoSbi) grava o aceite.
+ * na língua do app se o aviso não foi aceito. Só a tela (AvisoSbi) grava o aceite.
  */
 export const setOnTop = (label: WindowLabel, on: boolean) => invoke<void>('widget_set_on_top', { label, on });
 export const hideAllWidgets = () => invoke<void>('widgets_hide_all');
@@ -69,6 +87,11 @@ export const showAllWidgets = () => invoke<void>('widgets_show_all');
 export const setCloseToTray = (on: boolean) => invoke<void>('set_close_to_tray', { on });
 /** Marca/desmarca "Silenciar voz" na bandeja e avisa todas as janelas (EV_VOZ_SILENCIADA). */
 export const traySetMuted = (on: boolean) => invoke<void>('tray_set_muted', { on });
+/**
+ * Língua efetiva do app para o lado Rust: menu da bandeja, títulos das janelas e mensagens de erro dos comandos.
+ * Só o painel chama (main.ts), ao abrir e a cada troca.
+ */
+export const definirLingua = (lingua: Locale) => invoke<void>('definir_lingua', { lingua });
 
 // ---------- a própria janela ----------
 

@@ -1,7 +1,8 @@
 <script lang="ts">
   // Um bundle, várias janelas: o rótulo da janela escolhe a tela (lib/windows.ts → currentLabel).
   import type { Component } from 'svelte';
-  import { PAINEL, WIDGET_TITLES, type WidgetLabel, type WindowLabel } from './lib/windows';
+  import { PAINEL, tituloWidget, type WidgetLabel, type WindowLabel } from './lib/windows';
+  import { getLocale } from './lib/i18n.svelte';
   import WidgetChrome from './lib/ui/WidgetChrome.svelte';
   import Painel from './painel/Painel.svelte';
   import Preco from './widgets/Preco.svelte';
@@ -22,11 +23,14 @@
   const WIDGETS: Record<WidgetLabel, Component> = { preco: Preco, dossie: Dossie, relogio: Relogio, alertas: Alertas, despertador: Despertador, lente: Lente, sessao: Sessao, loot: Loot };
 </script>
 
-{#if label === PAINEL}
-  <Painel />
-{:else}
-  {@const W = WIDGETS[label]}
-  <WidgetChrome {label} titulo={WIDGET_TITLES[label]}>
-    <W />
-  </WidgetChrome>
-{/if}
+<!-- Trocar de língua remonta a tela: texto calculado fora do template (format.ts, rótulos) se refaz na língua nova. -->
+{#key getLocale()}
+  {#if label === PAINEL}
+    <Painel />
+  {:else}
+    {@const W = WIDGETS[label]}
+    <WidgetChrome {label} titulo={tituloWidget(label, getLocale())}>
+      <W />
+    </WidgetChrome>
+  {/if}
+{/key}

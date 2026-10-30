@@ -12,6 +12,8 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 /** Só o que a extensão usa em tempo de execução (lista fechada: script de build e testes ficam fora). */
 export const FILES = [
   'manifest.json',
+  '_locales/pt_BR/messages.json',
+  '_locales/es/messages.json',
   'background.js',
   'content.js',
   'lib/core.js',

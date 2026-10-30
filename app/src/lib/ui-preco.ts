@@ -1,5 +1,6 @@
 // Regras puras do widget "Preço rápido" e dos links "abrir no site". Testado em tests/ui.test.ts.
 import type { CityQuote, Flip, ItemResponse, Quality } from '../../../shared/types';
+import { currentLocale, localizePath, type Locale } from '../../../src/lib/i18n/core';
 import { API_BASE } from './api';
 import { cheapestReliable, flipIsStale, flipView, sortCities, sortFlips } from './format';
 
@@ -38,12 +39,14 @@ export function resumoPreco(item: ItemResponse, premium: boolean): ResumoPreco {
 
 export const SITE = API_BASE;
 
-export function urlItemNoSite(id: string, q: Quality | number = 1): string {
-  return `${SITE}/item/${encodeURIComponent(id)}${q > 1 ? `?q=${q}` : ''}`;
+/** Página do item no site, na língua pedida (padrão: a do app; espanhol em /es/item/...). */
+export function urlItemNoSite(id: string, q: Quality | number = 1, loc: Locale = currentLocale()): string {
+  return `${SITE}${localizePath(`/item/${encodeURIComponent(id)}`, loc)}${q > 1 ? `?q=${q}` : ''}`;
 }
 
-export function urlJogadorNoSite(id: string): string {
-  return `${SITE}/jogador/${encodeURIComponent(id)}`;
+/** Dossiê do jogador no site, na língua pedida (espanhol em /es/jogador/...). */
+export function urlJogadorNoSite(id: string, loc: Locale = currentLocale()): string {
+  return `${SITE}${localizePath(`/jogador/${encodeURIComponent(id)}`, loc)}`;
 }
 
 export interface Recente {

@@ -1,5 +1,6 @@
-// Formulário das regras de preço locais (widget "Alertas"): validação em PT-BR e montagem da RegraLocal.
+// Formulário das regras de preço locais (widget "Alertas"): validação (PT-BR ou espanhol) e montagem da RegraLocal.
 // A regra é checada pelo motor (engine/alerts.ts) só com o app aberto. Puro, testado em tests/ui.test.ts.
+import { currentLocale, type Locale } from '../../../src/lib/i18n/core';
 import { BM_CITY, MEDIAN_PCT_MAX, MEDIAN_PCT_MIN, sideAllowsCities } from '../../../shared/alertLimits';
 import { ALL_CITIES, ROYAL_CITIES } from '../../../shared/market';
 import type { AlertCondition, City, Quality } from '../../../shared/types';
@@ -31,27 +32,34 @@ export function formRegraPadrao(): FormRegra {
   return { itemId: '', itemName: '', quality: 1, cities: [...CIDADES_PADRAO], side: 'sell', kind: 'below', valor: '', cooldownMin: 60, voz: true };
 }
 
-/** Erros por campo; objeto vazio = pode salvar. */
-export function validarFormRegra(f: FormRegra, totalAtual: number): Record<string, string> {
+/** Erros por campo; objeto vazio = pode salvar. Mensagens na língua pedida (padrão: a do app). */
+export function validarFormRegra(f: FormRegra, totalAtual: number, loc: Locale = currentLocale()): Record<string, string> {
+  const t = (pt: string, es: string) => (loc === 'es' ? es : pt);
   const e: Record<string, string> = {};
-  if (totalAtual >= MAX_REGRAS_LOCAIS) e.form = `O app já tem ${MAX_REGRAS_LOCAIS} regras, o limite. Apague uma para criar outra.`;
-  if (!f.itemId) e.item = 'Escolha um item na lista.';
+  if (totalAtual >= MAX_REGRAS_LOCAIS) {
+    e.form = t(
+      `O app já tem ${MAX_REGRAS_LOCAIS} regras, o limite. Apague uma para criar outra.`,
+      `La app ya tiene ${MAX_REGRAS_LOCAIS} reglas, el límite. Borra una para crear otra.`,
+    );
+  }
+  if (!f.itemId) e.item = t('Escolha um item na lista.', 'Elige un objeto de la lista.');
+  const soCompra = t('O Black Market só compra: para ele, escolha "Vender caro".', 'El Mercado Negro solo compra: para él, elige "Vender caro".');
   const cidades = citiesForSide(f.side, f.cities);
   if (!cidades.length) e.cities = f.cities.includes(BM_CITY) && f.side === 'sell'
-    ? 'O Black Market só compra: para ele, escolha "Vender caro".'
-    : 'Marque pelo menos uma cidade.';
-  else if (!sideAllowsCities(f.side, cidades)) e.cities = 'O Black Market só compra: para ele, escolha "Vender caro".';
-  const n = parseNumberBR(f.valor);
+    ? soCompra
+    : t('Marque pelo menos uma cidade.', 'Marca al menos una ciudad.');
+  else if (!sideAllowsCities(f.side, cidades)) e.cities = soCompra;
+  const n = parseNumberBR(f.valor, loc);
   if (f.kind === 'belowMedianPct') {
     if (n === null || Math.round(n) < MEDIAN_PCT_MIN || Math.round(n) > MEDIAN_PCT_MAX) {
-      e.valor = `Informe uma porcentagem entre ${MEDIAN_PCT_MIN} e ${MEDIAN_PCT_MAX}.`;
+      e.valor = t(`Informe uma porcentagem entre ${MEDIAN_PCT_MIN} e ${MEDIAN_PCT_MAX}.`, `Indica un porcentaje entre ${MEDIAN_PCT_MIN} y ${MEDIAN_PCT_MAX}.`);
     }
   } else if (n === null || n <= 0 || !Number.isInteger(n)) {
-    e.valor = 'Informe um preço inteiro em prata, maior que zero.';
+    e.valor = t('Informe um preço inteiro em prata, maior que zero.', 'Indica un precio entero en plata, mayor que cero.');
   } else if (n > PRECO_MAX) {
-    e.valor = 'Preço alto demais para um alerta.';
+    e.valor = t('Preço alto demais para um alerta.', 'Precio demasiado alto para una alerta.');
   }
-  if (!(ESPERAS as readonly number[]).includes(f.cooldownMin)) e.cooldown = 'Escolha um intervalo da lista.';
+  if (!(ESPERAS as readonly number[]).includes(f.cooldownMin)) e.cooldown = t('Escolha um intervalo da lista.', 'Elige un intervalo de la lista.');
   return e;
 }
 

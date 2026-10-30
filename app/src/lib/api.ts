@@ -6,7 +6,11 @@
 // com escopo limitado a https://guarita.pages.dev/* nas capabilities. No navegador (vite:dev) usa o fetch comum.
 //
 // Cache em memória por URL com prazo por rota (gameinfo é lenta: dossiê guarda 10 min), uma só requisição em voo
-// por URL e timeout com AbortController. Erro sempre como ApiError com mensagem em PT-BR.
+// por URL e timeout com AbortController. Erro sempre como ApiError com mensagem na língua do app.
+//
+// Espanhol: as rotas /api/* ganham `lang=es` (motivos do selo, do perigo, festividades e erros vêm em espanhol do
+// servidor; em português a URL não muda) e o índice de itens é o /data/items-index-es.json (mesmo formato, nome ES
+// no lugar do PT: busca, nome do loot e do alerta saem em espanhol sem mudar shared/items.ts).
 import type {
   City,
   ClockResponse,
@@ -17,10 +21,19 @@ import type {
   Quality,
 } from '../../../shared/types';
 import type { ItemsIndex } from '../../../shared/items';
+import { currentLocale, type Locale } from '../../../src/lib/i18n/core';
 import { isTauri } from './windows';
 
 export const API_BASE = 'https://guarita.pages.dev';
 export const ITEMS_INDEX_URL = `${API_BASE}/data/items-index.json`;
+export const ITEMS_INDEX_URL_ES = `${API_BASE}/data/items-index-es.json`;
+
+/** Índice de itens da língua (padrão: a do app). */
+export function itemsIndexUrl(loc: Locale = currentLocale()): string {
+  return loc === 'es' ? ITEMS_INDEX_URL_ES : ITEMS_INDEX_URL;
+}
+
+const L = (loc: Locale, pt: string, es: string) => (loc === 'es' ? es : pt);
 
 /** Mesma forma do fetch; o tauri-plugin-http e o fetch do navegador servem. */
 export type Fetcher = (url: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<Response>;
@@ -59,6 +72,8 @@ export interface ApiOptions {
   fetcher?: Fetcher;
   timeoutMs?: number;
   now?: () => number;
+  /** Língua das respostas e das mensagens de erro (padrão: a do app no momento da chamada). */
+  lingua?: () => Locale;
 }
 
 /** Resposta com a hora em que foi buscada (ms) e se veio do cache em memória. */
@@ -80,8 +95,8 @@ export interface GuaritaApi {
   clock(): Promise<Fetched<ClockResponse>>;
   searchPlayers(q: string): Promise<Fetched<PlayerSearchResponse>>;
   dossier(id: string): Promise<Fetched<PlayerDossier>>;
-  /** Índice de itens (~1 MB). Cópia local por 24 h; módulo do preço rápido decide persistir em disco. */
-  itemsIndex(): Promise<Fetched<ItemsIndex>>;
+  /** Índice de itens (~1 MB) da língua (padrão: a do app). Cópia local por 24 h (ui-itens.ts). */
+  itemsIndex(loc?: Locale): Promise<Fetched<ItemsIndex>>;
   /** Esquece o cache (todo, ou só as URLs que começam com o prefixo). */
   clearCache(prefix?: string): void;
 }
@@ -124,17 +139,24 @@ function lerCorpo(r: Response, signal: AbortSignal): Promise<unknown> {
 export function createApi(opts: ApiOptions = {}): GuaritaApi {
   const base = (opts.base ?? API_BASE).replace(/\/$/, '');
   const now = opts.now ?? (() => Date.now());
+  const lingua = opts.lingua ?? (() => currentLocale());
   const cache = new Map<string, { at: number; data: unknown }>();
   const inflight = new Map<string, Promise<Fetched<unknown>>>();
 
   async function raw<T>(url: string, timeoutMs: number): Promise<T> {
     const fetcher = opts.fetcher ?? (await defaultFetcher());
+    const loc = lingua();
     const ctrl = new AbortController();
     // O prazo vale para a resposta INTEIRA: o fetcher resolve com os cabeçalhos e o corpo chega depois, por stream
     // (plugin-http), sem prazo próprio. Por isso o timer só é limpo depois de ler o corpo.
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const s = Math.round(timeoutMs / 1000);
     const demorou = () =>
-      new ApiError(`A Guarita demorou mais de ${Math.round(timeoutMs / 1000)} s para responder. Tente de novo.`, 0, 'timeout');
+      new ApiError(
+        L(loc, `A Guarita demorou mais de ${s} s para responder. Tente de novo.`, `La Guarita tardó más de ${s} s en responder. Inténtalo de nuevo.`),
+        0,
+        'timeout',
+      );
     let r: Response;
     let body: unknown;
     try {
@@ -142,25 +164,36 @@ export function createApi(opts: ApiOptions = {}): GuaritaApi {
         r = await fetcher(url, { signal: ctrl.signal, headers: { accept: 'application/json' } });
       } catch {
         if (ctrl.signal.aborted) throw demorou();
-        throw new ApiError('Sem conexão com a Guarita. Verifique a internet e tente de novo.', 0, 'rede');
+        throw new ApiError(
+          L(loc, 'Sem conexão com a Guarita. Verifique a internet e tente de novo.', 'Sin conexión con la Guarita. Revisa tu internet e inténtalo de nuevo.'),
+          0,
+          'rede',
+        );
       }
       body = await lerCorpo(r, ctrl.signal);
     } catch (err) {
       if (err instanceof ApiError) throw err;
       if (ctrl.signal.aborted) throw demorou();
-      throw new ApiError(`Resposta inválida da Guarita (erro ${r!.status}).`, r!.status, 'resposta');
+      throw new ApiError(
+        L(loc, `Resposta inválida da Guarita (erro ${r!.status}).`, `Respuesta no válida de la Guarita (error ${r!.status}).`),
+        r!.status,
+        'resposta',
+      );
     } finally {
       clearTimeout(timer);
     }
     if (!r.ok) {
-      const msg = (body as { error?: string } | null)?.error ?? `Erro ${r.status} na Guarita.`;
+      const msg = (body as { error?: string } | null)?.error ?? L(loc, `Erro ${r.status} na Guarita.`, `Error ${r.status} en la Guarita.`);
       throw new ApiError(msg, r.status, 'http');
     }
     return body as T;
   }
 
   function get<T>(path: string, ttl: number, timeoutMs = opts.timeoutMs ?? TIMEOUT_MS): Promise<Fetched<T>> {
-    const url = path.startsWith('http') ? path : `${base}${path}`;
+    let url = path.startsWith('http') ? path : `${base}${path}`;
+    // Espanhol nas rotas da API: "lang=es" no fim (em português a URL fica igual; o cache é por URL, então cada língua
+    // tem o seu).
+    if (path.startsWith('/api/') && lingua() === 'es') url += `${url.includes('?') ? '&' : '?'}lang=es`;
     const hit = cache.get(url);
     if (hit && now() - hit.at < ttl) return Promise.resolve({ data: hit.data as T, at: hit.at, fromCache: true });
     const running = inflight.get(url);
@@ -181,9 +214,12 @@ export function createApi(opts: ApiOptions = {}): GuaritaApi {
     item: (id, quality = 1) => get<ItemResponse>(`/api/item/${enc(id.toUpperCase())}?q=${quality}`, TTL.item),
     prices: ({ ids, cities, qualities }) => {
       const list = [...new Set(ids.map((i) => i.toUpperCase()))];
-      if (!list.length) return Promise.reject(new ApiError('Informe ao menos um item.', 400, 'http'));
+      const loc = lingua();
+      if (!list.length) return Promise.reject(new ApiError(L(loc, 'Informe ao menos um item.', 'Indica al menos un objeto.'), 400, 'http'));
       if (list.length > MAX_PRICE_IDS) {
-        return Promise.reject(new ApiError(`No máximo ${MAX_PRICE_IDS} itens por consulta.`, 400, 'http'));
+        return Promise.reject(
+          new ApiError(L(loc, `No máximo ${MAX_PRICE_IDS} itens por consulta.`, `Como máximo ${MAX_PRICE_IDS} objetos por consulta.`), 400, 'http'),
+        );
       }
       let qs = `ids=${enc(list.join(','))}`;
       if (cities?.length) qs += `&cities=${enc(cities.join(','))}`;
@@ -193,7 +229,7 @@ export function createApi(opts: ApiOptions = {}): GuaritaApi {
     clock: () => get<ClockResponse>('/api/clock', TTL.clock),
     searchPlayers: (q) => get<PlayerSearchResponse>(`/api/player/search?q=${enc(q.trim())}`, TTL.playerSearch, TIMEOUT_GAMEINFO_MS),
     dossier: (id) => get<PlayerDossier>(`/api/player/${enc(id)}`, TTL.dossier, TIMEOUT_GAMEINFO_MS),
-    itemsIndex: () => get<ItemsIndex>(ITEMS_INDEX_URL, TTL.itemsIndex, 30_000),
+    itemsIndex: (loc = lingua()) => get<ItemsIndex>(itemsIndexUrl(loc), TTL.itemsIndex, 30_000),
     clearCache: (prefix) => {
       for (const k of [...cache.keys()]) if (!prefix || k.startsWith(prefix) || k.startsWith(`${base}${prefix}`)) cache.delete(k);
     },

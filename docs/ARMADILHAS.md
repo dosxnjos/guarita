@@ -271,8 +271,9 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
 - **"12,000" em espanhol virava 12** → o es-419 mostra milhar com vírgula. `parseNumberBR` (de `alertForm.ts` e de
   `timers/presets.ts`) recebe a língua: em `es`, grupos de 3 depois da vírgula são milhar; em `pt` nada muda.
 - **Mudou o texto PT de `shared/forecast.ts`, `shared/zones.ts`, `shared/confidence.ts` ou `worker/mcp/catalog.ts`** →
-  a cópia em espanhol mora em outro arquivo (`forecastMethodEs`, `ZONE_TEXT_ES`, `MOTIVO_ES`, `TOOL_ES`) e não
-  acompanha sozinha; só as duas primeiras têm teste.
+  a cópia em espanhol mora ao lado ou em outro arquivo (`forecastMethodEs`, `ZONE_TEXT_ES` em `shared/zones.ts` com
+  cópia em `src/lib/novato/arriscar.ts`, `MOTIVO_ES` em `worker/api/hoje.ts`, `descriptionEs` no catálogo, `TOOL_ES` em
+  `McpInfo.svelte`) e não acompanha sozinha; só as duas primeiras têm teste (o das zonas confere também a cópia).
 - **Asset sem cache longo apesar do `_headers`** → no modo avançado o `_headers` não vale para o que sai do
   `_worker.js`; o cabeçalho de `/assets/*` sai de `worker/lib/cacheHeaders.ts`.
 - **Tela não abre logo depois de um deploy** → a aba antiga pede o arquivo da tela com o hash velho; `lazyView.ts`
@@ -285,8 +286,14 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
   salva. O aviso nunca aparece no `/live` (`App.svelte`) e `html.live-obs .lang-hint` fica escondido (`Live.svelte`).
 - **Link do seletor de língua sem a query atual** → `replaceState` das telas (qualidade, filtros) não dispara
   `popstate`; o `href` do seletor é recalculado também ao apontar, focar ou apertar o link (`refreshLangHref`).
-- **Festividade ou arma em português no espanhol** → a API manda só `labelPt`. Em espanhol: `festivityLabel(f, loc)` /
-  `festivityLabelEs` (`shared/festivities.ts`) e `weaponLabelEsFromPt` (`shared/weapons.ts`), no site e no bot.
+- **Festividade ou arma em português no espanhol** → a arma vem só como `labelPt`; a festividade ganha `label` só com
+  `lang=es`. Em espanhol: `festivityLabel(f, loc)` / `festivityLabelEs` (`shared/festivities.ts`) e
+  `weaponLabelEsFromPt` (`shared/weapons.ts`), no site e no bot.
+- **Trocou PT↔ES e os motivos do perigo/lições ficaram na língua anterior** → o cache de 5 min de dossiê, autópsia e
+  guilda (`src/lib/player/cache.ts`) reaproveitava a promessa da outra língua. A chave sai de `cacheKey(key, loc)`
+  e a chamada usa a mesma `loc` (`api.dossier(pid, loc)`).
+- **Nomes PT e ES misturados em `/api/losses`** → a memória das fatias de nome no isolate (`loadShardText`,
+  `worker/api/insightsA.ts`) precisa da língua na chave; sem ela, um isolate quente serve a fatia da outra língua.
 - **Âmbar claro reprovado no contraste** → `--accent` claro precisa de 4,5:1 sobre `--bg`, `--warn-bg` e
   `--accent-soft`; `#9a6416` dava 4,46 (hoje `#8a5810`).
 - **LCP de `/item` "piorou" depois do `min-height` do `#conteudo`** → não é regressão: antes o Lighthouse media o
@@ -304,6 +311,8 @@ Detalhe em [`extension/README.md`](../extension/README.md) § Armadilhas.
 - **Firefox: opção "ligada" sem permissão, cartão não aparece** → `permissions.request` só vale na parte síncrona do
   clique; um `await` antes (até `contains`) perde o gesto e o pedido lança erro. O `request` vem primeiro e erro =
   `false` (`options.js`, teste em `tests/extension.test.ts`).
+- **Opção "Español" ignorada** → `chrome.i18n.getMessage` só segue a língua do navegador. O texto da extensão vem da
+  tabela `STR` de `lib/core.js` (`t(loc, chave)`); `_locales/` serve só ao manifesto (nome, descrição, dica do botão).
 
 ## Testes
 

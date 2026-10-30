@@ -445,10 +445,10 @@ function guildLine(guild: string, alliance: string, loc: Locale): string {
   );
 }
 
-/** Rótulo de perigo (a API manda em português; os motivos seguem em português até a API mandar códigos). */
+/** Rótulo de perigo (código em português na API); os motivos já chegam na língua pedida (getDossier com 'es'). */
 function dangerText(label: string, loc: Locale): string {
   if (loc !== 'es') return label;
-  return ({ tranquilo: 'tranquilo', atenção: 'precaución', perigoso: 'peligroso', 'sem dado': 'sin datos' } as Record<string, string>)[label] ?? label;
+  return ({ tranquilo: 'tranquilo', atenção: 'atención', perigoso: 'peligroso', 'sem dado': 'sin datos' } as Record<string, string>)[label] ?? label;
 }
 
 /** Vários jogadores com nome parecido: mostra os 5 primeiros com link. */
@@ -484,7 +484,7 @@ export function renderPlayerList(players: PlayerHit[], query: string, loc: Local
 
 function eventLine(e: KillEvent, asKiller: boolean, now: number, loc: Locale): string {
   const other = asKiller ? e.victim : e.killer;
-  const verb = asKiller ? tx(loc, 'matou', 'mató a') : tx(loc, 'morto por', 'muerto por');
+  const verb = asKiller ? tx(loc, 'matou', 'mató a') : tx(loc, 'morto por', 'murió ante');
   const guild = other.guild ? ` [${esc(other.guild)}]` : '';
   const group = e.participants > 1 ? tx(loc, ` · grupo de ${e.participants}`, ` · grupo de ${e.participants}`) : tx(loc, ' · solo', ' · en solitario');
   return tx(
@@ -516,7 +516,7 @@ export function renderDossier(d: PlayerDossier, now = Date.now(), loc: Locale = 
   });
   const style: string[] = [];
   if (d.soloRate != null) style.push(tx(loc, `Solo em ${fmtPct(d.soloRate)} das kills recentes`, `En solitario en el ${fmtPct(d.soloRate, loc)} de los asesinatos recientes`));
-  if (d.avgGroup != null) style.push(tx(loc, `Grupo médio: ${fmtDec(d.avgGroup)}`, `Grupo promedio: ${fmtDec(d.avgGroup, loc)}`));
+  if (d.avgGroup != null) style.push(tx(loc, `Grupo médio: ${fmtDec(d.avgGroup)}`, `Grupo medio: ${fmtDec(d.avgGroup, loc)}`));
   if (d.avgIp != null) style.push(tx(loc, `IP médio: ${fmtInt(d.avgIp)}`, `IP medio: ${fmtInt(d.avgIp, loc)}`));
   fields.push({ name: tx(loc, 'Estilo', 'Estilo'), value: style.length ? style.join('\n') : tx(loc, 'Sem lutas recentes.', 'Sin combates recientes.'), inline: true });
   if (d.weapons.length) {
@@ -585,7 +585,7 @@ export function renderAutopsy(player: { id: string; name: string }, a: AutopsyRe
     const kd = a.killerDossier;
     const w = kd.weapons[0];
     fields.push({
-      name: tx(loc, 'Quem matou', 'Quién lo mató'),
+      name: tx(loc, 'Quem matou', 'Asesino'),
       value: [
         kd.danger.label !== 'sem dado'
           ? tx(loc, `Perigo: **${kd.danger.label}** (${kd.danger.score}/100)`, `Peligro: **${dangerText(kd.danger.label, loc)}** (${kd.danger.score}/100)`)
@@ -777,7 +777,7 @@ export function renderLosses(r: LossesResponse, nameOf: NameOf, loc: Locale = 'p
   const url = siteUrl(loc, `/perdas${r.days > 1 ? `?dias=${r.days}` : ''}`);
   const janela = r.days <= 1 ? tx(loc, 'hoje', 'hoy') : tx(loc, `últimos ${r.days} dias`, `últimos ${r.days} días`);
   const lines = r.items.slice(0, 10).map((it, k) => {
-    // Em espanhol o nome vem das fatias names-es (nameOf); o `name` da API é o português.
+    // Em espanhol o `name` da API já vem das fatias names-es (getLosses com 'es'); nameOf cobre o item sem nome.
     const own = it.name && it.name !== it.id ? it.name : null;
     const name = loc === 'es' ? (nameOf(it.id) !== it.id ? nameOf(it.id) : own ?? it.id) : own ?? nameOf(it.id);
     const price = it.price != null ? tx(loc, `${fmtInt(it.price)} cada`, `${fmtInt(it.price, loc)} c/u`) : tx(loc, 'sem preço', 'sin precio');

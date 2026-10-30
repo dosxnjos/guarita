@@ -23,7 +23,9 @@ vi.mock('../worker/api/player', async (orig) => ({
 vi.mock('../worker/api/insights', () => ({ getLosses: m.getLosses }));
 
 import { handleMcp, resetMcpRateLimit, hashIp, takeToken, LATEST_VERSION, MAX_TOOL_CALLS_PER_POST } from '../worker/mcp/server';
-import { callTool, listTools, summarizeItem, ageLabel, fmtDateBr } from '../worker/mcp/tools';
+import { callTool, listTools, summarizeItem, summarizeHoje, ageLabel, fmtDateBr, DANGER_ES, TRILHA_TEXTO_ES } from '../worker/mcp/tools';
+import { trilhaLabel } from '../src/lib/hoje/view';
+import { dangerHeadline } from '../src/lib/player/format';
 import { MCP_TOOLS, MCP_CALLS_PER_MIN } from '../worker/mcp/catalog';
 import { GameinfoError } from '../worker/lib/gameinfo';
 import { AodpError } from '../worker/lib/aodp';
@@ -474,6 +476,171 @@ describe('segurança e limites', () => {
   });
   it('callTool direto: argumentos que não são objeto → isError', async () => {
     expect((await callTool('relogio', 'x', { env, ctx })).isError).toBe(true);
+  });
+});
+
+describe('espanhol (argumento lingua)', () => {
+  const es = (name: string, args: Record<string, unknown> = {}, id: number | string = 1) => call(name, { ...args, lingua: 'es' }, id);
+  const PT_WORDS = /\bprata\b|\bguilda\b|\bDossiê\b|\bvocê\b|\bconfiança\b|Black Market|\bcidade\b/;
+
+  it('tools/list: lingua opcional em todas, enum pt|es, descrição "pt / es" e required de antes', async () => {
+    const tools = (await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).body.result.tools;
+    for (const t of tools) {
+      expect(t.inputSchema.properties.lingua).toMatchObject({ type: 'string', enum: ['pt', 'es'], default: 'pt' });
+      expect(t.inputSchema.required ?? []).not.toContain('lingua');
+      expect(t.description).toContain(' / ');
+      expect(t).not.toHaveProperty('descriptionEs');
+    }
+    // A página /mcp em português continua lendo só a descrição em português do catálogo.
+    for (const d of MCP_TOOLS) expect(d.description).not.toContain(' / ');
+    expect(tools[1].inputSchema.required).toEqual(['item']);
+    const init = (await rpc({ jsonrpc: '2.0', id: 2, method: 'initialize', params: {} })).body.result;
+    expect(init.instructions).toContain('lingua: "es"');
+  });
+
+  it('buscar_item: busca nas fatias ES e responde em espanhol', async () => {
+    m.acSearch.mockResolvedValue([{ id: 'T4_BAG', label: 'Bolsa del iniciado (T4)' }]);
+    const r = (await rpc(es('buscar_item', { consulta: 'bolsa iniciado' }))).body.result;
+    expect(m.acSearch.mock.calls[0].slice(1)).toEqual(['bolsa iniciado', 10, 'es']);
+    expect(r.content[0].text).toContain('Objetos encontrados para “bolsa iniciado” (1)');
+    expect(r.content[0].text).toContain('Usa el id en preco_item');
+    m.acSearch.mockResolvedValue([]);
+    expect((await rpc(es('buscar_item', { consulta: 'xyzabc' }))).body.result.content[0].text).toMatch(/^No encontré ningún objeto/);
+  });
+
+  it('preco_item: nome ES, números es-419, Mercado Negro, link /es; getItem com a assinatura de antes', async () => {
+    m.acLabel.mockImplementation(async (_e: unknown, id: string, loc?: string) =>
+      id.toUpperCase() === 'T4_BAG@1' ? (loc === 'es' ? 'Bolsa del iniciado (T4.1)' : 'Bolsa do Adepto (T4.1)') : null);
+    m.getItem.mockResolvedValue({ ...ITEM, quality: 2 });
+    const r = (await rpc(es('preco_item', { item: 't4_bag@1', qualidade: 2 }))).body.result;
+    expect(m.acLabel).toHaveBeenCalledWith(expect.anything(), 't4_bag@1', 'es');
+    expect(m.getItem.mock.calls[0].slice(1)).toEqual([ctx, 'T4_BAG@1', 2]);
+    const t: string = r.content[0].text;
+    expect(t).toContain('Bolsa del iniciado (T4.1) (T4_BAG@1) · calidad Bueno · servidor Americas');
+    expect(t).toContain('Más barato para comprar: Lymhurst, 4,800 de plata');
+    expect(t).toContain('Mercado Negro (venta inmediata): 6,100 de plata');
+    expect(t).toContain('Veredicto en Lymhurst: barato');
+    expect(t).toContain('Mejor reventa al Mercado Negro: comprar en Lymhurst por 4,800 y vender por 6,100');
+    expect(t).toContain('Martlock: venta 5,200');
+    expect(t).toContain('confianza alta');
+    expect(t).not.toMatch(PT_WORDS);
+    expect(r.structuredContent.qualidadeNome).toBe('Bueno');
+    expect(r.structuredContent.link).toBe('https://guarita.pages.dev/es/item/T4_BAG%401?q=2');
+  });
+
+  it('lingua "pt" explícita sai idêntica a sem lingua', async () => {
+    m.getItem.mockResolvedValue(ITEM);
+    const a = (await rpc(call('preco_item', { item: 'T4_BAG@1', lingua: 'pt' }))).body.result;
+    const b = (await rpc(call('preco_item', { item: 'T4_BAG@1' }))).body.result;
+    expect(a).toEqual(b);
+    expect(m.getItem.mock.calls.every((c: unknown[]) => c.length === 4)).toBe(true);
+  });
+
+  it('relogio: getClock com "es", status, festividade e ouro em espanhol', async () => {
+    m.getClock.mockResolvedValue(CLOCK);
+    const r = (await rpc(es('relogio'))).body.result;
+    expect(m.getClock.mock.calls[0].slice(1)).toEqual([ctx, 'es']);
+    const t: string = r.content[0].text;
+    expect(t).toContain('(hora de Brasilia)');
+    expect(t).toContain('Servidor Americas: en línea');
+    expect(t).toContain('Bonificaciones activas:');
+    expect(t).toContain('Oro: 4,321 de plata por oro, bajando');
+    expect(t).toContain('16,203,750 de plata');
+    expect(t).not.toMatch(PT_WORDS);
+  });
+
+  it('dossie_jogador: getDossier com "es", gremio, arma ES, peligro e link /es', async () => {
+    m.searchPlayers.mockResolvedValue({ players: [{ id: DOSSIER.id, name: 'CalangoPeto', guild: 'B A G R E', alliance: '', killFame: 1, deathFame: 1 }] });
+    m.getDossier.mockResolvedValue({ ...DOSSIER, danger: { score: 40, label: 'atenção', reasons: ['mata en solitario (60% de los asesinatos)'] } });
+    const r = (await rpc(es('dossie_jogador', { nome: 'calangopeto' }))).body.result;
+    expect(m.getDossier.mock.calls[0].slice(1)).toEqual([ctx, DOSSIER.id, 'es']);
+    const t: string = r.content[0].text;
+    expect(t).toContain('Dosier de CalangoPeto (Americas)');
+    expect(t).toContain('Gremio: B A G R E');
+    expect(t).toContain('Peligro: atención (40/100): mata en solitario (60% de los asesinatos).');
+    expect(t).toContain('Lanza (4×)');
+    expect(t).toContain('mató a Fulano [Outra]');
+    expect(t).toContain(' · asesinatos/muertes ');
+    expect(t).not.toMatch(/razón|\bsolo en el\b|· solo\b/);
+    expect(t).toContain('nunca la posición actual');
+    expect(t).not.toMatch(PT_WORDS);
+    expect(r.structuredContent.link).toBe(`https://guarita.pages.dev/es/jogador/${DOSSIER.id}`);
+    m.searchPlayers.mockResolvedValue({ players: [{ id: 'a', name: 'Calango1', guild: 'G', alliance: '', killFame: 10, deathFame: 1 }, { id: 'b', name: 'Calango2', guild: '', alliance: '', killFame: 2, deathFame: 1 }] });
+    const list: string = (await rpc(es('dossie_jogador', { nome: 'Calango' }))).body.result.content[0].text;
+    expect(list).toContain('Calango1 · gremio G');
+    expect(list).toContain('Calango2 · sin gremio');
+  });
+
+  it('perdas_pvp: getLosses com "es" e resumo em espanhol', async () => {
+    m.getLosses.mockResolvedValue({ ...LOSSES, items: [{ ...LOSSES.items[0], name: 'Lanza del iniciado' }] });
+    const r = (await rpc(es('perdas_pvp', { dias: 7 }))).body.result;
+    expect(m.getLosses.mock.calls[0].slice(1)).toEqual([ctx, 7, 20, 'es']);
+    const t: string = r.content[0].text;
+    expect(t).toContain('Objetos más perdidos en PvP en Americas en los últimos 7 días.');
+    expect(t).toContain('Muestra: 12,345 muertes recopiladas por Guarita (recopilación desde el 30/10/2026)');
+    expect(t).toContain('1. Lanza del iniciado (T4_MAIN_SPEAR): 321 perdidos · 9,000 de plata c/u');
+    expect(t).toContain('https://guarita.pages.dev/es/perdas');
+    expect(t).not.toMatch(PT_WORDS);
+  });
+
+  it('o_que_fazer: validação e resumo em espanhol, link /es/hoje', async () => {
+    const deps = { env, ctx };
+    expect((await callTool('o_que_fazer', { lingua: 'es' }, deps)).content[0].text).toBe('Indica la plata disponible (argumento "prata").');
+    expect((await callTool('o_que_fazer', { prata: 1_000_000, minutos: 240, lingua: 'es' }, deps)).content[0].text).toMatch(/debe ser 30, 60 o 120/);
+    expect((await callTool('o_que_fazer', { prata: 1_000_000, premium: 'talvez', lingua: 'es' }, deps)).content[0].text).toMatch(/true o false/);
+    const resp = {
+      prata: 2_000_000, minutos: 60, premium: true, fetchedAt: '2026-10-30T14:58:00Z', notas: ['Hoy hay bonificación de refinado.'],
+      opcoes: [{
+        trilha: 'flip' as const, titulo: 'Reventa: Bolsa del iniciado', passos: ['Compra 10 en Lymhurst.'], lucro: 12_000, capital: 48_000, minutos: 30,
+        confianca: 70, riscos: ['Ruta por zona roja.'], itens: [], conta: { compra: 48_000, venda: 61_000, taxas: 1_000, lucro: 12_000 },
+      }],
+    };
+    const t = summarizeHoje(resp, NOW, 'es');
+    const s = t.content[0].text;
+    expect(s).toContain('Qué hacer hoy con 2,000,000 de plata, 60 min y Premium');
+    expect(s).toContain('1. [Reventa al Mercado Negro] Bolsa del iniciado · confianza 70/100');
+    expect(s).toContain('Cálculo: compra 48,000, venta 61,000, impuestos 1,000, ganancia estimada 12,000');
+    expect(s).toContain('Riesgos: Ruta por zona roja.');
+    expect(t.structuredContent!.link).toBe('https://guarita.pages.dev/es/hoje?prata=2000000&minutos=60&premium=1');
+    expect(summarizeHoje(resp, NOW).structuredContent!.link).toBe('https://guarita.pages.dev/hoje?prata=2000000&minutos=60&premium=1');
+  });
+
+  it('erros na língua pedida: argumento, item não achado, fonte fora; lingua desconhecida vira pt', async () => {
+    expect((await rpc(es('preco_item', { item: 'T4_BAG@1', qualidade: 9 }))).body.result.content[0].text).toBe('El argumento "qualidade" debe ser un número entero de 1 a 5.');
+    expect((await rpc(es('preco_item', { item: 'coisa inexistente' }))).body.result.content[0].text).toMatch(/^No encontré el objeto “coisa inexistente”. Usa buscar_item/);
+    expect((await rpc(es('buscar_item', {}))).body.result.content[0].text).toBe('Indica el nombre del objeto (argumento "consulta").');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    m.searchPlayers.mockRejectedValue(new GameinfoError('timeout', 'gameinfo: sem resposta em 25000 ms'));
+    const slow: string = (await rpc(es('dossie_jogador', { nome: 'CalangoPeto' }))).body.result.content[0].text;
+    expect(slow).toContain('El killboard oficial está lento');
+    expect(slow).not.toContain('25000');
+    m.getItem.mockRejectedValue(new AodpError('O AODP limitou as requisições; tente de novo em 30 s.', 429, 30));
+    expect((await rpc(es('preco_item', { item: 'T4_BAG@1' }))).body.result.content[0].text).toBe(
+      'Albion Data Project no disponible ahora: El AODP limitó las solicitudes; inténtalo de nuevo en 30 s.',
+    );
+    warn.mockRestore();
+    m.searchPlayers.mockResolvedValue({ players: [] });
+    expect((await rpc(es('dossie_jogador', { nome: 'Ninguem' }))).body.result.content[0].text).toBe('Ningún jugador llamado “Ninguem” en el killboard de Americas.');
+    // lingua fora de pt/es (ex.: um cliente que já mandava "en" ou "fr"): cai em português, sem erro, como antes do argumento.
+    m.getClock.mockResolvedValue(CLOCK);
+    const outra = (await rpc(call('relogio', { lingua: 'fr' }))).body.result;
+    const semLingua = (await rpc(call('relogio', {}))).body.result;
+    expect(outra.isError).toBeFalsy();
+    expect(outra.content[0].text).toBe(semLingua.content[0].text);
+    expect((await rpc(call('relogio', { lingua: 42 }))).body.result.content[0].text).toBe(semLingua.content[0].text);
+    expect((await rpc(call('relogio', { lingua: 'es-419' }))).body.result.content[0].text).toContain('en línea');
+  });
+
+  it('rótulos em espanhol iguais aos do site (trilha do "hoje" e perigo)', () => {
+    for (const t of ['flip', 'refino', 'transporte'] as const) expect(TRILHA_TEXTO_ES[t]).toBe(trilhaLabel(t, 'es'));
+    for (const l of ['tranquilo', 'atenção', 'perigoso'] as const) expect(DANGER_ES[l]).toBe(dangerHeadline(l, 'es').toLowerCase());
+  });
+
+  it('limite de ferramentas por requisição em espanhol', async () => {
+    m.getClock.mockResolvedValue(CLOCK);
+    const batch = Array.from({ length: MAX_TOOL_CALLS_PER_POST + 1 }, (_, k) => es('relogio', {}, k + 1));
+    const out = (await rpc(batch)).body;
+    expect(out.at(-1).result.content[0].text).toMatch(/^Como máximo 2 herramientas por solicitud/);
   });
 });
 

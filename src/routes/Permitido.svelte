@@ -37,7 +37,7 @@
             pasiva el tráfico del juego en tu PC para mostrar <strong>tu</strong> sesión: plata, fama, botín y muertes.
             Descarta todo lo relacionado con otros jugadores, no envía nada al juego y solo se activa después de que leas el
             aviso. Leer el tráfico solo para análisis es tolerado por Sandbox Interactive desde 2017 (ver abajo), pero no está
-            permitido oficialmente: el riesgo de usarlo corre por tu cuenta (es tu cuenta del juego la que se arriesga).</li>
+            permitido oficialmente: el riesgo de usarlo es tuyo (lo que está en juego es tu cuenta de Albion).</li>
         </ul>
       {:else}
         <ul>
@@ -159,7 +159,7 @@
     {#if es}
       <ul>
         <li>Viene <strong>desactivada</strong>. Solo funciona si la activas.</li>
-        <li>Activarla es tu decisión, y <strong>el riesgo corre por tu cuenta</strong>: es tu cuenta del juego la que se arriesga.</li>
+        <li>Activarla es tu decisión, y <strong>el riesgo es tuyo</strong>: lo que está en juego es tu cuenta de Albion.</li>
         <li>Nunca muestra radar, jugadores avistados ni nada en tiempo real de la partida. Por eso el dosier de jugador queda
           solo en el sitio, fuera de la ventana.</li>
       </ul>

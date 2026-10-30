@@ -11,6 +11,8 @@ const COMMANDS: &[&str] = &[
     "widgets_show_all",
     "set_close_to_tray",
     "tray_set_muted",
+    // língua da bandeja, dos títulos e das mensagens (só o painel informa)
+    "definir_lingua",
     // captura do próprio jogador (src/capture): painel liga/desliga; widgets só leem
     "captura_estado",
     "captura_sessao",

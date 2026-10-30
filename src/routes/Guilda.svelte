@@ -4,9 +4,9 @@
   import { api, ApiError } from '../lib/api';
   import { go } from '../lib/router';
   import type { GuildSummary } from '../../shared/types';
-  import { cached } from '../lib/player/cache';
+  import { cacheKey, cached } from '../lib/player/cache';
   import { fmtCompact, fmtDec, fmtNum, fmtAgo, playerHref, weaponLabel } from '../lib/player/format';
-  import { href, tx } from '../lib/i18n/index.svelte';
+  import { getLocale, href, tx } from '../lib/i18n/index.svelte';
   import { coverageText, guildTotals } from '../lib/insights/format';
   import BarList from '../lib/player/BarList.svelte';
   import Patient from '../lib/player/Patient.svelte';
@@ -27,7 +27,8 @@
     const my = ++seq;
     loading = true; error = null; notFound = false; data = null;
     try {
-      const d = await cached(`guilda:${n.toLowerCase()}`, () => api.guild(n), fresh);
+      const loc = getLocale();
+      const d = await cached(cacheKey(`guilda:${n.toLowerCase()}`, loc), () => api.guild(n, loc), fresh);
       if (my === seq) data = d;
     } catch (e) {
       if (my !== seq) return;

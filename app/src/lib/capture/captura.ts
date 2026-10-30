@@ -4,7 +4,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '../windows';
 import { URL_ITENS, URL_MAPAS, codigosAssinados, parseItensTxt, parseMapasTxt, textoComCopia } from './dados';
-import { normalizarPref, prefPadrao } from './sessao';
+import { mensagemCaptura, normalizarPref, prefPadrao } from './sessao';
 import {
   EV_CAPTURA_ESTADO,
   EV_CAPTURA_SESSAO,
@@ -21,8 +21,14 @@ export const CHAVE_CAPTURA = 'captura';
 
 export const estadoCaptura = () => invoke<EstadoCaptura>('captura_estado');
 export const sessaoCaptura = () => invoke<RetratoSessao>('captura_sessao');
-/** Exige o aviso aceito (o Rust confere no store). Sem Npcap não é erro: o estado diz o que falta. */
-export const ligarCaptura = () => invoke<EstadoCaptura>('captura_ligar');
+/**
+ * Exige o aviso aceito (o Rust confere no store). Sem Npcap não é erro: o estado diz o que falta. A recusa do Rust
+ * vem em português: em espanhol, traduzida por mensagemCaptura.
+ */
+export const ligarCaptura = () =>
+  invoke<EstadoCaptura>('captura_ligar').catch((e: unknown) => {
+    throw typeof e === 'string' ? new Error(mensagemCaptura(e)) : e;
+  });
 export const desligarCaptura = () => invoke<EstadoCaptura>('captura_desligar');
 export const novaSessao = () => invoke<RetratoSessao>('captura_nova_sessao');
 export const definirCodigos = (json: string, assinatura: string | null) =>

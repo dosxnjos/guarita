@@ -4,6 +4,7 @@
 //
 // As telas (módulo a) usam motorLocal() para "checar agora", o estado dos alertas e as leituras do relógio,
 // sem montar outro motor. Nos widgets (outras janelas) motorLocal() é null: lá a tela lê a config.
+import { currentLocale } from '../../../../src/lib/i18n/core';
 import { api } from '../api';
 import { getConfig, loadConfig, MAX_DISPAROS, onConfigChange, updateConfig, type AcaoAtalho } from '../config';
 import { avisar } from '../notify';
@@ -99,7 +100,8 @@ export async function iniciarMotorLocal(): Promise<() => void> {
   let intervalo = getConfig().intervaloRegrasMin;
 
   const pararConfig = onConfigChange((c) => {
-    const a = assinaturaAtalhos(c.atalhos);
+    // A língua entra na assinatura: as mensagens de falha (tela de ajustes) se refazem na língua nova.
+    const a = `${assinaturaAtalhos(c.atalhos)}|${currentLocale()}`;
     if (a !== assinAtalhos) {
       assinAtalhos = a;
       void aplicarAtalhos(c.atalhos, acoes)

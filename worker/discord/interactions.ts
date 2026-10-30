@@ -344,7 +344,9 @@ async function command(i: Interaction, env: Env, ctx: ExecutionContext): Promise
       return deferred(i, ctx, async () => {
         const found = await resolvePlayer(env, ctx, name, loc);
         if ('list' in found) return found.list;
-        return renderDossier(await getDossier(env, ctx, found.id), undefined, loc);
+        // Em espanhol a API devolve os motivos do perigo em espanhol; em português a chamada fica como antes.
+        const dossier = loc === 'es' ? await getDossier(env, ctx, found.id, 'es') : await getDossier(env, ctx, found.id);
+        return renderDossier(dossier, undefined, loc);
       });
     }
     case 'morte': {
@@ -352,7 +354,8 @@ async function command(i: Interaction, env: Env, ctx: ExecutionContext): Promise
       return deferred(i, ctx, async () => {
         const found = await resolvePlayer(env, ctx, name, loc);
         if ('list' in found) return found.list;
-        const autopsy = await getAutopsy(env, ctx, found.id);
+        // Em espanhol: lições e motivos do perigo do matador em espanhol, vindos da API.
+        const autopsy = loc === 'es' ? await getAutopsy(env, ctx, found.id, 'es') : await getAutopsy(env, ctx, found.id);
         return renderAutopsy(found, autopsy, await labelsFor(env, autopsy.rebuy.map((r) => r.id), loc), undefined, loc);
       });
     }
@@ -361,10 +364,11 @@ async function command(i: Interaction, env: Env, ctx: ExecutionContext): Promise
     case 'perdas': {
       const days = Number(opt<number>(opts, 'dias') ?? 1) === 7 ? 7 : 1;
       return fastOrDeferred(i, ctx, async () => {
-        const r = await getLosses(env, ctx, days, 10);
-        // O `name` da API é o português: em espanhol todos os 10 passam pelas fatias names-es/.
+        // Em espanhol a API já devolve o `name` em espanhol (fatias names-es/); nas duas línguas só o item sem nome
+        // passa pelo índice do bot.
+        const r = loc === 'es' ? await getLosses(env, ctx, days, 10, 'es') : await getLosses(env, ctx, days, 10);
         const top = r.items.slice(0, 10);
-        const needNames = (loc === 'es' ? top : top.filter((it) => !it.name || it.name === it.id)).map((it) => it.id);
+        const needNames = top.filter((it) => !it.name || it.name === it.id).map((it) => it.id);
         return renderLosses(r, await labelsFor(env, needNames, loc), loc);
       });
     }

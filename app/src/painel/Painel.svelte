@@ -1,3 +1,10 @@
+<script lang="ts" module>
+  /** Os widgets abertos no último uso já foram reabertos nesta execução (vale entre remontagens do painel). */
+  let jaAbriu = false;
+  /** Aba aberta: sobrevive à remontagem da troca de língua (quem troca está em Ajustes e continua lá). */
+  let ultimaAba: 'inicio' | 'ajustes' | 'sobre' = 'inicio';
+</script>
+
 <script lang="ts">
   // Janela principal: abre os widgets, mostra o status (API da Guarita, servidor do Albion, última atualização) e
   // guarda os ajustes. Ao abrir, reabre os widgets que estavam abertos quando o app fechou.
@@ -9,13 +16,14 @@
   import { ACOES_ATALHO, onConfigChange, updateConfig, type AcaoAtalho, type GuaritaConfig } from '../lib/config';
   import { fmtDateTime, serverLabel, serverTone } from '../lib/format';
   import { abrirLink } from '../lib/links';
-  import { ROTULO_ACAO, validarAtalho, type FalhaAtalho } from '../lib/shortcuts';
+  import { rotuloAcao, validarAtalho, type FalhaAtalho } from '../lib/shortcuts';
   import { atalhoRepetido, partesAtalho } from '../lib/ui-atalhos';
-  import { TEMAS, escolherTema, temaAtual, widgetsParaReabrir, fmtOpacidade, opacidadeEmTodos, type Tema } from '../lib/ui-janelas';
-  import { falar, isSilenciada, vozesPtBr } from '../lib/voice';
+  import { TEMAS, escolherTema, nomeTema, temaAtual, widgetsParaReabrir, fmtOpacidade, opacidadeEmTodos, type Tema } from '../lib/ui-janelas';
+  import { falar, isSilenciada, vozesDaLingua } from '../lib/voice';
+  import { brasilia, getLocale, intlLocale, linkSite, resolverLingua, tx, type PrefLingua } from '../lib/i18n.svelte';
   import {
-    EV_VOZ_SILENCIADA, OPACITY_MIN, WIDGET_LABELS, WIDGET_TITLES, isTauri, listWidgets, openWidget, setCloseToTray, setOnTop, toggleWidget,
-    traySetMuted, type WidgetInfo, type WidgetLabel,
+    EV_VOZ_SILENCIADA, OPACITY_MIN, WIDGET_LABELS, isTauri, listWidgets, openWidget, setCloseToTray, setOnTop, toggleWidget,
+    tituloWidget, traySetMuted, type WidgetInfo, type WidgetLabel,
   } from '../lib/windows';
   import AvisoSbi from '../lib/ui/AvisoSbi.svelte';
   import Carregando from '../lib/ui/Carregando.svelte';
@@ -24,24 +32,36 @@
   import CapturaAjustes from './CapturaAjustes.svelte';
   import { iniciarCapturaNoPainel } from '../lib/capture/captura';
 
-  const SITE = 'https://guarita.pages.dev';
+  const SITE = getLocale() === 'es' ? linkSite('/') : 'https://guarita.pages.dev';
+  const PERMITIDO = linkSite('/permitido');
   const REPO = 'https://github.com/dosxnjos/guarita';
   const VERSAO = pkg.version;
 
+  // Texto calculado no script: a troca de língua remonta o painel (App.svelte), então isto se refaz.
   const DESCRICAO: Record<WidgetLabel, string> = {
-    preco: 'Digite o item e veja a cidade mais barata, a idade do preço e o flip para o Black Market.',
-    dossie: 'Busque um jogador e veja guilda, armas, perigo e as últimas lutas no killboard público.',
-    relogio: 'Hora do servidor, status, bônus do dia, ouro, Premium e fim da temporada.',
-    alertas: 'Regras de preço checadas por este app enquanto ele estiver aberto.',
-    despertador: 'Lembretes de plantação, animais e foco, avisados com o app aberto.',
-    lente: 'Experimental: preço nas outras cidades do item aberto no mercado, com o cliente do Albion Data Project.',
-    sessao: 'Experimental: prata, fama e loot por hora do seu personagem. Precisa da captura ligada em Ajustes.',
-    loot: 'Experimental: itens que você pegou nesta sessão, com valor estimado. Precisa da captura ligada em Ajustes.',
+    preco: tx('Digite o item e veja a cidade mais barata, a idade do preço e o flip para o Black Market.', 'Escribe el objeto y mira la ciudad más barata, la antigüedad del precio y la reventa al Mercado Negro.'),
+    dossie: tx('Busque um jogador e veja guilda, armas, perigo e as últimas lutas no killboard público.', 'Busca a un jugador y mira su gremio, sus armas, el peligro y sus últimas peleas en el killboard público.'),
+    relogio: tx('Hora do servidor, status, bônus do dia, ouro, Premium e fim da temporada.', 'Hora del servidor, estado, bonificación del día, oro, Premium y fin de la temporada.'),
+    alertas: tx('Regras de preço checadas por este app enquanto ele estiver aberto.', 'Reglas de precio que revisa esta app mientras esté abierta.'),
+    despertador: tx('Lembretes de plantação, animais e foco, avisados com o app aberto.', 'Recordatorios de cultivos, animales y foco, que suenan con la app abierta.'),
+    lente: tx('Experimental: preço nas outras cidades do item aberto no mercado, com o cliente do Albion Data Project.', 'Experimental: precio en las demás ciudades del objeto abierto en el mercado, con el cliente del Albion Data Project.'),
+    sessao: tx('Experimental: prata, fama e loot por hora do seu personagem. Precisa da captura ligada em Ajustes.', 'Experimental: plata, fama y botín por hora de tu personaje. Requiere la captura activada en Ajustes.'),
+    loot: tx('Experimental: itens que você pegou nesta sessão, com valor estimado. Precisa da captura ligada em Ajustes.', 'Experimental: objetos que recogiste en esta sesión, con su valor estimado. Requiere la captura activada en Ajustes.'),
   };
+  /** Língua que o "Automático" daria agora (a do Windows), para mostrar no botão. */
+  const LINGUA_SISTEMA = resolverLingua('auto') === 'es' ? 'Español' : 'Português';
+  const LINGUAS: { id: PrefLingua; nome: string }[] = [
+    { id: 'auto', nome: `${tx('Automático', 'Automático')} (${LINGUA_SISTEMA})` },
+    { id: 'pt', nome: 'Português' },
+    { id: 'es', nome: 'Español' },
+  ];
   const ATALHO_DO_WIDGET: Partial<Record<WidgetLabel, AcaoAtalho>> = { preco: 'abrirPreco', dossie: 'abrirDossie' };
 
   type Aba = 'inicio' | 'ajustes' | 'sobre';
-  let aba = $state<Aba>('inicio');
+  let aba = $state<Aba>(ultimaAba);
+  $effect(() => {
+    ultimaAba = aba;
+  });
 
   let cfg = $state<GuaritaConfig | null>(null);
   let widgets = $state<WidgetInfo[]>([]);
@@ -101,7 +121,7 @@
     try {
       await setIniciarComWindows(on);
     } catch (e) {
-      erroAcao = `Não foi possível mudar o início com o Windows: ${erroTxt(e)}`;
+      erroAcao = tx(`Não foi possível mudar o início com o Windows: ${erroTxt(e)}`, `No fue posible cambiar el inicio con Windows: ${erroTxt(e)}`);
     }
   }
 
@@ -120,7 +140,7 @@
   async function gravarAtalho(acao: AcaoAtalho, atalho: string | null): Promise<string | null> {
     if (atalho && cfg) {
       const outra = atalhoRepetido(cfg.atalhos, acao, atalho);
-      if (outra) return `Esse atalho já está em “${ROTULO_ACAO[outra]}”.`;
+      if (outra) return tx(`Esse atalho já está em “${rotuloAcao(outra)}”.`, `Ese atajo ya está en “${rotuloAcao(outra)}”.`);
     }
     await updateConfig((c) => {
       c.atalhos[acao] = atalho;
@@ -129,11 +149,18 @@
   }
 
   async function carregarVozes() {
-    vozes = await vozesPtBr();
+    vozes = await vozesDaLingua(getLocale());
   }
 
   function testarVoz() {
-    falar('A Guarita está pronta. O preço da bolsa caiu em Martlock.', 'alta');
+    falar(tx('A Guarita está pronta. O preço da bolsa caiu em Martlock.', 'La Guarita está lista. El precio de la bolsa bajó en Martlock.'), 'alta');
+  }
+
+  async function mudarLingua(l: PrefLingua) {
+    // Grava e pronto: main.ts (todas as janelas) ouve a config, aplica a língua, remonta a tela e avisa o Rust.
+    await updateConfig((c) => {
+      c.lingua = l;
+    });
   }
 
   async function aplicarOpacidadeTodos() {
@@ -184,9 +211,13 @@
       const { loadConfig } = await import('../lib/config');
       const c = await loadConfig();
       opacidadePadrao = c.janelas.preco.opacidade;
-      // O registro do Windows é a verdade de "Iniciar com o Windows": se divergir da config, desliga (nunca liga).
-      await reconciliarIniciarComWindows().catch((e) => console.warn('iniciar com o Windows', e));
-      for (const l of widgetsParaReabrir(c)) await openWidget(l).catch((e) => console.warn('reabrir', l, e));
+      // Só na primeira montagem: a troca de língua remonta o painel, e reabrir os widgets de novo roubaria o foco.
+      if (!jaAbriu) {
+        jaAbriu = true;
+        // O registro do Windows é a verdade de "Iniciar com o Windows": se divergir da config, desliga (nunca liga).
+        await reconciliarIniciarComWindows().catch((e) => console.warn('iniciar com o Windows', e));
+        for (const l of widgetsParaReabrir(c)) await openWidget(l).catch((e) => console.warn('reabrir', l, e));
+      }
       await atualizarWidgets();
       // Captura do próprio jogador: entrega a tabela de códigos e as listas ao Rust; liga só se o usuário deixou
       // ligada com o aviso aceito (lib/capture/captura.ts).
@@ -231,12 +262,12 @@
   <header class="cabeca">
     <div class="marca">
       <h1>Guarita</h1>
-      <span class="tag">no PC</span>
+      <span class="tag">{tx('no PC', 'en PC')}</span>
     </div>
-    <nav class="abas" aria-label="Seções do painel">
-      <button type="button" aria-current={aba === 'inicio' ? 'page' : undefined} onclick={() => (aba = 'inicio')}>Início</button>
-      <button type="button" aria-current={aba === 'ajustes' ? 'page' : undefined} onclick={() => (aba = 'ajustes')}>Ajustes</button>
-      <button type="button" aria-current={aba === 'sobre' ? 'page' : undefined} onclick={() => (aba = 'sobre')}>Sobre</button>
+    <nav class="abas" aria-label={tx('Seções do painel', 'Secciones del panel')}>
+      <button type="button" aria-current={aba === 'inicio' ? 'page' : undefined} onclick={() => (aba = 'inicio')}>{tx('Início', 'Inicio')}</button>
+      <button type="button" aria-current={aba === 'ajustes' ? 'page' : undefined} onclick={() => (aba = 'ajustes')}>{tx('Ajustes', 'Ajustes')}</button>
+      <button type="button" aria-current={aba === 'sobre' ? 'page' : undefined} onclick={() => (aba = 'sobre')}>{tx('Sobre', 'Acerca de')}</button>
     </nav>
   </header>
 
@@ -245,20 +276,20 @@
   {#if aba === 'inicio'}
     <section class="card status" aria-labelledby="status-h">
       <div class="sec-cab">
-        <h2 id="status-h">Status</h2>
-        <button type="button" class="btn btn-mini" onclick={() => carregarRelogio(true)} disabled={atualizando}>{atualizando ? 'Atualizando…' : 'Atualizar'}</button>
+        <h2 id="status-h">{tx('Status', 'Estado')}</h2>
+        <button type="button" class="btn btn-mini" onclick={() => carregarRelogio(true)} disabled={atualizando}>{atualizando ? tx('Atualizando…', 'Actualizando…') : tx('Atualizar', 'Actualizar')}</button>
       </div>
       <dl class="status-lista">
         <div>
-          <dt>API da Guarita</dt>
+          <dt>{tx('API da Guarita', 'API de la Guarita')}</dt>
           <dd>
-            {#if apiOk === null}<span class="muted">conferindo…</span>
-            {:else if apiOk}<span class="dot good" aria-hidden="true"></span> Respondendo
-            {:else}<span class="dot bad" aria-hidden="true"></span> Sem resposta{/if}
+            {#if apiOk === null}<span class="muted">{tx('conferindo…', 'comprobando…')}</span>
+            {:else if apiOk}<span class="dot good" aria-hidden="true"></span> {tx('Respondendo', 'Respondiendo')}
+            {:else}<span class="dot bad" aria-hidden="true"></span> {tx('Sem resposta', 'Sin respuesta')}{/if}
           </dd>
         </div>
         <div>
-          <dt>Servidor do Albion</dt>
+          <dt>{tx('Servidor do Albion', 'Servidor de Albion')}</dt>
           <dd>
             {#if relogio}
               <span class="dot {serverTone(relogio.server.status)}" aria-hidden="true"></span> {serverLabel(relogio.server.status)}
@@ -266,12 +297,12 @@
           </dd>
         </div>
         <div>
-          <dt>Última atualização</dt>
-          <dd>{relogioEm ? `${fmtDateTime(relogioEm)} (Brasília)` : '—'}</dd>
+          <dt>{tx('Última atualização', 'Última actualización')}</dt>
+          <dd>{relogioEm ? `${fmtDateTime(relogioEm)} (${brasilia()})` : '—'}</dd>
         </div>
       </dl>
       {#if erroRelogio}<p class="small bad-text m0">{erroRelogio}</p>{/if}
-      {#if apiOk === null}<Carregando texto="Conferindo a API da Guarita…" />{/if}
+      {#if apiOk === null}<Carregando texto={tx('Conferindo a API da Guarita…', 'Comprobando la API de la Guarita…')} />{/if}
     </section>
 
     <section class="card stack" aria-labelledby="widgets-h">
@@ -279,24 +310,24 @@
         <h2 id="widgets-h">Widgets</h2>
         {#if cfg}
           <button type="button" class="switch" role="switch" aria-checked={silenciada} onclick={() => mudarSilencio(!silenciada)}>
-            <span class="switch-track" aria-hidden="true"></span><span class="small">Silenciar voz</span>
+            <span class="switch-track" aria-hidden="true"></span><span class="small">{tx('Silenciar voz', 'Silenciar voz')}</span>
           </button>
         {/if}
       </div>
-      <p class="muted small m0">Janelas pequenas para deixar ao lado do jogo ou em outra tela. Cada uma lembra posição e tamanho.</p>
+      <p class="muted small m0">{tx('Janelas pequenas para deixar ao lado do jogo ou em outra tela. Cada uma lembra posição e tamanho.', 'Ventanas pequeñas para dejar al lado del juego o en otra pantalla. Cada una recuerda su posición y su tamaño.')}</p>
       <ul class="widgets">
         {#each WIDGET_LABELS as l (l)}
           {@const acao = ATALHO_DO_WIDGET[l]}
           {@const at = acao && cfg ? cfg.atalhos[acao] : null}
           <li class="widget-linha">
             <div class="widget-txt">
-              <strong>{WIDGET_TITLES[l]}</strong>
-              {#if aberto(l)}<span class="tag good">aberto</span>{/if}
+              <strong>{tituloWidget(l)}</strong>
+              {#if aberto(l)}<span class="tag good">{tx('aberto', 'abierto')}</span>{/if}
               {#if at}<span class="atalho-mini">{#each partesAtalho(at) as p, i (i)}{#if i}+{/if}<kbd>{p}</kbd>{/each}</span>{/if}
               <p class="small muted m0">{DESCRICAO[l]}</p>
             </div>
             <button type="button" class="btn" class:primary={!aberto(l)} aria-pressed={aberto(l)} onclick={() => alternar(l)}>
-              {aberto(l) ? 'Fechar' : 'Abrir'}
+              {aberto(l) ? tx('Fechar', 'Cerrar') : tx('Abrir', 'Abrir')}
             </button>
           </li>
         {/each}
@@ -304,160 +335,171 @@
     </section>
 
     <p class="small muted m0">
-      A Guarita só trabalha com este app aberto: fechou, os avisos param e nada fica rodando no computador.
-      {#if cfg && !cfg.fecharParaBandeja}Fechar esta janela encerra o app.{:else}Fechar esta janela deixa o app na bandeja, perto do relógio do Windows.{/if}
+      {tx('A Guarita só trabalha com este app aberto: fechou, os avisos param e nada fica rodando no computador.', 'La Guarita solo trabaja con esta app abierta: si la cierras, los avisos se detienen y nada queda funcionando en la computadora.')}
+      {#if cfg && !cfg.fecharParaBandeja}{tx('Fechar esta janela encerra o app.', 'Cerrar esta ventana cierra la app.')}{:else}{tx('Fechar esta janela deixa o app na bandeja, perto do relógio do Windows.', 'Cerrar esta ventana deja la app en la bandeja, cerca del reloj de Windows.')}{/if}
     </p>
   {:else if aba === 'ajustes' && cfg}
+    <section class="card stack" aria-labelledby="lingua-h">
+      <h2 id="lingua-h">{tx('Língua', 'Idioma')}</h2>
+      <div class="seg" role="group" aria-label={tx('Língua da interface', 'Idioma de la interfaz')}>
+        {#each LINGUAS as l (l.id)}
+          <button type="button" aria-pressed={cfg.lingua === l.id} lang={l.id === 'pt' ? 'pt-BR' : l.id === 'es' ? 'es' : undefined} onclick={() => mudarLingua(l.id)}>{l.nome}</button>
+        {/each}
+      </div>
+      <p class="small muted m0">{tx('Automático segue a língua do Windows. Vale para o painel, os widgets, a bandeja, os avisos e a voz.', 'Automático sigue el idioma de Windows. Vale para el panel, los widgets, la bandeja, los avisos y la voz.')}</p>
+    </section>
+
     <section class="card stack" aria-labelledby="atalhos-h">
-      <h2 id="atalhos-h">Atalhos globais</h2>
-      <p class="small muted m0">Funcionam mesmo com o jogo em primeiro plano. Cada atalho só mexe na Guarita, nunca manda tecla ao jogo. Começam vazios: escolha combinações que o jogo não usa.</p>
-      <p class="small muted m0">O atalho abre a janela da Guarita e passa o foco para ela, como um Alt+Tab. Use o Albion em modo janela sem borda (Configurações de vídeo do jogo); em tela cheia exclusiva, o jogo minimiza ou pisca.</p>
+      <h2 id="atalhos-h">{tx('Atalhos globais', 'Atajos globales')}</h2>
+      <p class="small muted m0">{tx('Funcionam mesmo com o jogo em primeiro plano. Cada atalho só mexe na Guarita, nunca manda tecla ao jogo. Começam vazios: escolha combinações que o jogo não usa.', 'Funcionan incluso con el juego en primer plano. Cada atajo solo actúa sobre la Guarita, nunca envía teclas al juego. Empiezan vacíos: elige combinaciones que el juego no use.')}</p>
+      <p class="small muted m0">{tx('O atalho abre a janela da Guarita e passa o foco para ela, como um Alt+Tab. Use o Albion em modo janela sem borda (Configurações de vídeo do jogo); em tela cheia exclusiva, o jogo minimiza ou pisca.', 'El atajo abre la ventana de la Guarita y le pasa el foco, como un Alt+Tab. Usa Albion en modo ventana sin bordes (configuración de video del juego); en pantalla completa exclusiva, el juego se minimiza o parpadea.')}</p>
       <div class="atalhos">
         {#each ACOES_ATALHO as a (a)}
-          <CampoAtalho rotulo={ROTULO_ACAO[a]} valor={cfg.atalhos[a]} validar={validarAtalho} onmudar={(v) => gravarAtalho(a, v)} />
+          <CampoAtalho rotulo={rotuloAcao(a)} valor={cfg.atalhos[a]} validar={(v) => validarAtalho(v)} onmudar={(v) => gravarAtalho(a, v)} />
         {/each}
       </div>
       {#if falhas.length}
         <div class="callout bad small" role="alert">
-          {#each falhas as f (f.acao)}<p>{ROTULO_ACAO[f.acao]} ({f.atalho}): {f.erro}</p>{/each}
+          {#each falhas as f (f.acao)}<p>{rotuloAcao(f.acao)} ({f.atalho}): {f.erro}</p>{/each}
         </div>
       {/if}
     </section>
 
     <section class="card stack" aria-labelledby="voz-h">
-      <h2 id="voz-h">Voz</h2>
+      <h2 id="voz-h">{tx('Voz', 'Voz')}</h2>
       <button type="button" class="switch" role="switch" aria-checked={cfg.voz.ligada} onclick={() => updateConfig((c) => void (c.voz.ligada = !c.voz.ligada))}>
         <span class="switch-track" aria-hidden="true"></span>
-        <span><strong>Falar os avisos</strong><br /><span class="small muted">Usa as vozes em português instaladas no Windows.</span></span>
+        <span><strong>{tx('Falar os avisos', 'Leer los avisos en voz alta')}</strong><br /><span class="small muted">{tx('Usa as vozes em português instaladas no Windows.', 'Usa las voces en español instaladas en Windows.')}</span></span>
       </button>
       <div class="campos">
         <label class="stack campo">
-          <span class="rot">Voz</span>
+          <span class="rot">{tx('Voz', 'Voz')}</span>
           {#if vozes === null}
-            <span class="small muted">Procurando vozes…</span>
+            <span class="small muted">{tx('Procurando vozes…', 'Buscando voces…')}</span>
           {:else if vozes.length}
-            <select class="input" value={cfg.voz.voz ?? ''} onchange={(e) => updateConfig((c) => void (c.voz.voz = e.currentTarget.value || null))}>
-              <option value="">Padrão ({vozes[0].name})</option>
+            <!-- A voz guardada pode ser de outra língua (troca de língua): aí vale a padrão desta. -->
+            <select class="input" value={vozes.some((v) => v.name === cfg!.voz.voz) ? cfg.voz.voz : ''} onchange={(e) => updateConfig((c) => void (c.voz.voz = e.currentTarget.value || null))}>
+              <option value="">{tx('Padrão', 'Predeterminada')} ({vozes[0].name})</option>
               {#each vozes as v (v.name)}<option value={v.name}>{v.name}</option>{/each}
             </select>
           {:else}
-            <span class="small warn-text">Nenhuma voz em português encontrada. Instale em Configurações do Windows › Hora e idioma › Fala.</span>
+            <span class="small warn-text">{tx('Nenhuma voz em português encontrada. Instale em Configurações do Windows › Hora e idioma › Fala.', 'No hay ninguna voz en español instalada: los avisos se leerán con la voz predeterminada de Windows. Instala una en Configuración de Windows › Hora e idioma › Voz.')}</span>
           {/if}
         </label>
         <label class="stack campo">
-          <span class="rot">Volume: {Math.round(cfg.voz.volume * 100)}%</span>
+          <span class="rot">{tx('Volume', 'Volumen')}: {Math.round(cfg.voz.volume * 100)}%</span>
           <input type="range" min="0" max="1" step="0.05" value={cfg.voz.volume} onchange={(e) => updateConfig((c) => void (c.voz.volume = Number(e.currentTarget.value)))} />
         </label>
         <label class="stack campo">
-          <span class="rot">Velocidade: {cfg.voz.velocidade.toLocaleString('pt-BR')}×</span>
+          <span class="rot">{tx('Velocidade', 'Velocidad')}: {cfg.voz.velocidade.toLocaleString(intlLocale())}×</span>
           <input type="range" min="0.5" max="2" step="0.1" value={cfg.voz.velocidade} onchange={(e) => updateConfig((c) => void (c.voz.velocidade = Number(e.currentTarget.value)))} />
         </label>
       </div>
       <div class="row">
-        <button type="button" class="btn" onclick={testarVoz} disabled={!cfg.voz.ligada || silenciada}>Testar a voz</button>
-        {#if silenciada}<span class="small muted">A voz está silenciada pela bandeja ou pelo atalho.</span>{/if}
+        <button type="button" class="btn" onclick={testarVoz} disabled={!cfg.voz.ligada || silenciada}>{tx('Testar a voz', 'Probar la voz')}</button>
+        {#if silenciada}<span class="small muted">{tx('A voz está silenciada pela bandeja ou pelo atalho.', 'La voz está silenciada desde la bandeja o con el atajo.')}</span>{/if}
       </div>
     </section>
 
     <section class="card stack" aria-labelledby="avisos-h">
-      <h2 id="avisos-h">Avisos</h2>
+      <h2 id="avisos-h">{tx('Avisos', 'Avisos')}</h2>
       <div class="interruptores">
         <button type="button" class="switch" role="switch" aria-checked={cfg.avisos.notificacao} onclick={() => updateConfig((c) => void (c.avisos.notificacao = !c.avisos.notificacao))}>
-          <span class="switch-track" aria-hidden="true"></span><span>Notificação do Windows</span>
+          <span class="switch-track" aria-hidden="true"></span><span>{tx('Notificação do Windows', 'Notificación de Windows')}</span>
         </button>
         <button type="button" class="switch" role="switch" aria-checked={cfg.avisos.som} onclick={() => updateConfig((c) => void (c.avisos.som = !c.avisos.som))}>
-          <span class="switch-track" aria-hidden="true"></span><span>Som curto</span>
+          <span class="switch-track" aria-hidden="true"></span><span>{tx('Som curto', 'Sonido corto')}</span>
         </button>
       </div>
-      <span class="rot">Relógio do servidor</span>
+      <span class="rot">{tx('Relógio do servidor', 'Reloj del servidor')}</span>
       <div class="interruptores">
         <button type="button" class="switch" role="switch" aria-checked={cfg.avisos.relogio.servidor} onclick={() => updateConfig((c) => void (c.avisos.relogio.servidor = !c.avisos.relogio.servidor))}>
-          <span class="switch-track" aria-hidden="true"></span><span>Servidor caiu ou voltou</span>
+          <span class="switch-track" aria-hidden="true"></span><span>{tx('Servidor caiu ou voltou', 'El servidor se cayó o volvió')}</span>
         </button>
         <button type="button" class="switch" role="switch" aria-checked={cfg.avisos.relogio.bonusAcabando} onclick={() => updateConfig((c) => void (c.avisos.relogio.bonusAcabando = !c.avisos.relogio.bonusAcabando))}>
-          <span class="switch-track" aria-hidden="true"></span><span>Bônus acabando</span>
+          <span class="switch-track" aria-hidden="true"></span><span>{tx('Bônus acabando', 'Bonificación por terminar')}</span>
         </button>
         <button type="button" class="switch" role="switch" aria-checked={cfg.avisos.relogio.festividade} onclick={() => updateConfig((c) => void (c.avisos.relogio.festividade = !c.avisos.relogio.festividade))}>
-          <span class="switch-track" aria-hidden="true"></span><span>Bônus começou</span>
+          <span class="switch-track" aria-hidden="true"></span><span>{tx('Bônus começou', 'Empezó una bonificación')}</span>
         </button>
         <button type="button" class="switch" role="switch" aria-checked={cfg.avisos.relogio.temporada} onclick={() => updateConfig((c) => void (c.avisos.relogio.temporada = !c.avisos.relogio.temporada))}>
-          <span class="switch-track" aria-hidden="true"></span><span>Fim da temporada perto</span>
+          <span class="switch-track" aria-hidden="true"></span><span>{tx('Fim da temporada perto', 'Se acerca el fin de temporada')}</span>
         </button>
       </div>
     </section>
 
     <section class="card stack" aria-labelledby="janelas-h">
-      <h2 id="janelas-h">Janelas</h2>
+      <h2 id="janelas-h">{tx('Janelas', 'Ventanas')}</h2>
       <div class="campos">
         <label class="stack campo">
-          <span class="rot">Opacidade do fundo: {fmtOpacidade(opacidadePadrao)}</span>
+          <span class="rot">{tx('Opacidade do fundo', 'Opacidad del fondo')}: {fmtOpacidade(opacidadePadrao)}</span>
           <input type="range" min={OPACITY_MIN} max="1" step="0.05" bind:value={opacidadePadrao} />
         </label>
-        <div class="campo-acao"><button type="button" class="btn" onclick={aplicarOpacidadeTodos}>Aplicar em todos os widgets</button></div>
+        <div class="campo-acao"><button type="button" class="btn" onclick={aplicarOpacidadeTodos}>{tx('Aplicar em todos os widgets', 'Aplicar a todos los widgets')}</button></div>
       </div>
-      <p class="small muted m0">O texto continua opaco; só o fundo fica translúcido. Cada widget também troca a opacidade pelo botão da própria barra.</p>
+      <p class="small muted m0">{tx('O texto continua opaco; só o fundo fica translúcido. Cada widget também troca a opacidade pelo botão da própria barra.', 'El texto sigue opaco; solo el fondo se vuelve translúcido. Cada widget también cambia la opacidad con el botón de su propia barra.')}</p>
 
-      <span class="rot">Sempre por cima</span>
-      <p class="small muted m0">Para ver as janelas sobre o jogo, use o Albion em modo janela sem borda (Configurações de vídeo do jogo). Em tela cheia exclusiva, o jogo cobre tudo.</p>
+      <span class="rot">{tx('Sempre por cima', 'Siempre encima')}</span>
+      <p class="small muted m0">{tx('Para ver as janelas sobre o jogo, use o Albion em modo janela sem borda (Configurações de vídeo do jogo). Em tela cheia exclusiva, o jogo cobre tudo.', 'Para ver las ventanas sobre el juego, usa Albion en modo ventana sin bordes (configuración de video del juego). En pantalla completa exclusiva, el juego lo tapa todo.')}</p>
       {#if !cfg.avisoSbiAceitoEm}
         {#if lendoAviso}
           <AvisoSbi onaceitar={() => (lendoAviso = false)} oncancelar={() => (lendoAviso = false)} />
         {:else}
-          <p class="small m0">Nenhuma janela fica por cima do jogo até você ler o aviso sobre a regra da Sandbox Interactive.</p>
-          <div><button type="button" class="btn" onclick={() => (lendoAviso = true)}>Ler o aviso</button></div>
+          <p class="small m0">{tx('Nenhuma janela fica por cima do jogo até você ler o aviso sobre a regra da Sandbox Interactive.', 'Ninguna ventana queda encima del juego hasta que leas el aviso sobre la regla de Sandbox Interactive.')}</p>
+          <div><button type="button" class="btn" onclick={() => (lendoAviso = true)}>{tx('Ler o aviso', 'Leer el aviso')}</button></div>
         {/if}
       {:else}
-        <p class="small muted m0">Aviso aceito em {fmtDateTime(cfg.avisoSbiAceitoEm)} (Brasília). <button type="button" class="linkbtn" onclick={retirarAceite}>Retirar o aceite e soltar todas</button></p>
+        <p class="small muted m0">{tx('Aviso aceito em', 'Aviso aceptado el')} {fmtDateTime(cfg.avisoSbiAceitoEm)} ({brasilia()}). <button type="button" class="linkbtn" onclick={retirarAceite}>{tx('Retirar o aceite e soltar todas', 'Retirar la aceptación y soltar todas')}</button></p>
         <div class="interruptores">
           {#each WIDGET_LABELS as l (l)}
             <button type="button" class="switch" role="switch" aria-checked={cfg.janelas[l].porCima} onclick={() => mudarPorCima(l, !cfg!.janelas[l].porCima)}>
-              <span class="switch-track" aria-hidden="true"></span><span>{WIDGET_TITLES[l]}</span>
+              <span class="switch-track" aria-hidden="true"></span><span>{tituloWidget(l)}</span>
             </button>
           {/each}
         </div>
       {/if}
-      <p class="small m0"><a href="{SITE}/permitido" onclick={(e) => abrirLink(e, `${SITE}/permitido`)}>O que é e o que não é permitido</a></p>
+      <p class="small m0"><a href={PERMITIDO} onclick={(e) => abrirLink(e, PERMITIDO)}>{tx('O que é e o que não é permitido', 'Qué está permitido y qué no')}</a></p>
     </section>
 
     <CapturaAjustes />
 
     <section class="card stack" aria-labelledby="aparencia-h">
-      <h2 id="aparencia-h">Aparência</h2>
-      <div class="seg" role="group" aria-label="Tema">
+      <h2 id="aparencia-h">{tx('Aparência', 'Apariencia')}</h2>
+      <div class="seg" role="group" aria-label={tx('Tema', 'Tema')}>
         {#each TEMAS as t (t.id)}
-          <button type="button" aria-pressed={tema === t.id} onclick={() => trocarTema(t.id)}>{t.nome}</button>
+          <button type="button" aria-pressed={tema === t.id} onclick={() => trocarTema(t.id)}>{nomeTema(t.id)}</button>
         {/each}
       </div>
     </section>
 
     <section class="card stack" aria-labelledby="sistema-h">
-      <h2 id="sistema-h">Sistema</h2>
+      <h2 id="sistema-h">{tx('Sistema', 'Sistema')}</h2>
       <button type="button" class="switch" role="switch" aria-checked={cfg.iniciarComWindows} onclick={() => mudarIniciar(!cfg!.iniciarComWindows)}>
         <span class="switch-track" aria-hidden="true"></span>
-        <span><strong>Iniciar com o Windows</strong><br /><span class="small muted">Desligado por padrão. Não cria tarefa agendada nem serviço: só abre o app quando você entra no Windows.</span></span>
+        <span><strong>{tx('Iniciar com o Windows', 'Iniciar con Windows')}</strong><br /><span class="small muted">{tx('Desligado por padrão. Não cria tarefa agendada nem serviço: só abre o app quando você entra no Windows.', 'Desactivado por defecto. No crea tareas programadas ni servicios: solo abre la app cuando inicias sesión en Windows.')}</span></span>
       </button>
       <button type="button" class="switch" role="switch" aria-checked={cfg.fecharParaBandeja} onclick={() => mudarBandeja(!cfg!.fecharParaBandeja)}>
         <span class="switch-track" aria-hidden="true"></span>
-        <span><strong>Fechar para a bandeja</strong><br /><span class="small muted">Desligado: fechar o painel encerra a Guarita e todos os avisos.</span></span>
+        <span><strong>{tx('Fechar para a bandeja', 'Minimizar a la bandeja al cerrar')}</strong><br /><span class="small muted">{tx('Desligado: fechar o painel encerra a Guarita e todos os avisos.', 'Desactivado: cerrar el panel cierra la Guarita y todos los avisos.')}</span></span>
       </button>
     </section>
   {:else if aba === 'sobre'}
     <section class="card stack" aria-labelledby="sobre-h">
-      <h2 id="sobre-h">Sobre</h2>
-      <p class="m0"><strong>Guarita no PC</strong> · versão {VERSAO}</p>
-      <p class="small m0">Companheiro em português para quem joga Albion Online no servidor Americas. Usa os mesmos dados do site.</p>
+      <h2 id="sobre-h">{tx('Sobre', 'Acerca de')}</h2>
+      <p class="m0"><strong>{tx('Guarita no PC', 'Guarita en PC')}</strong> · {tx('versão', 'versión')} {VERSAO}</p>
+      <p class="small m0">{tx('Companheiro em português para quem joga Albion Online no servidor Americas. Usa os mesmos dados do site.', 'Compañero en español para quienes juegan Albion Online en el servidor Americas. Usa los mismos datos del sitio.')}</p>
       <ul class="small lista">
-        <li>Só trabalha com o app aberto: nada de tarefa agendada ou serviço do Windows.</li>
-        <li>Não lê o processo do jogo e não manda tecla nem clique ao jogo.</li>
-        <li>Captura do próprio jogador (experimental, desligada por padrão): só com o Npcap instalado e o aviso aceito, lê o tráfego que o jogo recebe e mostra apenas os seus números. Nada de outros jogadores é exibido; nada é enviado ao jogo.</li>
-        <li>Preços do Albion Online Data Project; jogadores do killboard público oficial.</li>
+        <li>{tx('Só trabalha com o app aberto: nada de tarefa agendada ou serviço do Windows.', 'Solo trabaja con la app abierta: nada de tareas programadas ni servicios de Windows.')}</li>
+        <li>{tx('Não lê o processo do jogo e não manda tecla nem clique ao jogo.', 'No lee el proceso del juego y no envía teclas ni clics al juego.')}</li>
+        <li>{tx('Captura do próprio jogador (experimental, desligada por padrão): só com o Npcap instalado e o aviso aceito, lê o tráfego que o jogo recebe e mostra apenas os seus números. Nada de outros jogadores é exibido; nada é enviado ao jogo.', 'Captura de tu propio personaje (experimental, desactivada por defecto): solo con Npcap instalado y el aviso aceptado, lee el tráfico que recibe el juego y muestra únicamente tus números. No se muestra nada de otros jugadores; no se envía nada al juego.')}</li>
+        <li>{tx('Preços do Albion Online Data Project; jogadores do killboard público oficial.', 'Precios del Albion Online Data Project; jugadores del killboard público oficial.')}</li>
       </ul>
       <div class="row">
-        <a class="btn" href={SITE} onclick={(e) => abrirLink(e, SITE)}>Abrir o site</a>
-        <a class="btn" href={REPO} onclick={(e) => abrirLink(e, REPO)}>Código aberto</a>
-        <a class="btn" href="{SITE}/permitido" onclick={(e) => abrirLink(e, `${SITE}/permitido`)}>O que é permitido</a>
+        <a class="btn" href={SITE} onclick={(e) => abrirLink(e, SITE)}>{tx('Abrir o site', 'Abrir el sitio')}</a>
+        <a class="btn" href={REPO} onclick={(e) => abrirLink(e, REPO)}>{tx('Código aberto', 'Código abierto')}</a>
+        <a class="btn" href={PERMITIDO} onclick={(e) => abrirLink(e, PERMITIDO)}>{tx('O que é permitido', 'Qué está permitido')}</a>
       </div>
-      <p class="small muted m0">Não afiliada à Sandbox Interactive. Albion Online é marca da Sandbox Interactive GmbH.</p>
+      <p class="small muted m0">{tx('Não afiliada à Sandbox Interactive. Albion Online é marca da Sandbox Interactive GmbH.', 'Sin afiliación con Sandbox Interactive. Albion Online es una marca de Sandbox Interactive GmbH.')}</p>
     </section>
   {/if}
 </div>

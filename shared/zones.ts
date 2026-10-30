@@ -1,4 +1,5 @@
-// Regras de perda por tipo de zona (módulo (c) da Fase 2: "Quanto vale arriscar"). Texto em PT-BR para o novato.
+// Regras de perda por tipo de zona (módulo (c) da Fase 2: "Quanto vale arriscar"). Texto em PT-BR para o novato
+// (ZONE_RULES) e o mesmo em espanhol (ZONE_TEXT_ES, mais abaixo).
 //
 // Fontes consultadas em 30/10/2026 (o wiki oficial, wiki.albiononline.com, respondeu 403 a toda consulta
 // automatizada nesse dia; as regras abaixo são o consenso das fontes secundárias, e a tela pede para conferir no jogo):
@@ -86,16 +87,84 @@ export const ZONE_RULES: ZoneRule[] = [
   },
 ];
 
-/** Cards por zona para um set que custa `total` em prata (só as zonas de saque total põem o valor em risco). */
-export function zonesFor(total: number): RiskZone[] {
+/** Texto de uma zona numa língua (rótulo, quem ataca, o que acontece ao morrer, observação). */
+export interface ZoneText {
+  label: string;
+  who: string;
+  death: string;
+  note: string;
+}
+
+/**
+ * As mesmas regras em espanhol (glossário: zona amarilla/roja/negra, Tierras Lejanas, Caminos de Avalon, Nieblas,
+ * gremio, botín completo). Fonte única do espanhol: a API (/api/risk?lang=es), o MCP e o bot leem daqui; a cópia em
+ * src/lib/novato/arriscar.ts (ZONE_TEXT_ES) tem de ser idêntica (tests/api-i18n.test.ts confere).
+ */
+export const ZONE_TEXT_ES: Record<ZoneKind, ZoneText> = {
+  azul: {
+    label: 'Zona azul',
+    who: 'Nadie puede atacarte: no hay combate entre jugadores.',
+    death: 'Morir ante un monstruo solo te derriba. El equipo se queda contigo y pierde durabilidad.',
+    note: 'No pierdes el set, solo pagas la reparación. El costo de la reparación no entra en el cálculo.',
+  },
+  amarela: {
+    label: 'Zona amarilla',
+    who: 'Solo quien activó la bandera de PvP (el ícono de espadas) puede atacar, y puede atacarte aunque no tengas bandera (quien ataca a alguien sin bandera pierde un poco de reputación).',
+    death: 'Una derrota ante un jugador o un monstruo solo te derriba. Nadie saquea tu set; el equipo pierde durabilidad.',
+    note: 'Pueden derribarte y echarte del lugar, pero no pierdes el set. El costo de la reparación no entra en el cálculo.',
+  },
+  vermelha: {
+    label: 'Zona roja',
+    who: 'Cualquier jugador con bandera puede atacarte, tengas o no tu bandera. Quien ataca a alguien sin bandera pierde reputación, pero eso no impide el ataque.',
+    death: 'Al morir, ante un jugador o un monstruo, todo lo que llevas puesto y en la bolsa queda en el suelo para quien pase.',
+    note: 'Botín completo: el set entero y la bolsa quedan en el suelo. Parte de los objetos puede destruirse al morir.',
+  },
+  preta: {
+    label: 'Zona negra (Tierras Lejanas)',
+    who: 'Cualquiera fuera de tu gremio, alianza y grupo puede atacarte, sin bandera y sin perder reputación.',
+    death: 'Al morir, ante un jugador o un monstruo, dejas todo lo que llevas puesto y en la bolsa.',
+    note: 'Botín completo, sin aviso de bandera. Cuanto más cerca del centro del mapa, más gente y más riesgo.',
+  },
+  avalon: {
+    label: 'Caminos de Avalon',
+    who: 'Siguen la regla de la zona negra: cualquiera fuera de tu gremio, alianza y grupo puede atacarte.',
+    death: 'Al morir dejas todo lo que llevas puesto y en la bolsa. Los portales cambian de lugar y de tiempo de cierre, y la salida puede desaparecer.',
+    note: 'Botín completo. Revisa el tiempo del portal de regreso antes de entrar.',
+  },
+  brumas: {
+    label: 'Nieblas',
+    who: 'Hechas para jugar solo o en pareja. En las Nieblas letales, cualquiera fuera de tu grupo puede atacarte.',
+    death: 'En las Nieblas letales (entrada por zona roja o negra) al morir lo dejas todo. En las no letales (entrada por zona azul o amarilla) solo te derriban.',
+    note: 'El valor considera las Nieblas letales. En las no letales solo pierdes durabilidad.',
+  },
+};
+
+/** Texto da zona na língua pedida: pt = o de ZONE_RULES (igual a antes); es = ZONE_TEXT_ES. */
+export function zoneTextFor(zone: ZoneKind, lang: 'pt' | 'es' = 'pt'): ZoneText {
+  const r = zoneRule(zone);
+  if (lang === 'es' && ZONE_TEXT_ES[zone]) return ZONE_TEXT_ES[zone];
+  return { label: r.labelPt, who: r.who, death: r.death, note: r.note };
+}
+
+/**
+ * Cards por zona para um set que custa `total` em prata (só as zonas de saque total põem o valor em risco).
+ * Em espanhol, `note` vem em espanhol e o campo opcional `label` traz o rótulo em espanhol; `labelPt` continua o
+ * português (contrato). Em português a forma é a de antes, sem `label`.
+ */
+export function zonesFor(total: number, lang: 'pt' | 'es' = 'pt'): RiskZone[] {
   const safe = Number.isFinite(total) && total > 0 ? Math.round(total) : 0;
-  return ZONE_RULES.map((r) => ({
-    zone: r.zone,
-    labelPt: r.labelPt,
-    lose: r.lose,
-    amount: r.lose === 'tudo' ? safe : 0,
-    note: r.note,
-  }));
+  return ZONE_RULES.map((r) => {
+    const base: RiskZone = {
+      zone: r.zone,
+      labelPt: r.labelPt,
+      lose: r.lose,
+      amount: r.lose === 'tudo' ? safe : 0,
+      note: r.note,
+    };
+    if (lang !== 'es') return base;
+    const es = ZONE_TEXT_ES[r.zone];
+    return { ...base, note: es.note, label: es.label };
+  });
 }
 
 export function zoneRule(zone: ZoneKind): ZoneRule {

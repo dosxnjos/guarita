@@ -1,6 +1,6 @@
 {
   "name": "guarita-app",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Guarita no PC: companheiro em PT-BR para quem joga Albion Online (Americas). Não afiliado à Sandbox Interactive.",
   "private": true,
   "type": "module",

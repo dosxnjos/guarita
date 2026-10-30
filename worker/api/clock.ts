@@ -4,7 +4,8 @@
 import type { Env } from '../env';
 import type { ClockResponse, Festivity } from '../../shared/types';
 import { PREMIUM_30D_GOLD, SEASON, SERVER_STATUS_URL } from '../../shared/market';
-import { festivityLabelPt } from '../../shared/festivities';
+import { festivityLabelEs, festivityLabelPt } from '../../shared/festivities';
+import { apiLang, tl, type ApiLang } from '../../shared/lang';
 import { median } from '../../shared/confidence';
 import { aodpFestivities, aodpGold, USER_AGENT, type FestivityRaw } from '../lib/aodp';
 import { cachedJsonMeta } from '../lib/cache';
@@ -36,8 +37,11 @@ export function parseStatusText(text: string): unknown {
   return JSON.parse(text.replace(/^﻿/, '').trim());
 }
 
-/** Só festividades ativas agora ou que começam nas próximas 48 h, em ordem de início. */
-export function filterFestivities(events: FestivityRaw[], now: number): Festivity[] {
+/**
+ * Só festividades ativas agora ou que começam nas próximas 48 h, em ordem de início. `lang` 'es' acrescenta o campo
+ * opcional `label` (rótulo em espanhol, festivityLabelEs); `labelPt` continua o português nas duas línguas.
+ */
+export function filterFestivities(events: FestivityRaw[], now: number, lang: ApiLang = 'pt'): Festivity[] {
   return events
     .filter((e) => {
       const start = Date.parse(e.start);
@@ -46,7 +50,10 @@ export function filterFestivities(events: FestivityRaw[], now: number): Festivit
       return start <= now + UPCOMING_MS;
     })
     .sort((a, b) => a.start.localeCompare(b.start) || a.kind - b.kind)
-    .map((e) => ({ kind: e.kind, category: e.category, name: e.name, labelPt: festivityLabelPt(e.kind, e.category, e.name), start: e.start, end: e.end }));
+    .map((e) => {
+      const f: Festivity = { kind: e.kind, category: e.category, name: e.name, labelPt: festivityLabelPt(e.kind, e.category, e.name), start: e.start, end: e.end };
+      return lang === 'es' ? { ...f, label: festivityLabelEs(e.kind, e.category, e.name) } : f;
+    });
 }
 
 function mean(v: number[]): number {
@@ -71,7 +78,7 @@ export function summarizeGold(points: { price: number; at: string }[]): Gold {
 
 // ---------- fontes ----------
 
-async function serverStatus(ctx: ExecutionContext | undefined): Promise<ServerStatus> {
+async function serverStatus(ctx: ExecutionContext | undefined, lang: ApiLang = 'pt'): Promise<ServerStatus> {
   try {
     const r = await cachedJsonMeta('status/server', STATUS_TTL, ctx, async () => {
       const res = await fetch(SERVER_STATUS_URL, {
@@ -84,14 +91,22 @@ async function serverStatus(ctx: ExecutionContext | undefined): Promise<ServerSt
     return { ...r.data, checkedAt: r.at };
   } catch (err) {
     console.warn('relógio: status do servidor indisponível', String(err));
-    return { status: 'desconhecido', message: 'Não foi possível consultar o status do servidor.', checkedAt: new Date().toISOString() };
+    return {
+      status: 'desconhecido',
+      message: tl(lang, 'Não foi possível consultar o status do servidor.', 'No fue posible consultar el estado del servidor.'),
+      checkedAt: new Date().toISOString(),
+    };
   }
 }
 
-export async function getClock(_env: Env, ctx: ExecutionContext): Promise<ClockResponse> {
+/**
+ * Relógio. `lang` 'es': rótulo das festividades em espanhol (campo `label`) e a mensagem de falha do status em
+ * espanhol; a mensagem que vem do próprio servidor do jogo passa como veio. Mesmo dado em cache, mesmos subrequests.
+ */
+export async function getClock(_env: Env, ctx: ExecutionContext, lang: ApiLang = 'pt'): Promise<ClockResponse> {
   const now = Date.now();
   const [server, fest, gold] = await Promise.all([
-    serverStatus(ctx),
+    serverStatus(ctx, lang),
     aodpFestivities(ctx).catch((e) => { console.warn('relógio: festividades indisponíveis', String(e)); return [] as FestivityRaw[]; }),
     aodpGold(GOLD_POINTS, ctx).catch((e) => { console.warn('relógio: ouro indisponível', String(e)); return [] as { price: number; at: string }[]; }),
   ]);
@@ -99,7 +114,7 @@ export async function getClock(_env: Env, ctx: ExecutionContext): Promise<ClockR
   return {
     now: new Date(now).toISOString(),
     server,
-    festivities: filterFestivities(fest, now),
+    festivities: filterFestivities(fest, now, lang),
     gold: g,
     premiumSilver: g.price === null ? null : Math.round(PREMIUM_30D_GOLD * g.price),
     season: { name: SEASON.name, end: SEASON.end, approx: true },
@@ -108,13 +123,14 @@ export async function getClock(_env: Env, ctx: ExecutionContext): Promise<ClockR
 
 export async function routeClock(request: Request, url: URL, env: Env, ctx: ExecutionContext): Promise<Response | null> {
   if (url.pathname !== '/api/clock' && url.pathname !== '/api/clock/') return null;
+  const lang = apiLang(url.searchParams.get('lang'));
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return json({ error: 'método não permitido' }, 405, 0, { Allow: 'GET, HEAD' });
+    return json({ error: tl(lang, 'método não permitido', 'método no permitido') }, 405, 0, { Allow: 'GET, HEAD' });
   }
   try {
-    return json(await getClock(env, ctx), 200, 120);
+    return json(await getClock(env, ctx, lang), 200, 120);
   } catch (err) {
     console.error('relógio: erro inesperado', err);
-    return json({ error: 'Não foi possível montar o relógio agora.' }, 502);
+    return json({ error: tl(lang, 'Não foi possível montar o relógio agora.', 'No fue posible preparar el reloj ahora.') }, 502);
   }
 }

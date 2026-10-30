@@ -20,7 +20,8 @@ import type {
   RebuyLine,
 } from '../../shared/types';
 import { ROYAL_CITIES, minutesSince } from '../../shared/market';
-import { WEAPON_LABEL_PT, weaponFamily, type WeaponFamily } from '../../shared/weapons';
+import { WEAPON_LABEL_ES, WEAPON_LABEL_PT, weaponFamily, type WeaponFamily } from '../../shared/weapons';
+import { apiLang, fmtDecL, fmtFameL, fmtIntL, tl, type ApiLang } from '../../shared/lang';
 import { aodpPrices } from '../lib/aodp';
 import { Budget, GameinfoError, GI_TTL, gameinfoCached, giPath, type GiOptions } from '../lib/gameinfo';
 
@@ -78,6 +79,8 @@ const RECENT = 10;
 
 export const MSG_GAMEINFO_DOWN = 'O killboard oficial está lento ou fora do ar; tente de novo em instantes';
 export const MSG_NOT_FOUND = 'Jogador não encontrado no killboard do Americas.';
+export const MSG_GAMEINFO_DOWN_ES = 'El killboard oficial está lento o fuera de servicio; inténtalo de nuevo en unos instantes';
+export const MSG_NOT_FOUND_ES = 'Jugador no encontrado en el killboard de Americas.';
 
 // ---------- utilitários ----------
 
@@ -86,16 +89,11 @@ const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v)
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d;
 
-const NF = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
-const NF1 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
-/** 1350 → "1.350". */
-export const fmtInt = (n: number) => NF.format(Math.round(n));
-/** Fama compacta: 2421977 → "2,4 mi"; 52000 → "52 mil". */
-export function fmtFame(n: number): string {
-  if (n >= 1e9) return `${NF1.format(n / 1e9)} bi`;
-  if (n >= 1e6) return `${NF1.format(n / 1e6)} mi`;
-  if (n >= 1e3) return `${NF.format(n / 1e3)} mil`;
-  return NF.format(n);
+/** 1350 → "1.350" (es: "1,350"). */
+export const fmtInt = (n: number, lang: ApiLang = 'pt') => fmtIntL(n, lang);
+/** Fama compacta: 2421977 → "2,4 mi"; 52000 → "52 mil" (es: "2.4 M", "52 mil"). */
+export function fmtFame(n: number, lang: ApiLang = 'pt'): string {
+  return fmtFameL(n, lang);
 }
 
 /** Data da gameinfo (7 a 9 casas de fração) → ISO em ms. */
@@ -265,21 +263,31 @@ export interface DangerInput {
 /**
  * Perigo 0–100 para quem está decidindo se foge ou luta. Soma pontos por fama, razão, ritmo recente de kills,
  * estilo (ganker solo com IP alto, grupo grande) e IP; quem não mata há 30 dias pesa 60%.
+ * `lang` muda só o texto dos motivos (o rótulo continua o código em PT do contrato).
  */
-export function computeDanger(d: DangerInput, now = Date.now()): Danger {
+export function computeDanger(d: DangerInput, now = Date.now(), lang: ApiLang = 'pt'): Danger {
+  const t = (pt: string, es: string) => tl(lang, pt, es);
   if (!d.kills.length && !d.deaths.length && d.killFame <= 0) {
-    return { score: 0, label: 'sem dado', reasons: ['nenhuma kill no killboard'] };
+    return { score: 0, label: 'sem dado', reasons: [t('nenhuma kill no killboard', 'ningún asesinato en el killboard')] };
   }
   let score = 0;
   const reasons: string[] = [];
+  const fame = fmtFame(d.killFame, lang);
 
-  if (d.killFame >= 50e6) { score += 25; reasons.push(`fama de abate muito alta (${fmtFame(d.killFame)})`); }
-  else if (d.killFame >= 10e6) { score += 18; reasons.push(`fama de abate alta (${fmtFame(d.killFame)})`); }
+  if (d.killFame >= 50e6) { score += 25; reasons.push(t(`fama de abate muito alta (${fame})`, `fama por asesinatos muy alta (${fame})`)); }
+  else if (d.killFame >= 10e6) { score += 18; reasons.push(t(`fama de abate alta (${fame})`, `fama por asesinatos alta (${fame})`)); }
   else if (d.killFame >= 1e6) score += 8;
 
   const ratio = fameRatio(d.killFame, d.deathFame);
-  if (d.killFame >= 1e6 && ratio >= 3) { score += 15; reasons.push(`mata ${NF1.format(Math.min(ratio, 99))}× mais do que morre`); }
-  else if (d.killFame >= 1e6 && ratio >= 1.5) { score += 8; reasons.push(`mata mais do que morre (${NF1.format(ratio)}×)`); }
+  if (d.killFame >= 1e6 && ratio >= 3) {
+    score += 15;
+    const r = fmtDecL(Math.min(ratio, 99), lang);
+    reasons.push(t(`mata ${r}× mais do que morre`, `mata ${r}× más de lo que muere`));
+  } else if (d.killFame >= 1e6 && ratio >= 1.5) {
+    score += 8;
+    const r = fmtDecL(ratio, lang);
+    reasons.push(t(`mata mais do que morre (${r}×)`, `mata más de lo que muere (${r}×)`));
+  }
 
   const day = 86_400_000;
   const times = d.kills.map((e) => Date.parse(e.time)).filter(Number.isFinite);
@@ -288,32 +296,43 @@ export function computeDanger(d: DangerInput, now = Date.now()): Danger {
   else if (last7 >= 5) score += 18;
   else if (last7 >= 2) score += 10;
   else if (last7 === 1) score += 4;
-  if (last7 >= 2) reasons.push(`${last7} kills recentes (últimos 7 dias)`);
+  if (last7 >= 2) reasons.push(t(`${last7} kills recentes (últimos 7 dias)`, `${last7} asesinatos recientes (últimos 7 días)`));
 
   const solo = d.soloRate ?? 0;
   if (d.kills.length >= 3 && solo >= 0.5) {
-    const pct = `${Math.round(solo * 100)}% das kills`;
-    if ((d.avgIp ?? 0) >= 1200) { score += 20; reasons.push(`mata sozinho com IP alto (${pct})`); }
-    else { score += 12; reasons.push(`mata sozinho (${pct})`); }
+    const n = Math.round(solo * 100);
+    const pct = t(`${n}% das kills`, `${n}% de los asesinatos`);
+    if ((d.avgIp ?? 0) >= 1200) { score += 20; reasons.push(t(`mata sozinho com IP alto (${pct})`, `mata en solitario con IP alto (${pct})`)); }
+    else { score += 12; reasons.push(t(`mata sozinho (${pct})`, `mata en solitario (${pct})`)); }
   }
-  if ((d.avgGroup ?? 0) >= 5) { score += 10; reasons.push(`anda em grupo de ${Math.round(d.avgGroup ?? 0)}`); }
+  if ((d.avgGroup ?? 0) >= 5) {
+    const g = Math.round(d.avgGroup ?? 0);
+    score += 10;
+    reasons.push(t(`anda em grupo de ${g}`, `anda en grupo de ${g}`));
+  }
 
-  if (d.avgIp != null && d.avgIp >= 1400) { score += 10; reasons.push(`IP médio ${fmtInt(d.avgIp)}`); }
-  else if (d.avgIp != null && d.avgIp >= 1250) { score += 5; reasons.push(`IP médio ${fmtInt(d.avgIp)}`); }
+  if (d.avgIp != null && d.avgIp >= 1250) {
+    score += d.avgIp >= 1400 ? 10 : 5;
+    const ip = fmtInt(d.avgIp, lang);
+    reasons.push(t(`IP médio ${ip}`, `IP medio ${ip}`));
+  }
 
   const lastKill = times.length ? Math.max(...times) : null;
   if (lastKill == null) {
     score = Math.round(score * 0.6);
-    reasons.push('nenhuma kill recente no killboard');
+    reasons.push(t('nenhuma kill recente no killboard', 'ningún asesinato reciente en el killboard'));
   } else if (now - lastKill > 30 * day) {
     score = Math.round(score * 0.6);
-    reasons.push(`última kill há ${Math.floor((now - lastKill) / day)} dias`);
+    const days = Math.floor((now - lastKill) / day);
+    reasons.push(t(`última kill há ${days} dias`, `último asesinato hace ${days} días`));
   }
-  if (d.partial) reasons.push('parte do histórico não carregou agora');
+  if (d.partial) reasons.push(t('parte do histórico não carregou agora', 'parte del historial no se pudo cargar ahora'));
 
   score = Math.max(0, Math.min(100, Math.round(score)));
   const label: Danger['label'] = score >= 60 ? 'perigoso' : score >= 30 ? 'atenção' : 'tranquilo';
-  if (!reasons.length) reasons.push(label === 'tranquilo' ? 'pouca atividade de PvP' : 'histórico de PvP moderado');
+  if (!reasons.length) {
+    reasons.push(label === 'tranquilo' ? t('pouca atividade de PvP', 'poca actividad de PvP') : t('histórico de PvP moderado', 'historial de PvP moderado'));
+  }
   return { score, label, reasons };
 }
 
@@ -408,8 +427,10 @@ export interface LessonInput {
   setValue: number | null;
 }
 
-/** 3 a 5 frases curtas, por regra, a partir da morte. A ordem é a prioridade (corta no fim). */
-export function buildLessons({ death, killerDanger, killerBasic, setValue }: LessonInput): string[] {
+/** 3 a 5 frases curtas, por regra, a partir da morte. A ordem é a prioridade (corta no fim). `lang`: só o texto. */
+export function buildLessons({ death, killerDanger, killerBasic, setValue }: LessonInput, lang: ApiLang = 'pt'): string[] {
+  const t = (pt: string, es: string) => tl(lang, pt, es);
+  const n = (x: number) => fmtInt(x, lang);
   const out: string[] = [];
   const k = death.killer;
   const v = death.victim;
@@ -417,42 +438,76 @@ export function buildLessons({ death, killerDanger, killerBasic, setValue }: Les
 
   if (k.ip > 0 && v.ip > 0) {
     const gap = k.ip - v.ip;
-    if (gap >= 200) out.push(`Ele estava com IP bem maior (${fmtInt(k.ip)} contra ${fmtInt(v.ip)}); evite trocar com builds desse nível.`);
-    else if (gap >= 100) out.push(`O matador tinha IP um pouco acima (+${fmtInt(gap)}): numa troca parelha isso pesa; escolha melhor a hora de lutar.`);
-    else if (gap <= -150 && isSolo(death)) out.push(`Você tinha IP maior (${fmtInt(v.ip)} contra ${fmtInt(k.ip)}) e mesmo assim perdeu no um contra um: reveja a build e o tempo das habilidades.`);
+    if (gap >= 200) {
+      out.push(t(
+        `Ele estava com IP bem maior (${n(k.ip)} contra ${n(v.ip)}); evite trocar com builds desse nível.`,
+        `Quien te mató tenía un IP mucho mayor (${n(k.ip)} contra ${n(v.ip)}); evita pelear contra builds de ese nivel.`,
+      ));
+    } else if (gap >= 100) {
+      out.push(t(
+        `O matador tinha IP um pouco acima (+${n(gap)}): numa troca parelha isso pesa; escolha melhor a hora de lutar.`,
+        `Quien te mató tenía un IP un poco mayor (+${n(gap)}): en una pelea pareja eso pesa; elige mejor el momento de pelear.`,
+      ));
+    } else if (gap <= -150 && isSolo(death)) {
+      out.push(t(
+        `Você tinha IP maior (${n(v.ip)} contra ${n(k.ip)}) e mesmo assim perdeu no um contra um: reveja a build e o tempo das habilidades.`,
+        `Tenías un IP mayor (${n(v.ip)} contra ${n(k.ip)}) y aun así perdiste el uno contra uno: revisa la build y el momento de usar las habilidades.`,
+      ));
+    }
   }
 
-  if (death.group >= 4) out.push(`Foi um grupo de ${death.group}: em zona vermelha ou preta, ande com escolta ou evite o horário de pico.`);
-  else if (death.group >= 2) out.push(`Foram ${death.group} contra você: quando vir mais de um inimigo chegando junto, saia cedo.`);
+  if (death.group >= 4) {
+    out.push(t(
+      `Foi um grupo de ${death.group}: em zona vermelha ou preta, ande com escolta ou evite o horário de pico.`,
+      `Fue un grupo de ${death.group}: en zona roja o negra, ve con escolta o evita la hora pico.`,
+    ));
+  } else if (death.group >= 2) {
+    out.push(t(
+      `Foram ${death.group} contra você: quando vir mais de um inimigo chegando junto, saia cedo.`,
+      `Fueron ${death.group} contra ti: cuando veas llegar a más de un enemigo a la vez, retírate pronto.`,
+    ));
+  }
 
-  if (killerBasic) out.push('Não deu para carregar o histórico do matador agora; abra o dossiê dele daqui a pouco.');
-  else if (killerDanger?.label === 'perigoso') out.push('Esse jogador mata com frequência: evite a área dele.');
-  else if (killerDanger?.label === 'atenção') out.push('Esse jogador tem histórico de PvP: fique atento se cruzar com ele de novo.');
+  if (killerBasic) out.push(t('Não deu para carregar o histórico do matador agora; abra o dossiê dele daqui a pouco.', 'No se pudo cargar ahora el historial de quien te mató; abre su dosier en un rato.'));
+  else if (killerDanger?.label === 'perigoso') out.push(t('Esse jogador mata com frequência: evite a área dele.', 'Este jugador mata con frecuencia: evita su zona.'));
+  else if (killerDanger?.label === 'atenção') out.push(t('Esse jogador tem histórico de PvP: fique atento se cruzar com ele de novo.', 'Este jugador tiene historial de PvP: mantente atento si te lo cruzas de nuevo.'));
 
-  if (!has('Mount')) out.push('Você estava sem montaria: sem ela, fugir fica quase impossível.');
-  if (!has('Potion') && !has('Food')) out.push('Sem poção e sem comida no set: leve as duas, elas decidem uma troca ou garantem a fuga.');
-  else if (!has('Potion')) out.push('Sem poção no set: leve uma de cura ou de resistência para virar a luta ou fugir.');
-  else if (!has('Food')) out.push('Sem comida no set: o bônus da comida faz diferença numa troca.');
+  if (!has('Mount')) out.push(t('Você estava sem montaria: sem ela, fugir fica quase impossível.', 'No llevabas montura: sin ella, huir es casi imposible.'));
+  if (!has('Potion') && !has('Food')) out.push(t('Sem poção e sem comida no set: leve as duas, elas decidem uma troca ou garantem a fuga.', 'Sin poción ni comida en el set: lleva las dos, deciden una pelea o aseguran la huida.'));
+  else if (!has('Potion')) out.push(t('Sem poção no set: leve uma de cura ou de resistência para virar a luta ou fugir.', 'Sin poción en el set: lleva una de curación o de resistencia para darle la vuelta a la pelea o huir.'));
+  else if (!has('Food')) out.push(t('Sem comida no set: o bônus da comida faz diferença numa troca.', 'Sin comida en el set: la bonificación de la comida marca la diferencia en una pelea.'));
 
   if (setValue != null && setValue >= 500_000) {
-    out.push(`Você carregava ${fmtInt(setValue)} de prata em equipamento: considere um set mais barato para essa atividade.`);
+    out.push(t(
+      `Você carregava ${n(setValue)} de prata em equipamento: considere um set mais barato para essa atividade.`,
+      `Llevabas ${n(setValue)} de plata en equipo: considera un set más barato para esa actividad.`,
+    ));
   }
 
   if (v.gear.some((g) => /GATHERER/.test(g.id))) {
-    out.push('Você morreu coletando: em zona de risco, colete perto da saída e de olho no mapa.');
+    out.push(t('Você morreu coletando: em zona de risco, colete perto da saída e de olho no mapa.', 'Moriste recolectando: en zona de riesgo, recolecta cerca de la salida y atento al mapa.'));
   }
 
   const kMain = k.gear.find((g) => g.slot === 'MainHand');
   const fam = weaponFamily(kMain?.id);
   if (fam !== 'other' && fam !== 'tool') {
-    out.push(`Ele usava ${WEAPON_LABEL_PT[fam]}: conheça o alcance e as habilidades dessa arma para reconhecer a build na próxima.`);
+    out.push(t(
+      `Ele usava ${WEAPON_LABEL_PT[fam]}: conheça o alcance e as habilidades dessa arma para reconhecer a build na próxima.`,
+      `Quien te mató usaba un arma de tipo ${WEAPON_LABEL_ES[fam].toLowerCase()}: conoce el alcance y las habilidades de esa arma para reconocer la build la próxima vez.`,
+    ));
   }
 
-  const fallback = [
-    'Confira o dossiê do matador antes de voltar para a mesma área.',
-    'Guarde no banco a prata que você não pode perder antes de sair para zona de risco.',
-    'Na dúvida entre lutar e fugir, fuja cedo: a fuga perde menos do que a morte.',
-  ];
+  const fallback = lang === 'es'
+    ? [
+        'Revisa el dosier de quien te mató antes de volver a la misma zona.',
+        'Guarda en el banco la plata que no puedes perder antes de salir a una zona de riesgo.',
+        'Si dudas entre pelear y huir, huye pronto: huir cuesta menos que morir.',
+      ]
+    : [
+        'Confira o dossiê do matador antes de voltar para a mesma área.',
+        'Guarde no banco a prata que você não pode perder antes de sair para zona de risco.',
+        'Na dúvida entre lutar e fugir, fuja cedo: a fuga perde menos do que a morte.',
+      ];
   for (const f of fallback) if (out.length < 3) out.push(f);
   return out.slice(0, 5);
 }
@@ -469,6 +524,8 @@ interface BuildOpts {
   budget: Budget;
   retry?: boolean;
   timeoutMs?: number;
+  /** Língua dos motivos do perigo (o dado bruto em cache é o mesmo). */
+  lang?: ApiLang;
 }
 
 /** Dossiê completo; gasta 3 idas à gameinfo (em paralelo) + 1 ao AODP no máximo, fora as novas tentativas. */
@@ -505,13 +562,13 @@ async function buildDossier(id: string, o: BuildOpts): Promise<PlayerDossier> {
     recentDeaths: deaths.map((e) => toKillEvent(e, value(e))),
     weapons: weaponsOf(id, kills, deaths),
     ...stats,
-    danger: computeDanger({ killFame: player.killFame, deathFame: player.deathFame, kills, deaths, ...stats, partial }),
+    danger: computeDanger({ killFame: player.killFame, deathFame: player.deathFame, kills, deaths, ...stats, partial }, Date.now(), o.lang ?? 'pt'),
     fetchedAt: oldest(p.value.at, k.status === 'fulfilled' ? k.value.at : undefined, d.status === 'fulfilled' ? d.value.at : undefined),
   };
 }
 
 /** Dossiê mínimo montado só com o que veio no evento (quando o completo não carrega ou estoura o orçamento). */
-export function basicDossier(side: SlimSide): PlayerDossier {
+export function basicDossier(side: SlimSide, lang: ApiLang = 'pt'): PlayerDossier {
   const main = side.gear.find((g) => g.slot === 'MainHand');
   const fam = main ? weaponFamily(main.id) : null;
   return {
@@ -530,7 +587,11 @@ export function basicDossier(side: SlimSide): PlayerDossier {
     soloRate: null,
     avgGroup: null,
     avgIp: side.ip > 0 ? side.ip : null,
-    danger: { score: 0, label: 'sem dado', reasons: ['histórico completo indisponível agora; tente de novo em instantes'] },
+    danger: {
+      score: 0,
+      label: 'sem dado',
+      reasons: [tl(lang, 'histórico completo indisponível agora; tente de novo em instantes', 'historial completo no disponible ahora; inténtalo de nuevo en unos instantes')],
+    },
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -546,11 +607,13 @@ export async function searchPlayers(_env: Env, ctx: ExecutionContext, q: string)
   return { players: res.data };
 }
 
-export async function getDossier(_env: Env, ctx: ExecutionContext, id: string): Promise<PlayerDossier> {
-  return buildDossier(id, { ctx, budget: new Budget(DOSSIER_BUDGET) });
+/** `lang` 'es': motivos do perigo em espanhol (mesmo dado em cache, mesmos subrequests). */
+export async function getDossier(_env: Env, ctx: ExecutionContext, id: string, lang: ApiLang = 'pt'): Promise<PlayerDossier> {
+  return buildDossier(id, { ctx, budget: new Budget(DOSSIER_BUDGET), lang });
 }
 
-export async function getAutopsy(_env: Env, ctx: ExecutionContext, id: string): Promise<AutopsyResponse> {
+/** `lang` 'es': lições e motivos do perigo do matador em espanhol (mesmo dado em cache, mesmos subrequests). */
+export async function getAutopsy(_env: Env, ctx: ExecutionContext, id: string, lang: ApiLang = 'pt'): Promise<AutopsyResponse> {
   const budget = new Budget(AUTOPSY_BUDGET);
   const deaths = await gameinfoCached(giPath.deaths(id), GI_TTL.events, normalizeEvents, { ctx, budget });
   const last = deaths.data[0];
@@ -562,14 +625,14 @@ export async function getAutopsy(_env: Env, ctx: ExecutionContext, id: string): 
   const [rows, killer] = await Promise.all([
     safePrices([...new Set(gear.map((g) => g.id))], [1, 2, 3, 4, 5], ctx, budget),
     last.killer.id
-      ? buildDossier(last.killer.id, { ctx, budget, retry: false, timeoutMs: 15_000 }).then(
+      ? buildDossier(last.killer.id, { ctx, budget, retry: false, timeoutMs: 15_000, lang }).then(
           (d) => ({ d, basic: false }),
           (err) => {
             console.warn('player: dossiê do matador falhou', String(err));
-            return { d: basicDossier(last.killer), basic: true };
+            return { d: basicDossier(last.killer, lang), basic: true };
           },
         )
-      : Promise.resolve({ d: basicDossier(last.killer), basic: true }),
+      : Promise.resolve({ d: basicDossier(last.killer, lang), basic: true }),
   ]);
 
   const { rebuy, rebuyTotal } = buildRebuy(gear, rows);
@@ -577,7 +640,7 @@ export async function getAutopsy(_env: Env, ctx: ExecutionContext, id: string): 
     // "Valor estimado" da morte com a mesma régua do dossiê (qualidade 1); rebuyTotal é o custo de recompra.
     death: toKillEvent(last, gearValue(gear, rows.filter((r) => r.quality === 1))),
     killerDossier: killer.d,
-    lessons: buildLessons({ death: last, killerDanger: killer.d.danger, killerBasic: killer.basic, setValue: rebuyTotal }),
+    lessons: buildLessons({ death: last, killerDanger: killer.d.danger, killerBasic: killer.basic, setValue: rebuyTotal }, lang),
     rebuy,
     rebuyTotal,
   };
@@ -595,37 +658,46 @@ function json(body: unknown, status = 200): Response {
 }
 
 /** Traduz erro em resposta: 404 jogador inexistente, 504 lento, 502 fora do ar. */
-export function playerErrorResponse(err: unknown): Response {
+export function playerErrorResponse(err: unknown, lang: ApiLang = 'pt'): Response {
   if (err instanceof GameinfoError) {
-    if (err.kind === 'not_found') return json({ error: MSG_NOT_FOUND }, 404);
-    if (err.kind === 'timeout') return json({ error: MSG_GAMEINFO_DOWN }, 504);
-    return json({ error: MSG_GAMEINFO_DOWN }, 502);
+    if (err.kind === 'not_found') return json({ error: tl(lang, MSG_NOT_FOUND, MSG_NOT_FOUND_ES) }, 404);
+    const down = tl(lang, MSG_GAMEINFO_DOWN, MSG_GAMEINFO_DOWN_ES);
+    if (err.kind === 'timeout') return json({ error: down }, 504);
+    return json({ error: down }, 502);
   }
   console.error('player: erro inesperado', err);
-  return json({ error: 'Erro interno ao montar os dados do jogador.' }, 500);
+  return json({ error: tl(lang, 'Erro interno ao montar os dados do jogador.', 'Error interno al preparar los datos del jugador.') }, 500);
 }
 
+/**
+ * /api/player/search?q=, /api/player/:id e /api/player/:id/autopsy. `?lang=es` devolve em espanhol os motivos do
+ * perigo, as lições da autópsia e as mensagens de erro; sem ele (ou com outro valor), tudo igual a antes.
+ */
 export async function routePlayer(request: Request, url: URL, env: Env, ctx: ExecutionContext): Promise<Response | null> {
   const parts = url.pathname.replace(/\/+$/, '').split('/');
   if (parts[1] !== 'api' || parts[2] !== 'player') return null;
+  const lang = apiLang(url.searchParams.get('lang'));
+  const t = (pt: string, es: string) => tl(lang, pt, es);
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return Response.json({ error: 'método não permitido' }, { status: 405, headers: { Allow: 'GET' } });
+    return Response.json({ error: t('método não permitido', 'método no permitido') }, { status: 405, headers: { Allow: 'GET' } });
   }
   try {
     if (parts.length === 4 && parts[3] === 'search') {
       const q = (url.searchParams.get('q') ?? '').trim();
-      if (q.length < 3) return json({ error: 'Digite pelo menos 3 caracteres do nome.' }, 400);
-      if (q.length > 32) return json({ error: 'Nome longo demais: no Albion o nome tem até 16 caracteres.' }, 400);
+      if (q.length < 3) return json({ error: t('Digite pelo menos 3 caracteres do nome.', 'Escribe al menos 3 caracteres del nombre.') }, 400);
+      if (q.length > 32) {
+        return json({ error: t('Nome longo demais: no Albion o nome tem até 16 caracteres.', 'Nombre demasiado largo: en Albion el nombre tiene hasta 16 caracteres.') }, 400);
+      }
       return json(await searchPlayers(env, ctx, q));
     }
     const id = parts[3] ?? '';
     if ((parts.length === 4 || (parts.length === 5 && parts[4] === 'autopsy')) && !ID_RE.test(id)) {
-      return json({ error: 'Id de jogador inválido.' }, 400);
+      return json({ error: t('Id de jogador inválido.', 'Id de jugador no válido.') }, 400);
     }
-    if (parts.length === 4) return json(await getDossier(env, ctx, id));
-    if (parts.length === 5 && parts[4] === 'autopsy') return json(await getAutopsy(env, ctx, id));
-    return json({ error: 'rota não encontrada' }, 404);
+    if (parts.length === 4) return json(await getDossier(env, ctx, id, lang));
+    if (parts.length === 5 && parts[4] === 'autopsy') return json(await getAutopsy(env, ctx, id, lang));
+    return json({ error: t('rota não encontrada', 'ruta no encontrada') }, 404);
   } catch (err) {
-    return playerErrorResponse(err);
+    return playerErrorResponse(err, lang);
   }
 }

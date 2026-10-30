@@ -1,5 +1,6 @@
 // Regras puras das janelas na interface: o que reabrir ao iniciar, opacidade rápida da barra e tema.
 // Testado em tests/ui.test.ts.
+import { currentLocale, type Locale } from '../../../src/lib/i18n/core';
 import type { GuaritaConfig } from './config';
 import { OPACITY_MIN, WIDGET_LABELS, clampOpacity, type WidgetLabel } from './windows';
 
@@ -35,6 +36,12 @@ export const TEMAS: { id: Tema; nome: string }[] = [
   { id: 'claro', nome: 'Claro' },
   { id: 'sistema', nome: 'Igual ao Windows' },
 ];
+const TEMAS_ES: Record<Tema, string> = { escuro: 'Oscuro', claro: 'Claro', sistema: 'Igual que Windows' };
+
+/** Nome do tema na língua pedida (padrão: a do app). */
+export function nomeTema(t: Tema, loc: Locale = currentLocale()): string {
+  return loc === 'es' ? TEMAS_ES[t] : (TEMAS.find((x) => x.id === t)?.nome ?? t);
+}
 export const TEMA_CHAVE = 'guarita-app-tema';
 
 export function lerTema(raw: string | null | undefined): Tema {

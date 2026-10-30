@@ -8,6 +8,7 @@
   import { fmtOpacidade, proximaOpacidade } from '../ui-janelas';
   import { closeSelf, isTauri, minimizeSelf, setOnTop, type WidgetLabel } from '../windows';
   import AvisoSbi from './AvisoSbi.svelte';
+  import { tx } from '../i18n.svelte';
 
   let { label, titulo, children }: { label: WidgetLabel; titulo: string; children: Snippet } = $props();
 
@@ -73,28 +74,28 @@
   <header class="barra" data-tauri-drag-region>
     <span class="titulo" data-tauri-drag-region>{titulo}</span>
     <div class="botoes">
-      <button type="button" class="icone" title="Opacidade do fundo: {fmtOpacidade(opacidade)}. Clique para trocar." onclick={trocarOpacidade}>
+      <button type="button" class="icone" title={tx(`Opacidade do fundo: ${fmtOpacidade(opacidade)}. Clique para trocar.`, `Opacidad del fondo: ${fmtOpacidade(opacidade)}. Haz clic para cambiarla.`)} onclick={trocarOpacidade}>
         <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" /><path d="M8 2.5v11" /><path d="M8 4.5h3.2M8 7h5M8 9.5h4.6M8 12h2.6" class="fino" /></svg>
-        <span class="sr">Opacidade do fundo: {fmtOpacidade(opacidade)}</span>
+        <span class="sr">{tx('Opacidade do fundo', 'Opacidad del fondo')}: {fmtOpacidade(opacidade)}</span>
       </button>
       <button
         type="button"
         class="icone"
         class:ativo={porCima}
         aria-pressed={porCima}
-        title={porCima ? 'Soltar (deixa de ficar por cima)' : 'Fixar por cima das outras janelas'}
+        title={porCima ? tx('Soltar (deixa de ficar por cima)', 'Soltar (deja de estar encima)') : tx('Fixar por cima das outras janelas', 'Fijar encima de las demás ventanas')}
         onclick={alternarPorCima}
       >
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1.5 14.5 6.5 12 7.5 9.5 10 9 13.5 2.5 7 6 6.5 8.5 4z M5 11 1.5 14.5" /></svg>
-        <span class="sr">{porCima ? 'Soltar' : 'Fixar por cima'}</span>
+        <span class="sr">{porCima ? tx('Soltar', 'Soltar') : tx('Fixar por cima', 'Fijar encima')}</span>
       </button>
-      <button type="button" class="icone" title="Minimizar" onclick={() => void minimizeSelf()}>
+      <button type="button" class="icone" title={tx('Minimizar', 'Minimizar')} onclick={() => void minimizeSelf()}>
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5h10" /></svg>
-        <span class="sr">Minimizar</span>
+        <span class="sr">{tx('Minimizar', 'Minimizar')}</span>
       </button>
-      <button type="button" class="icone fechar" title="Fechar" onclick={() => void fechar()}>
+      <button type="button" class="icone fechar" title={tx('Fechar', 'Cerrar')} onclick={() => void fechar()}>
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
-        <span class="sr">Fechar</span>
+        <span class="sr">{tx('Fechar', 'Cerrar')}</span>
       </button>
     </div>
   </header>

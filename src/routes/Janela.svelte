@@ -93,7 +93,7 @@
         <strong>{tx('Antes de ligar, leia', 'Antes de activarla, lee esto')}</strong>
         {#if getLocale() === 'es'}
           <p style="margin:0">En 2020, Sandbox Interactive prohibió las herramientas que hacen “<span lang="en">displaying extra information to the player in the client</span>” (mostrar información extra al jugador dentro del cliente del juego).</p>
-          <p style="margin:0">Esta ventana es del navegador, separada del cliente: no lee, no altera y no dibuja nada dentro del juego. Aun así, quedar encima de la pantalla del juego es una zona gris en las reglas. <strong>El riesgo corre por tu cuenta: es tu cuenta del juego la que se arriesga.</strong></p>
+          <p style="margin:0">Esta ventana es del navegador, separada del cliente: no lee, no altera y no dibuja nada dentro del juego. Aun así, quedar encima de la pantalla del juego es una zona gris en las reglas. <strong>El riesgo es tuyo: lo que está en juego es tu cuenta de Albion.</strong></p>
         {:else}
           <p style="margin:0">Em 2020 a Sandbox Interactive proibiu ferramentas que fazem “<span lang="en">displaying extra information to the player in the client</span>” (mostrar informação extra ao jogador dentro do cliente do jogo).</p>
           <p style="margin:0">Esta janela é do navegador, separada do cliente: não lê, não altera e não desenha nada dentro do jogo. Mesmo assim, ficar por cima da tela do jogo é uma zona cinza nas regras. <strong>O risco é da sua conta.</strong></p>

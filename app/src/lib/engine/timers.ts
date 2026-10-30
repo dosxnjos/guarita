@@ -13,8 +13,9 @@
 import type { TimerKind } from '../../../../shared/types';
 import type { GuaritaConfig, TimerLocal } from '../config';
 import type { Aviso } from '../notify';
-import { fmtTime } from '../format';
+import { articuloHora, fmtTime } from '../format';
 import { minutosFalados } from '../fala';
+import { currentLocale, type Locale } from '../../../../src/lib/i18n/core';
 
 /** Maior atraso seguro de setTimeout (2^31-1 ms). */
 export const MAX_ATRASO_TIMEOUT = 2 ** 31 - 1;
@@ -63,11 +64,53 @@ const TITULO: Record<TimerKind, string> = {
   outro: 'Despertador',
 };
 
+const TITULO_ES: Record<TimerKind, string> = {
+  plantacao: 'Cultivos listos',
+  animal: 'Animales listos',
+  foco: 'Foco recargado',
+  outro: 'Despertador',
+};
+
+/** Título do aviso de um tipo de lembrete na língua pedida. */
+export function tituloTimer(k: TimerKind, loc: Locale = currentLocale()): string {
+  return (loc === 'es' ? TITULO_ES : TITULO)[k];
+}
+
+function avisoTimerEs(t: TimerLocal, now: number, fechado: boolean): Aviso {
+  const titulo = TITULO_ES[t.kind];
+  const nome = t.label || titulo;
+  const hora = fmtTime(t.endsAt, undefined, false);
+  const atraso = atrasoMin(t, now);
+  if (fechado) {
+    return {
+      titulo,
+      corpo: `${nome}: terminó a ${articuloHora(hora)} ${hora} (hora de Brasilia), mientras la app estaba cerrada.`,
+      voz: `${nome}: terminó mientras la app estaba cerrada.`,
+      prioridade: 'normal',
+    };
+  }
+  if (atraso >= ATRASO_AVISO_MIN) {
+    return {
+      titulo,
+      corpo: `${nome}: terminó a ${articuloHora(hora)} ${hora} (hora de Brasilia), hace ${atraso} min.`,
+      voz: `${nome}: terminó hace ${minutosFalados(atraso, 'es')}.`,
+      prioridade: 'alta',
+    };
+  }
+  return {
+    titulo,
+    corpo: `${nome}: terminó ahora, a ${articuloHora(hora)} ${hora} (hora de Brasilia).`,
+    voz: nome === titulo ? `${nome}.` : `${titulo}: ${nome}.`,
+    prioridade: 'alta',
+  };
+}
+
 /**
  * Aviso de um timer vencido. `fechado` = venceu antes de o app abrir (o aviso diz isso);
  * senão, se saiu com atraso de 2 min ou mais (painel escondido), diz há quanto tempo venceu. Pura.
  */
-export function avisoTimer(t: TimerLocal, now: number, fechado: boolean): Aviso {
+export function avisoTimer(t: TimerLocal, now: number, fechado: boolean, loc: Locale = currentLocale()): Aviso {
+  if (loc === 'es') return avisoTimerEs(t, now, fechado);
   const nome = t.label || TITULO[t.kind];
   const hora = fmtTime(t.endsAt, undefined, false);
   const atraso = atrasoMin(t, now);
@@ -83,7 +126,7 @@ export function avisoTimer(t: TimerLocal, now: number, fechado: boolean): Aviso 
     return {
       titulo: TITULO[t.kind],
       corpo: `${nome}: venceu às ${hora} (horário de Brasília), há ${atraso} min.`,
-      voz: `${nome}: venceu há ${minutosFalados(atraso)}.`,
+      voz: `${nome}: venceu há ${minutosFalados(atraso, loc)}.`,
       prioridade: 'alta',
     };
   }
@@ -102,19 +145,36 @@ const PLURAL: Record<TimerKind, [um: string, varios: string]> = {
   outro: ['outro lembrete', 'outros lembretes'],
 };
 
+const PLURAL_ES: Record<TimerKind, [um: string, varios: string]> = {
+  plantacao: ['cultivo', 'cultivos'],
+  animal: ['lote de animales', 'lotes de animales'],
+  foco: ['foco', 'focos'],
+  outro: ['otro recordatorio', 'otros recordatorios'],
+};
+
 /**
  * Um aviso só para vários lembretes que venceram com o app fechado (ao abrir, nada de N notificações e N falas
  * seguidas). Pura. Com um só, use avisoTimer.
  */
-export function avisoTimersFechados(lista: TimerLocal[]): Aviso {
+export function avisoTimersFechados(lista: TimerLocal[], loc: Locale = currentLocale()): Aviso {
+  const es = loc === 'es';
   const conta = new Map<TimerKind, number>();
   for (const t of lista) conta.set(t.kind, (conta.get(t.kind) ?? 0) + 1);
   const ordem: TimerKind[] = ['plantacao', 'animal', 'foco', 'outro'];
   const partes = ordem.filter((k) => conta.has(k)).map((k) => {
     const n = conta.get(k)!;
-    return `${n} ${PLURAL[k][n === 1 ? 0 : 1]}`;
+    return `${n} ${(es ? PLURAL_ES : PLURAL)[k][n === 1 ? 0 : 1]}`;
   });
-  const juntar = (p: string[]) => (p.length <= 1 ? p.join('') : `${p.slice(0, -1).join(', ')} e ${p.at(-1)}`);
+  const e = es ? 'y' : 'e';
+  const juntar = (p: string[]) => (p.length <= 1 ? p.join('') : `${p.slice(0, -1).join(', ')} ${e} ${p.at(-1)}`);
+  if (es) {
+    return {
+      titulo: 'Recordatorios vencidos',
+      corpo: `${lista.length} recordatorios terminaron mientras la app estaba cerrada: ${juntar(partes)}.`,
+      voz: `${lista.length} recordatorios terminaron mientras la app estaba cerrada.`,
+      prioridade: 'normal',
+    };
+  }
   return {
     titulo: 'Lembretes vencidos',
     corpo: `${lista.length} lembretes venceram enquanto o app estava fechado: ${juntar(partes)}.`,

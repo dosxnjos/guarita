@@ -1,4 +1,5 @@
-// Voz em PT-BR pelo speechSynthesis do WebView2 (vozes do Windows, ex.: "Microsoft Maria").
+// Voz em PT-BR (ou espanhol, com o app em espanhol) pelo speechSynthesis do WebView2 (vozes do Windows, ex.:
+// "Microsoft Maria", "Microsoft Sabina"). Cada fala guarda a língua em que foi escrita e sai numa voz dessa língua.
 // Fila: uma fala por vez, nunca uma por cima da outra; prioridade "alta" passa na frente e interrompe fala de
 // prioridade menor. Silenciar (bandeja, atalho ou ajustes) esvazia a fila e cala na hora. Dono: módulo (b).
 //
@@ -8,6 +9,7 @@
 // Pegadinhas do Chromium tratadas aqui: utterance sem referência viva é recolhida e o onend nunca chega (guardamos
 // a atual); onend às vezes não chega mesmo assim (vigia por tempo); cancel() dispara o onend da fala cancelada
 // depois que a próxima já começou (cada fala tem um número e o fim só vale para a fala atual).
+import { currentLocale, type Locale } from '../../../src/lib/i18n/core';
 import { getConfig } from './config';
 import { isTauri } from './windows';
 
@@ -27,6 +29,8 @@ interface Fala {
   texto: string;
   prioridade: Prioridade;
   n: number;
+  /** Língua do texto (a do app quando entrou na fila). */
+  loc: Locale;
 }
 
 const fila: Fala[] = [];
@@ -42,9 +46,16 @@ const synth = (): SpeechSynthesis | null => (typeof speechSynthesis === 'undefin
 
 const ehPtBr = (v: SpeechSynthesisVoice) => /^pt[-_]br$/i.test(v.lang);
 const ehPt = (v: SpeechSynthesisVoice) => /^pt([-_]|$)/i.test(v.lang);
+const ehEs = (v: SpeechSynthesisVoice) => /^es([-_]|$)/i.test(v.lang);
+/** Espanhol da América (México, EUA, 419...): tudo que não é es-ES. */
+const ehEsAmerica = (v: SpeechSynthesisVoice) => ehEs(v) && !/^es[-_]es$/i.test(v.lang);
 
-/** Vozes pt-BR instaladas no Windows (a lista chega assíncrona no WebView2). */
-export async function vozesPtBr(): Promise<SpeechSynthesisVoice[]> {
+/** `lang` da fala quando não há voz da língua instalada (o Windows tenta a voz padrão com esta língua). */
+export function langDaFala(loc: Locale = currentLocale()): string {
+  return loc === 'es' ? 'es-MX' : 'pt-BR';
+}
+
+async function todasAsVozes(): Promise<SpeechSynthesisVoice[]> {
   const s = synth();
   if (!s) return [];
   let vs = s.getVoices();
@@ -55,16 +66,49 @@ export async function vozesPtBr(): Promise<SpeechSynthesisVoice[]> {
     });
     vs = s.getVoices();
   }
-  return vs.filter(ehPtBr);
+  return vs;
+}
+
+/** Vozes pt-BR instaladas no Windows (a lista chega assíncrona no WebView2). */
+export async function vozesPtBr(): Promise<SpeechSynthesisVoice[]> {
+  return (await todasAsVozes()).filter(ehPtBr);
+}
+
+/** Vozes da língua do app: pt-BR em português; qualquer espanhol em espanhol (as da América primeiro). */
+export async function vozesDaLingua(loc: Locale = currentLocale()): Promise<SpeechSynthesisVoice[]> {
+  return filtrarVozes(await todasAsVozes(), loc);
+}
+
+/** Vozes da língua (pura). Espanhol: as da América antes das da Espanha. */
+export function filtrarVozes(vozes: SpeechSynthesisVoice[], loc: Locale = currentLocale()): SpeechSynthesisVoice[] {
+  if (loc !== 'es') return vozes.filter(ehPtBr);
+  return [...vozes.filter(ehEsAmerica), ...vozes.filter((v) => ehEs(v) && !ehEsAmerica(v))];
 }
 
 /**
- * Escolhe a voz: a da config pelo nome → Francisca (neural, quando existir) → Maria → qualquer pt-BR → qualquer
- * português. Sem nenhuma, null (a fala sai na voz padrão do Windows com lang pt-BR; nunca fica muda por isso). Pura.
+ * Espanhol: a da config só se for uma voz em espanhol (a guardada pode ser a portuguesa de antes da troca de língua,
+ * e texto em espanhol lido por voz portuguesa sai errado) → espanhol da América instalada no PC → online → da
+ * Espanha → null (fala na voz padrão com lang es-MX; a tela avisa que não há voz em espanhol). Pura.
  */
-export function escolherVoz(vozes: SpeechSynthesisVoice[], preferida: string | null): SpeechSynthesisVoice | null {
+function escolherVozEs(vozes: SpeechSynthesisVoice[], preferida: string | null): SpeechSynthesisVoice | null {
   if (preferida) {
-    const v = vozes.find((x) => x.name === preferida);
+    const v = vozes.find((x) => x.name === preferida && ehEs(x));
+    if (v) return v;
+  }
+  const am = vozes.filter(ehEsAmerica);
+  return am.find((v) => v.localService) ?? am[0] ?? vozes.find(ehEs) ?? null;
+}
+
+/**
+ * Escolhe a voz: a da config pelo nome (salvo se for espanhola) → Francisca (neural, quando existir) → Maria → qualquer pt-BR → qualquer
+ * português. Sem nenhuma, null (a fala sai na voz padrão do Windows com lang pt-BR; nunca fica muda por isso). Pura.
+ * Em espanhol, ver escolherVozEs.
+ */
+export function escolherVoz(vozes: SpeechSynthesisVoice[], preferida: string | null, loc: Locale = currentLocale()): SpeechSynthesisVoice | null {
+  if (loc === 'es') return escolherVozEs(vozes, preferida);
+  if (preferida) {
+    // A guardada pode ser a espanhola escolhida com o app em espanhol: texto em português não sai nela.
+    const v = vozes.find((x) => x.name === preferida && !ehEs(x));
     if (v) return v;
   }
   const br = vozes.filter(ehPtBr);
@@ -103,13 +147,13 @@ async function proxima(): Promise<void> {
   }
   falando = f;
   const g = geracao;
-  const todas = s.getVoices().length ? s.getVoices() : await vozesPtBr();
+  const todas = s.getVoices().length ? s.getVoices() : await todasAsVozes();
   if (g !== geracao || falando !== f) return; // calaram enquanto a lista de vozes chegava
   const u = new SpeechSynthesisUtterance(f.texto);
-  u.lang = 'pt-BR';
+  u.lang = langDaFala(f.loc);
   u.volume = cfg.volume;
   u.rate = cfg.velocidade;
-  const voz = escolherVoz(todas, cfg.voz);
+  const voz = escolherVoz(todas, cfg.voz, f.loc);
   if (voz) u.voice = voz;
   u.onstart = () => registrar('info', `voz: falando com ${voz?.name ?? 'a voz padrão'} (${f.texto.length} caracteres)`);
   u.onend = () => terminou(f);
@@ -135,7 +179,7 @@ export function falar(texto: string, prioridade: Prioridade = 'normal'): void {
   if (!t || silenciada || !getConfig().voz.ligada || !synth()) return;
   // Mesma frase já esperando: não repete.
   if (fila.some((x) => x.texto === t) || falando?.texto === t) return;
-  const f: Fala = { texto: t, prioridade, n: ++contador };
+  const f: Fala = { texto: t, prioridade, n: ++contador, loc: currentLocale() };
   const i = fila.findIndex((x) => PESO[x.prioridade] < PESO[prioridade]);
   if (i === -1) fila.push(f);
   else fila.splice(i, 0, f);

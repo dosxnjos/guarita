@@ -15,7 +15,9 @@ import { labelFromShardText } from '../lib/shardText';
 import { aodpPricesMeta } from '../lib/aodp';
 import { cachedJson, cachedJsonMeta } from '../lib/cache';
 import { GameinfoError, gameinfoFetch, Budget } from '../lib/gameinfo';
-import { badRequest, json, upstreamError } from '../lib/respond';
+import { badRequest, json } from '../lib/respond';
+import { apiLang, tl, type ApiLang } from '../../shared/lang';
+import { upstreamErrorL } from './langErrors';
 
 export const LOSSES_TTL_S = 600;
 export const GUILD_TTL_S = 600;
@@ -203,11 +205,18 @@ export function isEmptyGuild(core: CoreGuildSummary | null): boolean {
 // ---------------------------------------------------------------------------------------------------------
 // Acesso às fontes
 
-/** Erro do KillLog (core fora, binding ausente): vira 502 na rota. */
+/** Erro do KillLog (core fora, binding ausente): vira 502 na rota. `status` = HTTP do core, quando respondeu. */
 export class CoreError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly status: number | null = null) {
     super(message);
     this.name = 'CoreError';
+  }
+  /** Mensagem na língua pedida (pt = a `message` de sempre). */
+  textFor(lang: ApiLang = 'pt'): string {
+    if (lang !== 'es') return this.message;
+    return this.status
+      ? `El historial del killboard respondió con error ${this.status}.`
+      : 'El historial del killboard no está disponible ahora.';
   }
 }
 
@@ -219,25 +228,33 @@ async function coreGet<T>(env: Env, path: string): Promise<T> {
   } catch {
     throw new CoreError('O histórico do killboard está indisponível agora.');
   }
-  if (!res.ok) throw new CoreError(`O histórico do killboard respondeu com erro ${res.status}.`);
+  if (!res.ok) throw new CoreError(`O histórico do killboard respondeu com erro ${res.status}.`, res.status);
   return (await res.json()) as T;
 }
 
 const shardText = new Map<string, Promise<string>>();
 
-/** Texto da fatia names/t<n>.json, guardado no isolate (uma ida ao ASSETS por tier). */
-function loadShardText(env: Env, tier: string): Promise<string> {
-  let p = shardText.get(tier);
+/**
+ * Texto da fatia names/t<n>.json (ou names-es/ em espanhol), guardado no isolate (uma ida ao ASSETS por tier e
+ * língua). A chave leva a língua: sem ela, um isolate quente misturaria nomes PT e ES.
+ */
+function loadShardText(env: Env, tier: string, lang: ApiLang = 'pt'): Promise<string> {
+  const key = `${lang}/${tier}`;
+  let p = shardText.get(key);
   if (!p) {
-    p = env.ASSETS.fetch(new Request(`https://assets.local/data/names/t${tier}.json`)).then((r) => (r.ok ? r.text() : ''));
-    p.catch(() => shardText.delete(tier));
-    shardText.set(tier, p);
+    const dir = lang === 'es' ? 'names-es' : 'names';
+    p = env.ASSETS.fetch(new Request(`https://assets.local/data/${dir}/t${tier}.json`)).then((r) => (r.ok ? r.text() : ''));
+    p.catch(() => shardText.delete(key));
+    shardText.set(key, p);
   }
   return p;
 }
 
-/** id → rótulo PT-BR para até LABEL_MAX ids, recortando o texto das fatias (sem JSON.parse do arquivo). */
-export async function labelsFor(env: Env, ids: string[]): Promise<Map<string, string>> {
+/**
+ * id → rótulo para até LABEL_MAX ids, recortando o texto das fatias (sem JSON.parse do arquivo). PT-BR por padrão;
+ * `lang` 'es' lê as fatias names-es/ (mesmo formato, nomes ES-ES do cliente).
+ */
+export async function labelsFor(env: Env, ids: string[], lang: ApiLang = 'pt'): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const want = [...new Set(ids.map((i) => i.toUpperCase()))].slice(0, LABEL_MAX);
   const byTier = new Map<string, string[]>();
@@ -247,7 +264,7 @@ export async function labelsFor(env: Env, ids: string[]): Promise<Map<string, st
   }
   await Promise.all(
     [...byTier.entries()].map(async ([tier, list]) => {
-      const text = await loadShardText(env, tier).catch(() => '');
+      const text = await loadShardText(env, tier, lang).catch(() => '');
       if (!text) return;
       for (const id of list) {
         const label = labelFromShardText(text, id);
@@ -265,8 +282,11 @@ interface CoreLosses {
   since: string | null;
 }
 
-/** (a) Itens mais perdidos no PvP nos últimos `days` dias (1 = hoje UTC, até 7). */
-export async function getLosses(env: Env, ctx: ExecutionContext, days: number, limit = 50): Promise<LossesResponse> {
+/**
+ * (a) Itens mais perdidos no PvP nos últimos `days` dias (1 = hoje UTC, até 7). `lang` 'es': `name` em espanhol
+ * (fatias names-es/); o KillLog e o preço em cache são os mesmos, sem subrequest a mais ao AODP.
+ */
+export async function getLosses(env: Env, ctx: ExecutionContext, days: number, limit = 50, lang: ApiLang = 'pt'): Promise<LossesResponse> {
   const d = clampParam(String(days), 1, 1, LOSSES_MAX_DAYS);
   const l = clampParam(String(limit), 50, 1, LOSSES_MAX_LIMIT);
   const core = await cachedJsonMeta<CoreLosses>(`insights/losses/v1/d${d}/l${l}`, LOSSES_TTL_S, ctx, async () => {
@@ -287,7 +307,7 @@ export async function getLosses(env: Env, ctx: ExecutionContext, days: number, l
           return null;
         })
       : Promise.resolve(null),
-    labelsFor(env, ids).catch(() => new Map<string, string>()),
+    labelsFor(env, ids, lang).catch(() => new Map<string, string>()),
   ]);
   const prices = cheapestById(priced?.data ?? []);
   const fetchedAt = priced && priced.at < core.at ? priced.at : core.at;
@@ -325,9 +345,18 @@ function coreGuild(env: Env, ctx: ExecutionContext, name: string): Promise<CoreG
 
 /** Guilda não encontrada nem no killboard oficial nem no histórico da Guarita. */
 export class GuildNotFound extends Error {
+  /** Nome digitado (o `message` em PT continua com ele entre aspas curvas; o bot recorta de lá). */
+  readonly guild: string;
   constructor(name: string) {
     super(`Guilda “${name}” não encontrada no servidor Americas. O nome precisa ser exato.`);
     this.name = 'GuildNotFound';
+    this.guild = name;
+  }
+  /** Mensagem na língua pedida (pt = a `message` de sempre; es = a mesma frase do bot). */
+  textFor(lang: ApiLang = 'pt'): string {
+    return lang === 'es'
+      ? `No encontré el gremio “${this.guild}” en el servidor Americas. El nombre tiene que ser exacto.`
+      : this.message;
   }
 }
 
@@ -370,46 +399,54 @@ export async function getGuild(env: Env, ctx: ExecutionContext, name: string): P
 // ---------------------------------------------------------------------------------------------------------
 // Rotas HTTP
 
-function errorResponse(err: unknown): Response {
-  if (err instanceof GuildNotFound) return json({ error: err.message }, 404);
-  if (err instanceof CoreError) return json({ error: err.message }, 502);
+function errorResponse(err: unknown, lang: ApiLang = 'pt'): Response {
+  const t = (pt: string, es: string) => tl(lang, pt, es);
+  if (err instanceof GuildNotFound) return json({ error: err.textFor(lang) }, 404);
+  if (err instanceof CoreError) return json({ error: err.textFor(lang) }, 502);
   if (err instanceof GameinfoError) {
-    if (err.kind === 'not_found') return json({ error: 'Não encontrado no killboard oficial.' }, 404);
-    if (err.kind === 'timeout') return json({ error: 'O killboard oficial demorou demais para responder. Tente de novo em instantes.' }, 504);
-    return json({ error: 'O killboard oficial está instável agora. Tente de novo em instantes.' }, 502);
+    if (err.kind === 'not_found') return json({ error: t('Não encontrado no killboard oficial.', 'No se encontró en el killboard oficial.') }, 404);
+    if (err.kind === 'timeout') {
+      return json({ error: t('O killboard oficial demorou demais para responder. Tente de novo em instantes.', 'El killboard oficial tardó demasiado en responder. Inténtalo de nuevo en unos instantes.') }, 504);
+    }
+    return json({ error: t('O killboard oficial está instável agora. Tente de novo em instantes.', 'El killboard oficial está inestable ahora. Inténtalo de nuevo en unos instantes.') }, 502);
   }
-  return upstreamError(err);
+  return upstreamErrorL(err, lang);
 }
 
-/** /api/losses?days=1..7&limit=, /api/guild/:nome, /api/guilds?q= (busca). null = rota de outro módulo. */
+/**
+ * /api/losses?days=1..7&limit=, /api/guild/:nome, /api/guilds?q= (busca). null = rota de outro módulo.
+ * `?lang=es`: nomes de item das perdas e mensagens de erro em espanhol; sem ele, tudo igual a antes.
+ */
 export async function handleLossesGuild(request: Request, url: URL, env: Env, ctx: ExecutionContext): Promise<Response | null> {
   const p = url.pathname;
   if (p !== '/api/losses' && p !== '/api/guilds' && !p.startsWith('/api/guild/')) return null;
-  if (request.method !== 'GET') return json({ error: 'método não permitido' }, 405);
+  const lang = apiLang(url.searchParams.get('lang'));
+  const t = (pt: string, es: string) => tl(lang, pt, es);
+  if (request.method !== 'GET') return json({ error: t('método não permitido', 'método no permitido') }, 405);
   try {
     if (p === '/api/losses') {
       const days = clampParam(url.searchParams.get('days'), 1, 1, LOSSES_MAX_DAYS);
       const limit = clampParam(url.searchParams.get('limit'), 50, 1, LOSSES_MAX_LIMIT);
-      return json(await getLosses(env, ctx, days, limit), 200, 300);
+      return json(await getLosses(env, ctx, days, limit, lang), 200, 300);
     }
     if (p === '/api/guilds') {
       const q = (url.searchParams.get('q') ?? '').trim();
-      if (q.length < 3) return badRequest('Digite pelo menos 3 letras do nome da guilda.');
-      if (q.length > GUILD_NAME_MAX) return badRequest('Nome de guilda longo demais.');
+      if (q.length < 3) return badRequest(t('Digite pelo menos 3 letras do nome da guilda.', 'Escribe al menos 3 letras del nombre del gremio.'));
+      if (q.length > GUILD_NAME_MAX) return badRequest(t('Nome de guilda longo demais.', 'Nombre de gremio demasiado largo.'));
       const r = await searchGuilds(ctx, q);
       return json({ guilds: r.hits, fetchedAt: r.at }, 200, 300);
     }
     const m = /^\/api\/guild\/([^/]+)$/.exec(p);
-    if (!m) return json({ error: 'rota não encontrada' }, 404);
+    if (!m) return json({ error: t('rota não encontrada', 'ruta no encontrada') }, 404);
     let name: string;
     try {
       name = decodeURIComponent(m[1]).trim();
     } catch {
-      return badRequest('Nome de guilda inválido.');
+      return badRequest(t('Nome de guilda inválido.', 'Nombre de gremio no válido.'));
     }
-    if (!name || name.length > GUILD_NAME_MAX) return badRequest('Nome de guilda inválido.');
+    if (!name || name.length > GUILD_NAME_MAX) return badRequest(t('Nome de guilda inválido.', 'Nombre de gremio no válido.'));
     return json(await getGuild(env, ctx, name), 200, 300);
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, lang);
   }
 }

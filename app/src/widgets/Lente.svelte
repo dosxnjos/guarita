@@ -15,21 +15,24 @@
   import { abrirLink } from '../lib/links';
   import {
     QUALITIES,
-    QUALITY_LABEL,
     ageTone,
     ageToneLabel,
+    cityName,
+    confidenceText,
     confidenceTone,
     fmtAge,
     fmtPct,
     fmtSilver,
     fmtTime,
+    qualityName,
     sortCities,
   } from '../lib/format';
+  import { getLocale, linkSite, tx } from '../lib/i18n.svelte';
   import Carregando from '../lib/ui/Carregando.svelte';
   import ErroCaixa from '../lib/ui/ErroCaixa.svelte';
 
   const SITE_AODP = 'https://www.albion-online-data.com/';
-  const PERMITIDO = 'https://guarita.pages.dev/permitido';
+  const PERMITIDO = linkSite('/permitido');
   const CONFIG_YAML = 'EnableWebsockets: true\nAllowedWebsocketHosts:\n  - tauri.localhost';
 
   const lente = criarLente();
@@ -100,7 +103,7 @@
     } catch (e) {
       if (meu !== seq) return;
       quote = null;
-      erro = e instanceof Error ? e.message : 'Não foi possível consultar o preço agora.';
+      erro = e instanceof Error ? e.message : tx('Não foi possível consultar o preço agora.', 'No fue posible consultar el precio ahora.');
     } finally {
       if (meu === seq) carregando = false;
     }
@@ -138,11 +141,11 @@
   }
 
   const ROTULO_ESTADO: Record<EstadoLente, [texto: string, tom: string]> = {
-    desligada: ['Desligada', ''],
-    conectando: ['Procurando o cliente', 'info'],
-    conectada: ['Conectada', 'good'],
-    'sem-cliente': ['Cliente não encontrado', 'warn'],
-    erro: ['Conexão caiu', 'bad'],
+    desligada: [tx('Desligada', 'Desactivada'), ''],
+    conectando: [tx('Procurando o cliente', 'Buscando el cliente'), 'info'],
+    conectada: [tx('Conectada', 'Conectada'), 'good'],
+    'sem-cliente': [tx('Cliente não encontrado', 'Cliente no encontrado'), 'warn'],
+    erro: [tx('Conexão caiu', 'Se cayó la conexión'), 'bad'],
   };
 
   function diferenca(c: CityQuote): string {
@@ -156,12 +159,25 @@
   <div class="topo">
     <button type="button" class="switch" role="switch" aria-checked={ligada} disabled={salvando} onclick={alternar}>
       <span class="switch-track" aria-hidden="true"></span>
-      <span class="small"><strong>Lente</strong></span>
+      <span class="small"><strong>{tx('Lente', 'Lente')}</strong></span>
     </button>
     <span class="tag {ROTULO_ESTADO[estado][1]}" role="status" aria-live="polite">{ROTULO_ESTADO[estado][0]}</span>
   </div>
 
-  {#if estado === 'desligada'}
+  {#if estado === 'desligada' && getLocale() === 'es'}
+    <p class="small" style="margin:0">
+      Con el <strong>cliente del Albion Data Project</strong> abierto en tu computadora, la lente muestra el precio en
+      las demás ciudades del objeto que abriste en el mercado del juego.
+    </p>
+    <p class="small muted" style="margin:0">
+      El cliente del Albion Data Project es un programa comunitario, sin relación con Sandbox Interactive, que lee el
+      tráfico de red del juego en tu PC para registrar los precios del mercado. Instalarlo es tu decisión.
+    </p>
+    <p class="small muted" style="margin:0">
+      La Guarita solo escucha lo que ese cliente publica en tu propia computadora. No captura la red, no lee el juego y
+      no envía nada al cliente. Queda desactivada hasta que la actives.
+    </p>
+  {:else if estado === 'desligada'}
     <p class="small" style="margin:0">
       Com o <strong>cliente do Albion Data Project</strong> aberto no seu computador, a lente mostra o preço do item
       que você abriu no mercado do jogo nas outras cidades.
@@ -175,17 +191,46 @@
       não manda nada ao cliente. Fica desligada até você ligar.
     </p>
   {:else if estado === 'conectando'}
-    <Carregando texto="Procurando o cliente do Albion Data Project…" />
+    <Carregando texto={tx('Procurando o cliente do Albion Data Project…', 'Buscando el cliente del Albion Data Project…')} />
   {:else if estado === 'sem-cliente' || estado === 'erro'}
     <div class="callout warn stack">
       {#if estado === 'erro'}
-        <strong>A conexão com o cliente caiu</strong>
-        <p class="small" style="margin:0">O cliente foi fechado ou reiniciado. A Guarita tenta de novo sozinha enquanto a lente estiver ligada.</p>
+        <strong>{tx('A conexão com o cliente caiu', 'Se cayó la conexión con el cliente')}</strong>
+        <p class="small" style="margin:0">{tx('O cliente foi fechado ou reiniciado. A Guarita tenta de novo sozinha enquanto a lente estiver ligada.', 'El cliente se cerró o se reinició. La Guarita vuelve a intentarlo sola mientras la lente esté activada.')}</p>
       {:else}
-        <strong>Não encontramos o cliente com o websocket ligado</strong>
-        <p class="small" style="margin:0">A Guarita tenta de novo sozinha a cada poucos segundos enquanto a lente estiver ligada.</p>
+        <strong>{tx('Não encontramos o cliente com o websocket ligado', 'No encontramos el cliente con el websocket activado')}</strong>
+        <p class="small" style="margin:0">{tx('A Guarita tenta de novo sozinha a cada poucos segundos enquanto a lente estiver ligada.', 'La Guarita vuelve a intentarlo sola cada pocos segundos mientras la lente esté activada.')}</p>
       {/if}
     </div>
+    {#if getLocale() === 'es'}
+    <details class="passos" open={estado === 'sem-cliente'}>
+      <summary class="small"><strong>Cómo activarla, paso a paso</strong></summary>
+      <ol class="small">
+        <li>
+          Instala y abre el cliente del Albion Data Project (proyecto comunitario):
+          <a href={SITE_AODP} onclick={(e) => abrirLink(e, SITE_AODP)}>albion-online-data.com</a>. Lee el tráfico
+          de red del juego en tu PC; instalarlo es tu decisión.
+        </li>
+        <li>
+          En la carpeta donde está instalado el cliente (la misma de <span class="mono">albiondata-client.exe</span>), crea o
+          edita el archivo <span class="mono">config.yaml</span> con:
+          <pre class="mono yaml">{CONFIG_YAML}</pre>
+          <button type="button" class="btn mini-btn" onclick={copiarConfig}>{copiado ? 'Copiado' : 'Copiar'}</button>
+        </li>
+        <li>Cierra y vuelve a abrir el cliente para que lea el archivo.</li>
+      </ol>
+      <p class="small muted" style="margin:0">
+        Sin la línea <span class="mono">tauri.localhost</span>, el cliente rechaza la conexión de la app y la pantalla queda igual que
+        con el cliente cerrado.
+      </p>
+      <p class="small muted" style="margin:0">
+        <strong>Por qué vale la pena:</strong> el cliente envía al Albion Data Project los precios que ves en el mercado. Son
+        esos envíos los que mantienen actualizados los precios de la Guarita y de otros sitios para toda la comunidad.
+        El cliente es un proyecto comunitario de código abierto, separado de la Guarita; usarlo o no es tu decisión.
+        <a href={PERMITIDO} onclick={(e) => abrirLink(e, PERMITIDO)}>Qué está permitido y qué no</a>.
+      </p>
+    </details>
+    {:else}
     <details class="passos" open={estado === 'sem-cliente'}>
       <summary class="small"><strong>Como ligar, passo a passo</strong></summary>
       <ol class="small">
@@ -213,9 +258,10 @@
         <a href={PERMITIDO} onclick={(e) => abrirLink(e, PERMITIDO)}>O que é e o que não é permitido</a>.
       </p>
     </details>
-    <div><button type="button" class="btn mini-btn" onclick={() => lente.conectar(urlLente)}>Tentar agora</button></div>
+    {/if}
+    <div><button type="button" class="btn mini-btn" onclick={() => lente.conectar(urlLente)}>{tx('Tentar agora', 'Intentar ahora')}</button></div>
   {:else if !itemId}
-    <p class="small" style="margin:0">Conectada ao cliente. Abra um item no mercado do jogo e o preço nas outras cidades aparece aqui.</p>
+    <p class="small" style="margin:0">{tx('Conectada ao cliente. Abra um item no mercado do jogo e o preço nas outras cidades aparece aqui.', 'Conectada al cliente. Abre un objeto en el mercado del juego y el precio en las demás ciudades aparece aquí.')}</p>
   {/if}
 
   {#if estado === 'conectada' && itemId}
@@ -229,41 +275,44 @@
       />
       <div class="nome">
         <strong>{nome}</strong>
-        <span class="small muted">{tier}{tier ? ' · ' : ''}{QUALITY_LABEL[qualidade]}</span>
+        <span class="small muted">{tier}{tier ? ' · ' : ''}{qualityName(qualidade)}</span>
       </div>
       <label class="q">
-        <span class="sr-only">Qualidade</span>
+        <span class="sr-only">{tx('Qualidade', 'Calidad')}</span>
         <select class="input" bind:value={qualidade} onchange={() => void carregarPreco()}>
           {#each QUALITIES as q (q)}
-            <option value={q}>{QUALITY_LABEL[q]}{qualidadesVistas.has(q) ? ' •' : ''}</option>
+            <option value={q}>{qualityName(q)}{qualidadesVistas.has(q) ? ' •' : ''}</option>
           {/each}
         </select>
       </label>
     </div>
 
     <p class="small visto" style="margin:0">
-      {#if resumo.venda || resumo.compra}
+      {#if (resumo.venda || resumo.compra) && getLocale() === 'es'}
+        Visto ahora{resumo.city ? ` en ${cityName(resumo.city)}` : ''}{vistoEm ? ` (${fmtTime(vistoEm, undefined, false)})` : ''}:
+        {#if resumo.venda}venta desde <strong>{fmtSilver(resumo.venda.price)}</strong>{/if}{#if resumo.venda && resumo.compra}{'; '}{/if}{#if resumo.compra}compra hasta <strong>{fmtSilver(resumo.compra.price)}</strong>{/if}.
+      {:else if resumo.venda || resumo.compra}
         Visto agora{resumo.city ? ` em ${resumo.city}` : ''}{vistoEm ? ` (${fmtTime(vistoEm, undefined, false)})` : ''}:
         {#if resumo.venda}venda a partir de <strong>{fmtSilver(resumo.venda.price)}</strong>{/if}{#if resumo.venda && resumo.compra}{'; '}{/if}{#if resumo.compra}compra até <strong>{fmtSilver(resumo.compra.price)}</strong>{/if}.
       {:else}
-        <span class="muted">Nenhuma ordem vista nesta qualidade no seu mercado.</span>
+        <span class="muted">{tx('Nenhuma ordem vista nesta qualidade no seu mercado.', 'No se vio ninguna orden en esta calidad en tu mercado.')}</span>
       {/if}
     </p>
 
     {#if carregando && !quote}
-      <Carregando texto="Consultando as outras cidades…" />
+      <Carregando texto={tx('Consultando as outras cidades…', 'Consultando las demás ciudades…')} />
     {:else if erro}
       <ErroCaixa mensagem={erro} ontentar={() => void carregarPreco()} />
     {:else if quote}
       <div class="table-wrap">
         <table class="data tabela">
           <thead>
-            <tr><th>Cidade</th><th class="num">Venda</th><th class="num">Compra</th><th>Idade</th><th>Selo</th></tr>
+            <tr><th>{tx('Cidade', 'Ciudad')}</th><th class="num">{tx('Venda', 'Venta')}</th><th class="num">{tx('Compra', 'Compra')}</th><th>{tx('Idade', 'Antigüedad')}</th><th>{tx('Selo', 'Confianza')}</th></tr>
           </thead>
           <tbody>
             {#each linhas as c (c.city)}
               <tr class:aqui={c.city === resumo.city}>
-                <td>{c.city}{#if c.city === resumo.city}<span class="sr-only"> (você está aqui)</span>{/if}</td>
+                <td>{cityName(c.city)}{#if c.city === resumo.city}<span class="sr-only"> {tx('(você está aqui)', '(estás aquí)')}</span>{/if}</td>
                 <td class="num">
                   {c.sellMin === null ? '—' : fmtSilver(c.sellMin)}
                   {#if diferenca(c)}<span class="dif muted">{diferenca(c)}</span>{/if}
@@ -274,14 +323,14 @@
                     <span class="age {ageTone(c.ageMin)}" aria-hidden="true"></span>{fmtAge(c.ageMin)}
                   </span>
                 </td>
-                <td><span class="tag {confidenceTone(c.confidence.label)}" title={c.confidence.reasons.join(' · ')}>{c.confidence.label}</span></td>
+                <td><span class="tag {confidenceTone(c.confidence.label)}" title={c.confidence.reasons.join(' · ')}>{confidenceText(c.confidence.label)}</span></td>
               </tr>
             {/each}
           </tbody>
         </table>
       </div>
       <p class="small muted" style="margin:0">
-        Outras cidades: Albion Data Project, pela Guarita. A diferença compara com a venda mais barata vista aqui.
+        {tx('Outras cidades: Albion Data Project, pela Guarita. A diferença compara com a venda mais barata vista aqui.', 'Demás ciudades: Albion Data Project, a través de la Guarita. La diferencia compara con la venta más barata vista aquí.')}
       </p>
     {/if}
   {/if}

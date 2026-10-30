@@ -5,13 +5,13 @@
   import { loadIndex } from '../lib/itemsClient';
   import { itemName, type ItemsIndex } from '../../shared/items';
   import type { AutopsyResponse } from '../../shared/types';
-  import { cached } from '../lib/player/cache';
+  import { cacheKey, cached } from '../lib/player/cache';
   import {
     ageClass, dangerHeadline, dangerTone, fmtAgo, fmtAgoMin, fmtCompact, fmtDateBR, fmtDec, fmtNum, itemHref,
     playerHref, qualityLabel, slotLabel, weaponLabel,
   } from '../lib/player/format';
   import { cityName, QUALITY_LABEL_ES } from '../lib/format';
-  import { href, tx } from '../lib/i18n/index.svelte';
+  import { getLocale, href, tx } from '../lib/i18n/index.svelte';
   import type { Quality } from '../../shared/types';
   import ItemIcon from '../lib/player/ItemIcon.svelte';
   import Patient from '../lib/player/Patient.svelte';
@@ -30,7 +30,8 @@
     const my = ++seq;
     loading = true; error = null; data = null;
     try {
-      const d = await cached(`autopsia:${pid}`, () => api.autopsy(pid), fresh);
+      const loc = getLocale();
+      const d = await cached(cacheKey(`autopsia:${pid}`, loc), () => api.autopsy(pid, loc), fresh);
       if (my === seq) data = d;
     } catch (e) {
       if (my === seq) error = e instanceof Error ? e.message : String(e);
@@ -102,13 +103,13 @@
       </p>
       <dl class="facts">
         <div>
-          <dt>{tx('Quem matou', 'Quién lo mató')}</dt>
+          <dt>{tx('Quem matou', 'Asesino')}</dt>
           <dd>
             {#if death.killer.id}<a href={href(playerHref(death.killer.id))} onclick={go}>{death.killer.name}</a>{:else}{death.killer.name || tx('desconhecido', 'desconocido')}{/if}
             {#if death.killer.guild}<span class="muted small">[{death.killer.guild}]</span>{/if}
           </dd>
         </div>
-        <div><dt>{tx('IP de quem matou', 'IP de quien lo mató')}</dt><dd class="num">{fmtNum(death.killer.ip)}</dd></div>
+        <div><dt>{tx('IP de quem matou', 'IP del asesino')}</dt><dd class="num">{fmtNum(death.killer.ip)}</dd></div>
         <div><dt>{tx('IP da vítima', 'IP de la víctima')}</dt><dd class="num">{fmtNum(death.victim.ip)}</dd></div>
         <div><dt>{tx('Tamanho do grupo', 'Tamaño del grupo')}</dt><dd class="num">{fmtNum(death.participants)}</dd></div>
         <div>
@@ -129,7 +130,7 @@
 
     {#if killer}
       <div class="card stack">
-        <h2 class="first">{tx('Quem matou', 'Quién lo mató')}: {killer.name}</h2>
+        <h2 class="first">{tx('Quem matou', 'Asesino')}: {killer.name}</h2>
         <div class="row">
           <span class="tag {dangerTone(killer.danger.label)}">{dangerHeadline(killer.danger.label)}</span>
           {#if killer.guild}<span class="muted small">{killerOrg(killer.guild, killer.alliance)}</span>{/if}

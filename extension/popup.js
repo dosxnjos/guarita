@@ -15,9 +15,11 @@
   let searchSeq = 0;
   let itemSeq = 0;
   let current = null; // { id } do item aberto
+  let loc = 'pt'; // língua do popup (opção salva ou a do navegador), definida no início
 
+  /** Toda mensagem leva a língua do popup: o fundo devolve nome e texto nela. */
   function send(msg) {
-    return Promise.resolve(ext.runtime.sendMessage(msg)).catch(() => ({ ok: false, error: 'A extensão não respondeu. Feche e abra o popup.' }));
+    return Promise.resolve(ext.runtime.sendMessage({ ...msg, lang: loc })).catch(() => ({ ok: false, error: C.t(loc, 'noResponse') }));
   }
 
   function el(tag, cls, text) {
@@ -86,7 +88,7 @@
       status.textContent = '';
       return;
     }
-    status.textContent = 'Buscando…';
+    status.textContent = C.t(loc, 'searching');
     const res = await send({ type: 'search', q: text });
     if (my !== searchSeq) return;
     if (!res.ok) {
@@ -95,7 +97,7 @@
       return;
     }
     renderHits(res.hits);
-    status.textContent = res.hits.length ? `${res.hits.length} ${res.hits.length === 1 ? 'resultado' : 'resultados'}` : 'Nenhum item com esse nome.';
+    status.textContent = res.hits.length ? `${res.hits.length} ${C.t(loc, res.hits.length === 1 ? 'resultOne' : 'resultMany')}` : C.t(loc, 'noHits');
   }
 
   q.addEventListener('input', () => {
@@ -138,13 +140,13 @@
     const my = ++itemSeq;
     item.hidden = false;
     item.setAttribute('aria-busy', 'true');
-    item.replaceChildren(el('strong', '', id), el('span', 'small muted', 'Consultando o preço…'));
+    item.replaceChildren(el('strong', '', id), el('span', 'small muted', C.t(loc, 'loadingPrice')));
     const res = await send({ type: 'item', id, q: Number(qual.value) });
     if (my !== itemSeq) return;
     item.removeAttribute('aria-busy');
     if (!res.ok) {
       const parts = [el('strong', '', id), el('p', 'err', res.error)];
-      if (res.url) parts.push(link(res.url, 'Abrir na Guarita'));
+      if (res.url) parts.push(link(res.url, C.t(loc, 'openOnGuarita')));
       item.replaceChildren(...parts);
       return;
     }
@@ -156,17 +158,17 @@
       parts.push(tags);
     }
     if (c.best) {
-      parts.push(el('span', 'small muted', c.best.reliable ? 'Melhor preço confiável para comprar' : 'Mais barato visto para comprar'));
+      parts.push(el('span', 'small muted', C.t(loc, c.best.reliable ? 'bestReliable' : 'cheapestSeen')));
       const line = el('div', 'row');
-      line.append(el('span', 'price', c.best.priceText), el('span', '', `em ${c.best.city}`));
+      line.append(el('span', 'price', c.best.priceText), el('span', '', `${C.t(loc, 'cityIn')} ${c.best.city}`));
       const meta = el('div', 'row small');
       const dot = el('span', `dot ${c.best.ageTone}`);
       dot.setAttribute('aria-hidden', 'true');
-      meta.append(dot, el('span', 'muted', `visto ${c.best.ageText}`), el('span', `tag ${c.best.badgeTone}`, c.best.badge));
+      meta.append(dot, el('span', 'muted', `${C.t(loc, 'seen')} ${c.best.ageText}`), el('span', `tag ${c.best.badgeTone}`, c.best.badge));
       parts.push(line, meta);
     }
     if (c.note) parts.push(el('p', 'small muted', c.note));
-    parts.push(link(c.url, 'Ver todas as cidades na Guarita'));
+    parts.push(link(c.url, C.t(loc, 'allCities')));
     item.replaceChildren(...parts);
   }
 
@@ -175,8 +177,8 @@
   let offsetMs = 0; // diferença entre o relógio do aparelho e o "now" da Guarita
   function tick() {
     const now = new Date(Date.now() + offsetMs);
-    $('hora-br').textContent = C.fmtTime(now, C.TZ_BR, true);
-    $('hora-utc').textContent = C.fmtTime(now, 'UTC', false);
+    $('hora-br').textContent = C.fmtTime(now, C.TZ_BR, true, loc);
+    $('hora-utc').textContent = C.fmtTime(now, 'UTC', false, loc);
   }
   tick();
   setInterval(tick, 1000);
@@ -191,32 +193,52 @@
     const server = Date.parse(res.clock.now);
     if (Number.isFinite(server) && Math.abs(server - Date.now()) > 5000) offsetMs = server - Date.now();
     tick();
-    const m = C.clockModel(res.clock, new Date(Date.now() + offsetMs));
+    const m = C.clockModel(res.clock, new Date(Date.now() + offsetMs), loc);
     const parts = [];
     const line = el('div', 'row');
-    line.append(el('span', `tag ${m.serverTone}`, m.serverLabel), el('span', 'muted', `Ouro: ${m.goldText}`));
+    line.append(el('span', `tag ${m.serverTone}`, m.serverLabel), el('span', 'muted', `${C.t(loc, 'gold')}: ${m.goldText}`));
     parts.push(line);
     if (m.festivities.length) {
-      parts.push(el('strong', '', 'Bônus e eventos ativos'));
+      parts.push(el('strong', '', C.t(loc, 'festActive')));
       const ul = el('ul', 'fest');
-      for (const f of m.festivities) ul.append(el('li', '', `${f.label}, até ${f.endsAt}`));
+      for (const f of m.festivities) ul.append(el('li', '', `${f.label}, ${C.t(loc, 'until')} ${f.endsAt}`));
       parts.push(ul);
     } else {
-      parts.push(el('span', 'muted', 'Nenhum bônus de festividade agora.'));
+      parts.push(el('span', 'muted', C.t(loc, 'noFest')));
     }
-    parts.push(link(`${C.BASE}/relogio`, 'Relógio completo na Guarita'));
+    parts.push(link(C.sitePageUrl('/relogio', loc), C.t(loc, 'fullClock')));
     info.replaceChildren(...parts);
+  }
+
+  // ---------- língua ----------
+
+  function uiLanguage() {
+    try {
+      return ext.i18n && ext.i18n.getUILanguage ? ext.i18n.getUILanguage() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  /** Traduz o HTML (que já vem em português) e os nomes de qualidade do seletor. */
+  function applyLocale() {
+    document.documentElement.lang = C.t(loc, 'htmlLang');
+    C.applyI18n(document, loc);
+    for (const opt of qual.options) opt.textContent = C.qualityLabel(Number(opt.value), loc);
   }
 
   // ---------- início ----------
 
   (async () => {
+    let o = C.defaultOptions();
     try {
-      const o = C.normalizeOptions((await ext.storage.local.get('options')).options);
-      qual.value = String(o.quality);
+      o = C.normalizeOptions((await ext.storage.local.get('options')).options);
     } catch {
-      /* padrão: Normal */
+      /* padrão: Normal, língua automática */
     }
+    qual.value = String(o.quality);
+    loc = C.resolveLocale(o.lang, uiLanguage());
+    if (loc !== 'pt') applyLocale(); // o HTML já está em português
     await checkPermission();
     loadClock();
     q.focus();

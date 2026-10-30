@@ -33,12 +33,12 @@ Site: <https://guarita.pages.dev> · Isso é permitido? <https://guarita.pages.d
 | **Despertador** | Avisa no celular quando a plantação, os animais ou o foco ficam prontos. |
 | **Oráculo MCP** | Ligue a Guarita no Claude, no Cursor ou no VS Code e pergunte preço, relógio, dossiê, perdas e o que fazer hoje. Só dado público. |
 | **Bot do Discord** | Os mesmos dados com comandos no teu servidor (preço, relógio, alertas, perdas, o que fazer hoje) e o killfeed da tua guilda num canal, com botão de pedir regear. |
-| **App para PC** | Guarita no Windows: widgets pequenos ao lado do jogo (preço rápido, dossiê, relógio, alertas, despertador), voz em português, atalhos globais e avisos do Windows. Desde a v0.2, opcional e desligada por padrão: a sua sessão (prata, fama e loot por hora, mortes) lida passivamente do tráfego do próprio jogador, com o Npcap. Só funciona com o app aberto: sem tarefa agendada nem serviço. Detalhes em [app/README.md](app/README.md) e na página [/app](https://guarita.pages.dev/app). |
-| **Extensão de navegador** | Nome em português e preço ao passar o mouse nos ícones de item da wiki, do killboard e de outros sites de Albion; popup com busca rápida e relógio. Chrome, Edge e Firefox. Ver [/extensao](https://guarita.pages.dev/extensao). |
+| **App para PC** | Guarita no Windows: widgets pequenos ao lado do jogo (preço rápido, dossiê, relógio, alertas, despertador), voz em português ou espanhol, atalhos globais e avisos do Windows. Desde a v0.2, opcional e desligada por padrão: a sua sessão (prata, fama e loot por hora, mortes) lida passivamente do tráfego do próprio jogador, com o Npcap. Só funciona com o app aberto: sem tarefa agendada nem serviço. Detalhes em [app/README.md](app/README.md) e na página [/app](https://guarita.pages.dev/app). |
+| **Extensão de navegador** | Nome em português (ou espanhol) e preço ao passar o mouse nos ícones de item da wiki, do killboard e de outros sites de Albion; popup com busca rápida e relógio. Chrome, Edge e Firefox. Ver [/extensao](https://guarita.pages.dev/extensao). |
 | **Painel de live** | Relógio, preços escolhidos e o histórico da guilda como fonte de navegador do OBS, com fundo transparente. Configure em [/live?config](https://guarita.pages.dev/live?config). |
 | **Janela flutuante** | Uma janelinha que fica por cima das outras (Chrome). Vem **desligada**: leia o aviso antes de ligar. |
 | **Instalável** | Dá para instalar como aplicativo no celular ou no computador. |
-| **Em espanhol** | O site inteiro também em espanhol neutro latino em [/es](https://guarita.pages.dev/es) (seletor PT/ES no topo), com os nomes dos itens e os termos do cliente oficial em espanhol. O bot responde em espanhol para quem usa o Discord em espanhol. O app de PC e a extensão seguem só em português. |
+| **Em espanhol** | O site inteiro também em espanhol neutro latino em [/es](https://guarita.pages.dev/es) (seletor PT/ES no topo), com os nomes dos itens e os termos do cliente oficial em espanhol. O bot responde em espanhol para quem usa o Discord em espanhol, o MCP com o argumento `lingua: "es"`, e o app de PC (desde a v0.2.2) e a extensão (desde a 0.2.0) seguem a língua do sistema ou a escolhida nos ajustes. |
 | **Status e custos** | Quanto custa manter a Guarita no ar (R$ 0/mês), os limites do plano grátis, o que acontece se estourar, de onde vem cada dado e a saúde ao vivo: [/status](https://guarita.pages.dev/status). |
 
 Sem login e sem cadastro. Para alertas, a Guarita guarda só o identificador da notificação do teu aparelho ou o
@@ -168,6 +168,10 @@ ficam em [shared/types.ts](shared/types.ts); a versão completa e legível está
 | `/sitemap.xml`, `/robots.txt` | mapa do site e regras para buscadores |
 | `POST /mcp` | servidor MCP (JSON-RPC 2.0, 6 ferramentas, só dado público) |
 | `POST /discord` | interações do Discord |
+
+Com `lang=es`, item, relógio, dossiê, autópsia, perdas, guilda, arriscar, hoje e previsão devolvem em espanhol os
+textos que a API monta (códigos e números iguais); sem `lang`, o português de sempre. Detalhe em
+[docs/CONTRATO-API.md](docs/CONTRATO-API.md).
 
 A busca de itens acontece no navegador, sobre `/data/items-index.json` (em `/es`, `/data/items-index-es.json`).
 As páginas em espanhol moram em `/es/...` (o mesmo `index.html`, com `lang`, título e `hreflang` próprios); nenhuma

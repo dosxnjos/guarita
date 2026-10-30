@@ -1,8 +1,8 @@
 # Guarita no PC
 
 App de Windows da Guarita: o companheiro que fica aberto enquanto você joga Albion Online (Americas). Janelas
-pequenas (widgets) ao lado do jogo ou noutra tela, voz em português, atalhos globais e avisos do Windows. Usa a
-mesma API pública do site (`https://guarita.pages.dev/api/*`); não tem servidor próprio.
+pequenas (widgets) ao lado do jogo ou noutra tela, voz, atalhos globais e avisos do Windows, em **português ou
+espanhol** (seção Línguas). Usa a mesma API pública do site (`https://guarita.pages.dev/api/*`); não tem servidor próprio.
 
 **Só trabalha com o app aberto.** Nenhuma tarefa agendada, nenhum serviço do Windows. "Iniciar com o Windows" é
 uma opção desligada por padrão (quando o usuário liga, o plugin usa a chave `Run` do registro do usuário, visível em
@@ -28,7 +28,7 @@ npm run codes:sign # assina capture-codes.json → capture-codes.json.sig (chave
 ## Gerar o instalador
 
 ```bash
-npm run build    # tauri build: instalador NSIS (.exe, pt-BR, por usuário) e MSI
+npm run build    # tauri build: instalador NSIS (.exe, pt-BR e espanhol, por usuário) e MSI (pt-BR)
 ```
 
 Saída em `<pasta de build do cargo>/release/bundle/{nsis,msi}/`. Nesta máquina a variável `CARGO_TARGET_DIR`
@@ -36,12 +36,14 @@ aponta para `C:\pt`, então o instalador sai em `C:\pt\release\bundle\`; sem a v
 `app/src-tauri/target/release/bundle/`. Sem certificado de assinatura, o Windows mostra o aviso do SmartScreen
 ("Mais informações" > "Executar assim mesmo"). v1 sem atualização automática: instalador novo no GitHub Releases.
 
-Arquivos gerados (v0.2.1, 30/10/2026; tabela de códigos remota só com assinatura válida):
-`nsis/Guarita_0.2.1_x64-setup.exe` (2.589.885 bytes, instala por usuário, sem pedir administrador; SHA-256
-`fec5f91d706c35cdeaf4810399cfa541d6f41fa02412c91322778387c9ea6b42`) e `msi/Guarita_0.2.1_x64_pt-BR.msi`
-(3.555.328 bytes; SHA-256 `4060bbba3fb60c84abcdd331a081c4d9aff2d92725decbd5455d25c20cf6098d`). A versão mora em
+Arquivos gerados (v0.2.2, 30/10/2026; interface em PT e ES):
+`nsis/Guarita_0.2.2_x64-setup.exe` (2.610.091 bytes, instala por usuário, sem pedir administrador; SHA-256
+`c936e28feeb3e183668f7cdad942c7bef1b89cf07ef90bc3578bc953ada07d2d`) e `msi/Guarita_0.2.2_x64_pt-BR.msi`
+(3.575.808 bytes; SHA-256 `e54b4bd151e7821f7a52816f425195515247031e1573d97866b28637266c26c6`). A versão mora em
 cinco lugares que andam juntos: `package.json`, `package-lock.json` (raiz do pacote), `src-tauri/tauri.conf.json`,
-`src-tauri/Cargo.toml` e `src-tauri/Cargo.lock`. O app segue só em português (o site também tem `/es`). Se faltar o WebView2 (Windows 10 antigo), o
+`src-tauri/Cargo.toml` e `src-tauri/Cargo.lock`. O instalador NSIS tem português e espanhol desde a 0.2.2
+(`bundle.windows.nsis.languages`; escolhe pela língua do Windows, sem perguntar); o MSI segue só em pt-BR (mais de uma
+língua no WiX gera um MSI por língua). Se faltar o WebView2 (Windows 10 antigo), o
 instalador NSIS baixa o instalador oficial da Microsoft (modo padrão `downloadBootstrapper`, precisa de internet).
 Nenhum dos dois cria tarefa agendada, serviço ou entrada de inicialização.
 
@@ -75,6 +77,40 @@ ficam fora de `releases/latest` e a página continua em "Em breve". Nas notas da
   `guarita://voz-silenciada`), sair. Clique esquerdo no ícone abre o painel.
 - **Fechar o painel encerra o app** (motor e voz param junto). Opção "fechar para a bandeja", desligada por padrão.
 - **Instância única**: abrir o app de novo só traz o painel para a frente.
+
+## Línguas (português e espanhol)
+
+- **Preferência** em Ajustes › Língua: Automático (padrão; segue a língua do Windows pelo `navigator.languages` do
+  WebView2: espanhol se o sistema pede espanhol antes de português, senão português), Português ou Español. Fica em
+  `config.lingua` (`'auto' | 'pt' | 'es'`, no mesmo `config.json` do store), então a troca chega a todas as janelas
+  pelo evento do store.
+- **`src/lib/i18n.svelte.ts`**: `tx(pt, es)`, `getLocale()`, `intlLocale()`, `linkSite(path)` (página do site na
+  língua: `/es/...`) e `brasilia()`. `main.ts` aplica a língua **antes de montar a tela** e a cada mudança de config.
+  Aplicar mexe em três espelhos: o estado do app, o espelho não reativo de `../src/lib/i18n/core.ts`
+  (`setCurrentLocale`, padrão de `format.ts`, `presets.ts` e `src/lib/player/*`) e o estado do site
+  (`syncLocale('/es')`), que os componentes do site usados aqui (`Patient`, `AgeDot`) leem.
+- **Troca de língua remonta a tela** (`{#key getLocale()}` em `App.svelte`). O painel guarda num `<script module>`
+  a aba aberta e se os widgets já foram reabertos, para a remontagem não voltar para Início nem roubar o foco.
+- **Código puro** (`engine/*`, `shortcuts.ts`, `ui-*.ts`, `fala.ts`, `capture/sessao.ts`) recebe `loc` no fim, com
+  padrão na língua atual (`currentLocale()` do core). Os registros em português (`WIDGET_TITLES`, `ROTULO_ACAO`,
+  `ROTULO_FASE`, `TEMAS`) ficam como estavam; o espanhol mora ao lado (`*_ES`) e a tela lê pelas funções
+  (`tituloWidget`, `rotuloAcao`, `rotuloFase`, `nomeTema`).
+- **Voz**: cada fala guarda a língua em que entrou na fila. Espanhol usa voz espanhola do Windows (da América antes
+  da Espanha; a voz guardada nos ajustes só vale se for espanhola, e em português só se não for), `lang` `es-MX` sem
+  voz instalada. Sem voz em
+  espanhol, Ajustes › Voz avisa e diz onde instalar. `fala.ts` tem o número por extenso em espanhol
+  (`porExtensoEs`: "veintiún mil", "un millón", "mil millones").
+- **Dados**: em espanhol as rotas `/api/*` levam `lang=es` (motivos do selo e do perigo, festividades e erros vêm do
+  servidor em espanhol) e o índice de itens é o `/data/items-index-es.json` (mesmo formato; busca, nome do loot, da
+  lente e do alerta em espanhol). Cada língua tem a sua cópia local no Cache Storage.
+- **Rust**: o painel informa a língua efetiva pelo comando `definir_lingua` (ao abrir e a cada troca). O Rust troca o
+  texto da bandeja, o título das janelas abertas (`title_es` no `WIDGETS`) e as mensagens de erro dos comandos. Ao
+  iniciar, lê `config.lingua`: espanhol explícito já monta a bandeja em espanhol; "automático" fica em português até
+  o painel avisar.
+- **Mensagens da captura** (`src-tauri/src/capture`, fora deste trabalho): continuam em português no Rust; a tela
+  traduz as conhecidas (`mensagemCaptura` em `capture/sessao.ts`), e um teste confere que o texto do Rust não mudou.
+- **Fica em português ou inglês de propósito**: o nome do mapa (o `world.txt` só tem inglês), o nome de item guardado
+  numa regra ou lembrete criado na outra língua, o histórico de avisos já disparados e o instalador.
 
 ## Segurança
 
@@ -177,10 +213,11 @@ diagnóstico ligados e conferir: Join reconhecido, fama/prata batendo com o jogo
 | `config.ts` | config persistente (store), padrões que são regra, sincroniza janelas | esqueleto (pronto) |
 | `autostart.ts` | único lugar que liga/desliga "iniciar com o Windows" | esqueleto (pronto) |
 | `links.ts` | abrir link no navegador | esqueleto (pronto) |
-| `format.ts` | reexporta a formatação pt-BR/Brasília do site | esqueleto (pronto) |
-| `voice.ts` | `falar(texto, prioridade)`: fila sem falar por cima, alta interrompe, silenciar cala; voz configurada → Francisca → Maria → qualquer pt-BR | (b) motor local (pronto) |
+| `format.ts` | reexporta a formatação do site (pt-BR ou es-419, sempre no horário de Brasília); `articuloHora` dá o artigo da hora em espanhol ("a la 01:20", "a las 13:05"), usado no despertador, relógio, Sessão e Preço | esqueleto (pronto) |
+| `i18n.svelte.ts` | língua do app: preferência (`auto`/`pt`/`es`), `tx(pt, es)`, espelhos do core e do site | i18n (pronto) |
+| `voice.ts` | `falar(texto, prioridade)`: fila sem falar por cima, alta interrompe, silenciar cala; voz configurada → Francisca → Maria → qualquer pt-BR (espanhol: voz espanhola da América → da Espanha) | (b) motor local (pronto) |
 | `notify.ts` | `avisar(aviso)`: notificação do Windows ("Guarita · título", som padrão do Windows) + voz; som curto próprio (Web Audio) só com a notificação desligada | (b) motor local (pronto) |
-| `fala.ts` | número por extenso em PT-BR para a voz ("três mil e quinhentos") | (b) motor local (pronto) |
+| `fala.ts` | número por extenso para a voz, em PT-BR ("três mil e quinhentos") ou espanhol ("tres mil quinientos") | (b) motor local (pronto) |
 | `shortcuts.ts` | atalhos globais: normaliza, valida (Ctrl/Alt/Win obrigatório, menos F13–F24; recusa Ctrl+C, Alt+F4...), acusa conflito, registra só no "apertou" | (b) motor local (pronto) |
 | `engine/alerts.ts` | regras de preço locais: `/api/prices` em lote a cada `intervaloRegrasMin` (padrão 3 min), mesma régua do servidor (`guarita-core/src/rules.ts`) | (b) motor local (pronto) |
 | `engine/timers.ts` | despertador local: `setTimeout` até o próximo vencimento; ao abrir, avisa os que venceram com o app fechado | (b) motor local (pronto) |
@@ -192,7 +229,7 @@ diagnóstico ligados e conferir: Join reconhecido, fama/prata batendo com o jogo
 | `capture/dados.ts` | baixa tabela de códigos com o `.sig`, `items.txt` e `world.txt` (cópia local de 24 h); parsers | (a) captura (pronto) |
 | `capture/sessao.ts`, `capture/precos.ts` | regras puras: ritmo por hora, valor do loot (mediana), textos; preço em lote | (a) captura (pronto) |
 | `painel/CapturaAjustes.svelte`, `widgets/{Sessao,Loot}.svelte` | bloco de ligar/desligar com aviso e Npcap; widgets da sessão | (a) captura (pronto) |
-| `painel/Painel.svelte` | abas Início (status da API e do servidor, widgets), Ajustes (atalhos, voz, avisos, opacidade, "por cima" com aviso SBI, tema, iniciar com o Windows, bandeja) e Sobre | (a) janelas e widgets (pronto) |
+| `painel/Painel.svelte` | abas Início (status da API e do servidor, widgets), Ajustes (língua, atalhos, voz, avisos, opacidade, "por cima" com aviso SBI, tema, iniciar com o Windows, bandeja) e Sobre | (a) janelas e widgets (pronto) |
 | `widgets/{Preco,Dossie,Relogio,Alertas,Despertador}.svelte` | telas dos widgets; layout compacto até 280×200 (container queries no preço) | (a) janelas e widgets (pronto) |
 | `ui/ItemBusca.svelte`, `ui/CampoAtalho.svelte` | autocomplete de item (combobox) e captura de atalho | (a) janelas e widgets (pronto) |
 | `lib/ui-itens.ts` | índice de itens: memória → Cache Storage do WebView2 (compartilhado pelas janelas) → API; atualiza em 2º plano depois de 24 h | (a) (pronto) |

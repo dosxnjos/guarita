@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-definir-lingua"
+description = "Enables the definir_lingua command without any pre-configured scope."
+commands.allow = ["definir_lingua"]
+
+[[permission]]
+identifier = "deny-definir-lingua"
+description = "Denies the definir_lingua command without any pre-configured scope."
+commands.deny = ["definir_lingua"]

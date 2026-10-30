@@ -9,4 +9,5 @@ regras do repo: [../CLAUDE.md](../CLAUDE.md).
 - **Captura de rede:** só a passiva do próprio jogador (`src-tauri/src/capture/`), opt-in (o Rust confere `avisoAceitoEm` em `captura.json`); evento de outro jogador se descarta no parser, nunca chega à tela nem ao diagnóstico.
 - **Widget novo:** rótulo em `WIDGETS` (`src-tauri/src/lib.rs`), `capabilities/widgets.json` e `src/lib/windows.ts`. Comando novo: `build.rs` + capability.
 - **Rede:** só `src/lib/api.ts` (plugin-http, escopo `guarita.pages.dev`) e `src/lib/capture/dados.ts` (4 URLs fixas do GitHub; tabela de códigos só com `.sig` válido: mudou → `npm run codes:sign`, commit junto); CSP e capabilities mínimas, sem shell nem fs.
+- **Línguas:** todo texto visível (tela, aviso, voz, bandeja) em PT e ES pela preferência `config.lingua` (`tx(pt, es)` de `src/lib/i18n.svelte.ts`; Rust por `definir_lingua`); o PT não muda ao acrescentar ES. Como funciona: README § Línguas.
 - **Pronto** = `npm run check`, `npm test` e `npm run vite:build` verdes dentro de `app/`.

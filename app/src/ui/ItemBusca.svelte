@@ -5,11 +5,13 @@
   import { tierLabel } from '../../../shared/items';
   import ItemIcon from '../../../src/lib/ui/ItemIcon.svelte';
   import { buscarItens, carregarItens } from '../lib/ui-itens';
+  import { tx } from '../lib/i18n.svelte';
 
+  // Em espanhol o índice é o items-index-es.json: hit.pt traz o nome ES (mesma posição da tupla).
   let {
     onselect,
-    label = 'Buscar item',
-    placeholder = 'Ex.: bolsa T4, capa de Martlock',
+    label = tx('Buscar item', 'Buscar objeto'),
+    placeholder = tx('Ex.: bolsa T4, capa de Martlock', 'Ej.: bolsa T4, capa de Martlock'),
     autofocus = false,
     limite = 8,
     input = $bindable(null),
@@ -39,7 +41,7 @@
     try {
       index = await carregarItens();
     } catch (e) {
-      erro = e instanceof Error ? e.message : 'Não foi possível carregar a lista de itens.';
+      erro = e instanceof Error ? e.message : tx('Não foi possível carregar a lista de itens.', 'No fue posible cargar la lista de objetos.');
     } finally {
       carregando = false;
     }
@@ -132,14 +134,14 @@
     {onkeydown}
   />
   <p class="sr-only" aria-live="polite">
-    {#if mostrar}{hits.length ? `${hits.length} resultados; use as setas para escolher` : 'Nenhum item encontrado'}{/if}
+    {#if mostrar}{hits.length ? tx(`${hits.length} resultados; use as setas para escolher`, `${hits.length} resultados; usa las flechas para elegir`) : tx('Nenhum item encontrado', 'No se encontró ningún objeto')}{/if}
   </p>
   {#if erro}
-    <p class="small bad-text ib-msg" role="alert">{erro} <button type="button" class="linkbtn" onclick={garantirIndice}>Tentar de novo</button></p>
+    <p class="small bad-text ib-msg" role="alert">{erro} <button type="button" class="linkbtn" onclick={garantirIndice}>{tx('Tentar de novo', 'Intentar de nuevo')}</button></p>
   {:else if carregando && q.trim()}
-    <p class="small muted ib-msg">Carregando a lista de itens…</p>
+    <p class="small muted ib-msg">{tx('Carregando a lista de itens…', 'Cargando la lista de objetos…')}</p>
   {/if}
-  <ul bind:this={listaEl} id="{uid}-lista" class="ib-lista" role="listbox" aria-label="Itens encontrados" hidden={!mostrar}>
+  <ul bind:this={listaEl} id="{uid}-lista" class="ib-lista" role="listbox" aria-label={tx('Itens encontrados', 'Objetos encontrados')} hidden={!mostrar}>
     {#if mostrar}
       {#each hits as hit, i (hit.id)}
         <!-- teclado fica no campo (aria-activedescendant); o clique é atalho de mouse -->
@@ -151,7 +153,7 @@
           {#if hit.tier}<span class="tag">{tierLabel(hit.tier, hit.ench)}</span>{/if}
         </li>
       {:else}
-        <li class="small muted ib-vazio" role="presentation">Nenhum item com esse nome. Tente o nome em inglês ou uma palavra só.</li>
+        <li class="small muted ib-vazio" role="presentation">{tx('Nenhum item com esse nome. Tente o nome em inglês ou uma palavra só.', 'Ningún objeto con ese nombre. Prueba el nombre en inglés o una sola palabra.')}</li>
       {/each}
     {/if}
   </ul>

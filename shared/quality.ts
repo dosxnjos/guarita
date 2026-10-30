@@ -8,3 +8,12 @@ export const QUALITY_LABEL: Record<Quality, string> = { 1: 'Normal', 2: 'Bom', 3
 export function qualityLabel(q: number): string {
   return QUALITY_LABEL[q as Quality] ?? `Qualidade ${q}`;
 }
+
+/** Os mesmos nomes no cliente em espanhol (glossário: Notable e Sobresaliente). Igual ao QUALITY_LABEL_ES do front. */
+export const QUALITY_LABEL_ES: Record<Quality, string> = { 1: 'Normal', 2: 'Bueno', 3: 'Notable', 4: 'Sobresaliente', 5: 'Obra maestra' };
+
+/** Nome da qualidade na língua pedida (pt = qualityLabel). */
+export function qualityLabelFor(q: number, lang: 'pt' | 'es' = 'pt'): string {
+  if (lang !== 'es') return qualityLabel(q);
+  return QUALITY_LABEL_ES[q as Quality] ?? `Calidad ${q}`;
+}

@@ -12,9 +12,10 @@
     buscar_item: {
       title: 'Buscar objeto',
       description:
-        'Busca objetos de Albion Online por el nombre en portugués o inglés (ej.: "bolsa adepto", "espada larga t6", ' +
-        '"T4_BAG@1") y devuelve hasta 10 resultados con el id interno y el nombre en portugués. Úsala antes de preco_item ' +
-        'cuando no sepas el id exacto. El tier puede venir como número (t4, 4.1) o nombre (adepto, mestre).',
+        'Busca objetos de Albion Online por el nombre en español (con lingua "es"), portugués o inglés (ej.: "bolsa ' +
+        'iniciado", "espada ancha t6", "T4_BAG@1") y devuelve hasta 10 resultados con el id interno y el nombre en la ' +
+        'lengua pedida. Úsala antes de preco_item cuando no sepas el id exacto. El tier puede venir como número (t4, 4.1) ' +
+        'o nombre (iniciado, maestro).',
       example: '¿Cuál es el id de la Bolsa del iniciado con encantamiento 1?',
     },
     preco_item: {
@@ -115,7 +116,9 @@
       <p class="lead">El MCP (Model Context Protocol) es un estándar abierto que permite que asistentes de IA, como Claude y
         Cursor, consulten herramientas externas. Al conectar el servidor MCP de la Guarita, puedes preguntar precios, el reloj del
         servidor, el dosier de un jugador, las pérdidas en PvP y qué hacer hoy con tu plata, y el asistente responde con los datos
-        de la Guarita. Las herramientas devuelven el resumen en portugués; tu asistente puede responderte en español.</p>
+        de la Guarita. Cada herramienta acepta el argumento <code>lingua: "es"</code>, que devuelve el resumen, los nombres de
+        los objetos y los enlaces en español; las instrucciones del servidor le piden al asistente que lo envíe cuando le
+        escribes en español.</p>
     {:else}
       <p class="lead">O MCP (Model Context Protocol) é um padrão aberto que deixa assistentes de IA, como o Claude e o
         Cursor, consultarem ferramentas externas. Ligando o servidor MCP da Guarita, você pergunta preço, relógio do

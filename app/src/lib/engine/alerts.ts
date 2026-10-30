@@ -13,7 +13,8 @@ import { weightedQuantile } from '../../../../shared/confidence';
 import { QUALITY_LABEL } from '../../../../shared/quality';
 import { MAX_PRICE_IDS, type GuaritaApi } from '../api';
 import type { GuaritaConfig, RegraLocal } from '../config';
-import { fmtAge, fmtSilver } from '../format';
+import { cityName, fmtAge, fmtSilver, qualityName } from '../format';
+import { currentLocale, type Locale } from '../../../../src/lib/i18n/core';
 import type { Aviso } from '../notify';
 import { precoFalado } from '../fala';
 
@@ -61,37 +62,77 @@ export function cooldownOk(regra: Pick<RegraLocal, 'cooldownMin' | 'lastFiredAt'
 }
 
 /** Nome do item para o aviso: o nome dado na regra, ou o id; qualidade acima de Normal entra junto. */
-export function rotuloItem(regra: Pick<RegraLocal, 'itemId' | 'itemName' | 'quality'>, sep: 'parenteses' | 'virgula' = 'parenteses'): string {
+export function rotuloItem(
+  regra: Pick<RegraLocal, 'itemId' | 'itemName' | 'quality'>,
+  sep: 'parenteses' | 'virgula' = 'parenteses',
+  loc: Locale = currentLocale(),
+): string {
   const nome = regra.itemName || regra.itemId;
   if (regra.quality <= 1) return nome;
-  const q = QUALITY_LABEL[regra.quality as Quality];
+  const q = loc === 'es' ? qualityName(regra.quality as Quality, 'es') : QUALITY_LABEL[regra.quality as Quality];
   // Na voz, vírgulas dos dois lados viram pausa: "Bolsa do Adepto, excelente, a três mil...".
   return sep === 'parenteses' ? `${nome} (${q})` : `${nome}, ${q.toLowerCase()},`;
 }
 
-/** "Bolsa do Adepto a 3.550 em Lymhurst (visto há 4 min). Abaixo do seu alvo de 3.600." */
-export function mensagemDisparo(regra: RegraLocal, d: Pick<DisparoLocal, 'city' | 'price' | 'ageMin' | 'median'>): string {
-  const rotulo = rotuloItem(regra);
-  const preco = fmtSilver(d.price);
+/**
+ * "Bolsa do Adepto a 3.550 em Lymhurst (visto há 4 min). Abaixo do seu alvo de 3.600."
+ * es: "Bolsa del iniciado a 3,550 en Lymhurst (visto hace 4 min). Por debajo de tu objetivo de 3,600."
+ */
+export function mensagemDisparo(
+  regra: RegraLocal,
+  d: Pick<DisparoLocal, 'city' | 'price' | 'ageMin' | 'median'>,
+  loc: Locale = currentLocale(),
+): string {
+  if (loc === 'es') return mensagemDisparoEs(regra, d);
+  const rotulo = rotuloItem(regra, 'parenteses', loc);
+  const preco = fmtSilver(d.price, false, loc);
   const cabeca = regra.side === 'sell' ? `${rotulo} a ${preco} em ${d.city}` : `${rotulo}: pedido de compra a ${preco} em ${d.city}`;
-  const idade = d.ageMin == null ? '' : d.ageMin < 1 ? ' (visto agora)' : ` (visto ${fmtAge(d.ageMin)})`;
+  const idade = d.ageMin == null ? '' : d.ageMin < 1 ? ' (visto agora)' : ` (visto ${fmtAge(d.ageMin, loc)})`;
   const c = regra.condition;
   let cauda: string;
-  if (c.kind === 'below') cauda = `Abaixo do seu alvo de ${fmtSilver(c.price)}.`;
-  else if (c.kind === 'above') cauda = `Acima do seu alvo de ${fmtSilver(c.price)}.`;
+  if (c.kind === 'below') cauda = `Abaixo do seu alvo de ${fmtSilver(c.price, false, loc)}.`;
+  else if (c.kind === 'above') cauda = `Acima do seu alvo de ${fmtSilver(c.price, false, loc)}.`;
   else {
     const m = d.median ?? 0;
     const pct = m > 0 ? Math.round((1 - d.price / m) * 100) : c.pct;
-    cauda = `${pct}% abaixo da mediana de 7 dias da cidade (${fmtSilver(m)}).`;
+    cauda = `${pct}% abaixo da mediana de 7 dias da cidade (${fmtSilver(m, false, loc)}).`;
   }
   return `${cabeca}${idade}. ${cauda}`;
 }
 
-/** Frase curta para a voz: "Bolsa do Adepto a três mil e quinhentos em Lymhurst". */
-export function vozDisparo(regra: RegraLocal, d: Pick<DisparoLocal, 'city' | 'price'>): string {
-  const rotulo = rotuloItem(regra, 'virgula');
-  const preco = precoFalado(d.price);
+function mensagemDisparoEs(regra: RegraLocal, d: Pick<DisparoLocal, 'city' | 'price' | 'ageMin' | 'median'>): string {
+  const rotulo = rotuloItem(regra, 'parenteses', 'es');
+  const preco = fmtSilver(d.price, false, 'es');
+  const ciudad = cityName(d.city, 'es');
+  const cabeca = regra.side === 'sell' ? `${rotulo} a ${preco} en ${ciudad}` : `${rotulo}: orden de compra a ${preco} en ${ciudad}`;
+  const idade = d.ageMin == null ? '' : d.ageMin < 1 ? ' (visto ahora)' : ` (visto ${fmtAge(d.ageMin, 'es')})`;
+  const c = regra.condition;
+  let cauda: string;
+  if (c.kind === 'below') cauda = `Por debajo de tu objetivo de ${fmtSilver(c.price, false, 'es')}.`;
+  else if (c.kind === 'above') cauda = `Por encima de tu objetivo de ${fmtSilver(c.price, false, 'es')}.`;
+  else {
+    const m = d.median ?? 0;
+    const pct = m > 0 ? Math.round((1 - d.price / m) * 100) : c.pct;
+    cauda = `${pct}% por debajo de la mediana de 7 días de la ciudad (${fmtSilver(m, false, 'es')}).`;
+  }
+  return `${cabeca}${idade}. ${cauda}`;
+}
+
+/** Frase curta para a voz: "Bolsa do Adepto a três mil e quinhentos em Lymhurst" (es: "... a tres mil quinientos en ..."). */
+export function vozDisparo(regra: RegraLocal, d: Pick<DisparoLocal, 'city' | 'price'>, loc: Locale = currentLocale()): string {
+  const rotulo = rotuloItem(regra, 'virgula', loc);
+  const preco = precoFalado(d.price, loc);
+  if (loc === 'es') {
+    const ciudad = cityName(d.city, 'es');
+    return regra.side === 'sell' ? `${rotulo} a ${preco} en ${ciudad}` : `Orden de compra de ${rotulo} a ${preco} en ${ciudad}`;
+  }
   return regra.side === 'sell' ? `${rotulo} a ${preco} em ${d.city}` : `Pedido de compra de ${rotulo} a ${preco} em ${d.city}`;
+}
+
+/** Título da notificação do disparo. */
+export function tituloDisparo(side: RegraLocal['side'], loc: Locale = currentLocale()): string {
+  if (loc === 'es') return side === 'sell' ? 'Precio en tu objetivo' : 'Orden de compra en tu objetivo';
+  return side === 'sell' ? 'Preço no alvo' : 'Pedido de compra no alvo';
 }
 
 /**
@@ -263,7 +304,7 @@ export function criarMotorAlertas(deps: MotorAlertasDeps): MotorAlertas {
         await deps.marcarDisparo(regra.id, quando, d).catch((e) => deps.onErro?.(e));
         await deps
           .avisar({
-            titulo: regra.side === 'sell' ? 'Preço no alvo' : 'Pedido de compra no alvo',
+            titulo: tituloDisparo(regra.side),
             corpo: d.mensagem,
             voz: atual.voz ? d.voz : false,
             prioridade: 'normal',

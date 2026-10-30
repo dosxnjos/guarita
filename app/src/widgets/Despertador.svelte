@@ -3,14 +3,15 @@
   // (engine/timers.ts, no painel) avisa com notificação e voz, só com o app aberto.
   import { onConfigChange, updateConfig, type GuaritaConfig } from '../lib/config';
   import { fmtCountdown, fmtDateTime } from '../lib/format';
+  import { brasilia, getLocale, linkSite, tx } from '../lib/i18n.svelte';
   import { abrirLink } from '../lib/links';
   import {
-    KIND_LABEL, MOUNT_TIERS, PRESETS, defaultTimerForm, fmtDuration, formDuration, montarTimer, presetById, progresso, splitTimers,
-    type PresetId, type TimerFormState,
+    MOUNT_TIERS, PRESETS, defaultTimerForm, fmtDuration, formDuration, kindLabel, montarTimer, presetById, presetText, progresso,
+    splitTimers, type PresetId, type TimerFormState,
   } from '../lib/ui-timers';
   import { fmtAgo } from '../../../src/lib/player/format';
 
-  const SITE_DESPERTADOR = 'https://guarita.pages.dev/despertador';
+  const SITE_DESPERTADOR = linkSite('/despertador');
 
   let cfg = $state<GuaritaConfig | null>(null);
   $effect(() => onConfigChange((c) => (cfg = c)));
@@ -26,7 +27,7 @@
   let erro = $state('');
 
   const listas = $derived(splitTimers(cfg?.timers ?? []));
-  const preset = $derived(presetById(f.preset));
+  const preset = $derived(presetText(presetById(f.preset)));
   const duracao = $derived(formDuration(f));
 
   function trocarPreset(id: PresetId) {
@@ -49,7 +50,8 @@
       criando = false;
       erro = '';
     } catch (err) {
-      erro = `Não foi possível salvar: ${err instanceof Error ? err.message : String(err)}`;
+      const det = err instanceof Error ? err.message : String(err);
+      erro = tx(`Não foi possível salvar: ${det}`, `No fue posible guardar: ${det}`);
     }
   }
 
@@ -70,89 +72,103 @@
   {#if criando}
     <form class="stack form" onsubmit={criar} novalidate>
       <label class="stack campo">
-        <span class="rot">Lembrete de</span>
+        <span class="rot">{tx('Lembrete de', 'Recordatorio de')}</span>
         <select class="input" value={f.preset} onchange={(e) => trocarPreset(e.currentTarget.value as PresetId)}>
-          {#each PRESETS as p (p.id)}<option value={p.id}>{p.title}</option>{/each}
+          {#each PRESETS as p (p.id)}<option value={p.id}>{presetText(p).title}</option>{/each}
         </select>
       </label>
       <p class="small muted m0">{preset.hint}</p>
 
       {#if f.preset === 'filhote-montaria'}
         <label class="stack campo">
-          <span class="rot">Tier do filhote</span>
+          <span class="rot">{tx('Tier do filhote', 'Tier de la cría')}</span>
           <select class="input" bind:value={f.tier}>
             {#each MOUNT_TIERS as t (t)}<option value={t}>T{t}</option>{/each}
           </select>
         </label>
       {:else if f.preset === 'foco'}
         <label class="stack campo">
-          <span class="rot">Foco que você tem agora</span>
-          <input class="input" inputmode="numeric" placeholder="Ex.: 12.500" bind:value={f.focus} />
+          <span class="rot">{tx('Foco que você tem agora', 'Foco que tienes ahora')}</span>
+          <input class="input" inputmode="numeric" placeholder={tx('Ex.: 12.500', 'Ej.: 12,500')} bind:value={f.focus} />
         </label>
-        <label class="check chk"><input type="checkbox" bind:checked={f.premium} /><span class="small">Tenho Premium</span></label>
+        <label class="check chk"><input type="checkbox" bind:checked={f.premium} /><span class="small">{tx('Tenho Premium', 'Tengo Premium')}</span></label>
       {:else if f.preset === 'livre'}
         <div class="duas">
-          <label class="stack campo"><span class="rot">Horas</span><input class="input" inputmode="numeric" placeholder="0" bind:value={f.hours} /></label>
-          <label class="stack campo"><span class="rot">Minutos</span><input class="input" inputmode="numeric" placeholder="30" bind:value={f.minutes} /></label>
+          <label class="stack campo"><span class="rot">{tx('Horas', 'Horas')}</span><input class="input" inputmode="numeric" placeholder="0" bind:value={f.hours} /></label>
+          <label class="stack campo"><span class="rot">{tx('Minutos', 'Minutos')}</span><input class="input" inputmode="numeric" placeholder="30" bind:value={f.minutes} /></label>
         </div>
       {/if}
 
       <label class="stack campo">
-        <span class="rot">Nome (opcional)</span>
-        <input class="input" maxlength="60" placeholder={preset.label || 'Ex.: Ilha da guilda'} bind:value={f.label} />
+        <span class="rot">{tx('Nome (opcional)', 'Nombre (opcional)')}</span>
+        <input class="input" maxlength="60" placeholder={preset.label || tx('Ex.: Ilha da guilda', 'Ej.: Isla del gremio')} bind:value={f.label} />
       </label>
 
-      {#if duracao.ok}<p class="small m0">Avisa em <strong>{fmtDuration(duracao.minutes)}</strong>, por volta de {fmtDateTime(now + duracao.minutes * 60_000, undefined, true)} (Brasília).</p>{/if}
+      {#if duracao.ok}
+        {#if getLocale() === 'es'}
+          <p class="small m0">Avisa en <strong>{fmtDuration(duracao.minutes)}</strong>, alrededor del {fmtDateTime(now + duracao.minutes * 60_000, undefined, true)} ({brasilia()}).</p>
+        {:else}
+          <p class="small m0">Avisa em <strong>{fmtDuration(duracao.minutes)}</strong>, por volta de {fmtDateTime(now + duracao.minutes * 60_000, undefined, true)} (Brasília).</p>
+        {/if}
+      {/if}
       {#if erro}<p class="callout bad small m0" role="alert">{erro}</p>{/if}
       <div class="row">
-        <button type="submit" class="btn primary mini-btn">Criar lembrete</button>
-        <button type="button" class="btn mini-btn" onclick={() => ((criando = false), (erro = ''))}>Cancelar</button>
+        <button type="submit" class="btn primary mini-btn">{tx('Criar lembrete', 'Crear recordatorio')}</button>
+        <button type="button" class="btn mini-btn" onclick={() => ((criando = false), (erro = ''))}>{tx('Cancelar', 'Cancelar')}</button>
       </div>
     </form>
   {:else}
     <div class="row topo">
-      <button type="button" class="btn primary mini-btn" onclick={() => ((criando = true), (f = defaultTimerForm()))}>Novo lembrete</button>
+      <button type="button" class="btn primary mini-btn" onclick={() => ((criando = true), (f = defaultTimerForm()))}>{tx('Novo lembrete', 'Nuevo recordatorio')}</button>
     </div>
 
     {#if listas.pending.length}
-      <ul class="plain-list" aria-label="Lembretes ativos">
+      <ul class="plain-list" aria-label={tx('Lembretes ativos', 'Recordatorios activos')}>
         {#each listas.pending as t (t.id)}
           {@const falta = Date.parse(t.endsAt) - now}
+          {@const tipo = kindLabel(t.kind)}
           <li class="timer">
             <div class="timer-cab">
-              <span class="timer-nome"><strong>{t.label || KIND_LABEL[t.kind]}</strong>{#if t.label && t.label !== KIND_LABEL[t.kind]} <span class="small muted">{KIND_LABEL[t.kind]}</span>{/if}</span>
-              <span class="conta num" aria-label="Faltam {fmtCountdown(falta)}">{falta > 0 ? fmtCountdown(falta) : 'agora'}</span>
+              <span class="timer-nome"><strong>{t.label || tipo}</strong>{#if t.label && t.label !== tipo} <span class="small muted">{tipo}</span>{/if}</span>
+              <span class="conta num" aria-label={tx(`Faltam ${fmtCountdown(falta)}`, `Faltan ${fmtCountdown(falta)}`)}>{falta > 0 ? fmtCountdown(falta) : tx('agora', 'ahora')}</span>
             </div>
             <div class="barra" aria-hidden="true"><div class="enche" style:width="{progresso(t, now) * 100}%"></div></div>
             <div class="row timer-pe">
-              <span class="small muted">{fmtDateTime(t.endsAt, undefined, true)} (Brasília)</span>
-              <button type="button" class="linkbtn small" onclick={() => remover(t.id)}>Apagar</button>
+              <span class="small muted">{fmtDateTime(t.endsAt, undefined, true)} ({brasilia()})</span>
+              <button type="button" class="linkbtn small" onclick={() => remover(t.id)}>{tx('Apagar', 'Borrar')}</button>
             </div>
           </li>
         {/each}
       </ul>
     {:else}
-      <p class="small muted m0">Nenhum lembrete ativo. Plantação e ovos levam 22 h; o app avisa na hora, se estiver aberto.</p>
+      <p class="small muted m0">{tx('Nenhum lembrete ativo. Plantação e ovos levam 22 h; o app avisa na hora, se estiver aberto.', 'Ningún recordatorio activo. Los cultivos y los huevos tardan 22 h; la app avisa en el momento, si está abierta.')}</p>
     {/if}
 
     {#if listas.fired.length}
-      <section class="stack avisados" aria-label="Já avisados">
+      <section class="stack avisados" aria-label={tx('Já avisados', 'Ya avisados')}>
         <div class="row topo">
-          <span class="kpi-label">Já avisados</span>
-          <button type="button" class="linkbtn small" onclick={limparAvisados}>Limpar</button>
+          <span class="kpi-label">{tx('Já avisados', 'Ya avisados')}</span>
+          <button type="button" class="linkbtn small" onclick={limparAvisados}>{tx('Limpar', 'Limpiar')}</button>
         </div>
         <ul class="plain-list">
           {#each listas.fired.slice(0, 5) as t (t.id)}
-            <li class="small"><span>{t.label || KIND_LABEL[t.kind]}</span> <span class="muted">· {fmtAgo(t.firedAt)}</span></li>
+            <li class="small"><span>{t.label || kindLabel(t.kind)}</span> <span class="muted">· {fmtAgo(t.firedAt)}</span></li>
           {/each}
         </ul>
       </section>
     {/if}
 
-    <p class="small muted m0">
-      Só avisa com o app aberto. Para ser avisado no celular com o PC desligado, use o
-      <a href={SITE_DESPERTADOR} onclick={(e) => abrirLink(e, SITE_DESPERTADOR)}>despertador do site</a>.
-    </p>
+    {#if getLocale() === 'es'}
+      <p class="small muted m0">
+        Solo avisa con la app abierta. Para recibir el aviso en el celular con la PC apagada, usa el
+        <a href={SITE_DESPERTADOR} onclick={(e) => abrirLink(e, SITE_DESPERTADOR)}>despertador del sitio</a>.
+      </p>
+    {:else}
+      <p class="small muted m0">
+        Só avisa com o app aberto. Para ser avisado no celular com o PC desligado, use o
+        <a href={SITE_DESPERTADOR} onclick={(e) => abrirLink(e, SITE_DESPERTADOR)}>despertador do site</a>.
+      </p>
+    {/if}
   {/if}
 </div>
 

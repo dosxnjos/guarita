@@ -7,6 +7,13 @@
   import { api } from '../lib/api';
   import { fmtCountdown, fmtDateTime, fmtSilver, fmtTime, isStale, serverLabel, serverTone, splitFestivities, trendArrow } from '../lib/format';
   import ErroCaixa from '../lib/ui/ErroCaixa.svelte';
+  import { festivityLabel } from '../../../shared/festivities';
+  import { brasilia, getLocale, tx } from '../lib/i18n.svelte';
+
+  const TENDENCIA_ES: Record<ClockResponse['gold']['trend'], string> = { subindo: 'subiendo', caindo: 'bajando', 'estável': 'estable', 'sem dado': 'sin datos' };
+  const tendencia = (t: ClockResponse['gold']['trend']) => (getLocale() === 'es' ? (TENDENCIA_ES[t] ?? t) : t);
+  /** Nome da festividade: o labelPt da API em português; em espanhol, montado pelo tipo e nome (shared/festivities.ts). */
+  const nomeFesta = (f: Parameters<typeof festivityLabel>[0]) => festivityLabel(f, getLocale());
 
   let clock = $state<ClockResponse | null>(null);
   let erro = $state('');
@@ -40,11 +47,11 @@
 <div class="relogio stack">
   <div class="horas">
     <div>
-      <div class="kpi-label">Brasília</div>
+      <div class="kpi-label">{tx('Brasília', 'Brasilia')}</div>
       <div class="hora num" aria-live="off">{fmtTime(now)}</div>
     </div>
     <div class="utc small">
-      <span class="muted">Servidor (UTC)</span>
+      <span class="muted">{tx('Servidor (UTC)', 'Servidor (UTC)')}</span>
       <strong class="num">{fmtTime(now, 'UTC', false)}</strong>
     </div>
   </div>
@@ -53,7 +60,7 @@
     <p class="row m0 status">
       <span class="dot {serverTone(clock.server.status)}" aria-hidden="true"></span>
       <strong>{serverLabel(clock.server.status)}</strong>
-      {#if statusVelho}<span class="tag warn">pode estar desatualizado</span>{/if}
+      {#if statusVelho}<span class="tag warn">{tx('pode estar desatualizado', 'puede estar desactualizado')}</span>{/if}
     </p>
     {#if clock.server.message && !/^server is online\.?$/i.test(clock.server.message.trim())}
       <p lang="en" class="small m0 muted">{clock.server.message}</p>
@@ -63,41 +70,41 @@
   {#if erro && !clock}
     <ErroCaixa mensagem={erro} ontentar={carregar} />
   {:else if !clock}
-    <p class="small muted m0" role="status">Carregando o relógio…</p>
+    <p class="small muted m0" role="status">{tx('Carregando o relógio…', 'Cargando el reloj…')}</p>
   {:else}
-    {#if erro}<p class="small warn-text m0">Sem atualizar agora; mostrando a última leitura.</p>{/if}
+    {#if erro}<p class="small warn-text m0">{tx('Sem atualizar agora; mostrando a última leitura.', 'Sin actualizar ahora; mostrando la última lectura.')}</p>{/if}
 
-    <section class="bloco" aria-label="Bônus do dia">
-      <span class="kpi-label">Bônus agora</span>
+    <section class="bloco" aria-label={tx('Bônus do dia', 'Bonificaciones del día')}>
+      <span class="kpi-label">{tx('Bônus agora', 'Bonificaciones ahora')}</span>
       {#if fest.active.length}
         <ul class="plain-list">
           {#each fest.active.slice(0, 4) as f (f.name + f.start)}
-            <li class="festa small"><span>{f.labelPt}</span><span class="count">{fmtCountdown(f.msLeft)}</span></li>
+            <li class="festa small"><span>{nomeFesta(f)}</span><span class="count">{fmtCountdown(f.msLeft)}</span></li>
           {/each}
         </ul>
       {:else}
-        <p class="small muted m0">Nenhum bônus ativo.</p>
+        <p class="small muted m0">{tx('Nenhum bônus ativo.', 'Ninguna bonificación activa.')}</p>
       {/if}
       {#if fest.upcoming[0]}
         {@const p = fest.upcoming[0]}
-        <p class="small muted m0">Próximo: {p.labelPt}, em {fmtCountdown(p.msLeft)}</p>
+        <p class="small muted m0">{tx(`Próximo: ${nomeFesta(p)}, em ${fmtCountdown(p.msLeft)}`, `Próxima: ${nomeFesta(p)}, en ${fmtCountdown(p.msLeft)}`)}</p>
       {/if}
     </section>
 
     <dl class="numeros small">
       <div>
-        <dt>Ouro</dt>
-        <dd class="num">{fmtSilver(clock.gold.price)} <span class="muted" title="Tendência: {clock.gold.trend}">{trendArrow(clock.gold.trend)}</span></dd>
+        <dt>{tx('Ouro', 'Oro')}</dt>
+        <dd class="num">{fmtSilver(clock.gold.price)} <span class="muted" title="{tx('Tendência', 'Tendencia')}: {tendencia(clock.gold.trend)}">{trendArrow(clock.gold.trend)}</span></dd>
       </div>
-      <div><dt>Premium 30 dias</dt><dd class="num">{fmtSilver(clock.premiumSilver, true)}</dd></div>
+      <div><dt>{tx('Premium 30 dias', 'Premium 30 días')}</dt><dd class="num">{fmtSilver(clock.premiumSilver, true)}</dd></div>
       <div>
         <dt>{temporada.name}</dt>
-        <dd class="num" title="Fim previsto por volta de {fmtDateTime(temporada.end)} (Brasília); data aproximada">
-          {faltaTemporada > 0 ? `≈ ${fmtCountdown(faltaTemporada)}` : 'encerrada'}
+        <dd class="num" title={tx(`Fim previsto por volta de ${fmtDateTime(temporada.end)} (${brasilia()}); data aproximada`, `Fin previsto alrededor del ${fmtDateTime(temporada.end)} (${brasilia()}); fecha aproximada`)}>
+          {faltaTemporada > 0 ? `≈ ${fmtCountdown(faltaTemporada)}` : tx('encerrada', 'terminada')}
         </dd>
       </div>
     </dl>
-    <p class="small muted m0">Fim da temporada aproximado. Premium em prata pela cotação do ouro.</p>
+    <p class="small muted m0">{tx('Fim da temporada aproximado. Premium em prata pela cotação do ouro.', 'Fin de temporada aproximado. Premium en plata según la cotización del oro.')}</p>
   {/if}
 </div>
 

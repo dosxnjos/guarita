@@ -7,13 +7,15 @@
   import AgeDot from '../../../src/lib/ui/AgeDot.svelte';
   import ItemIcon from '../../../src/lib/ui/ItemIcon.svelte';
   import { api } from '../lib/api';
-  import { QUALITIES, QUALITY_LABEL, citySlug, confidenceTone, fmtAge, fmtPct, fmtSilver, fmtTime } from '../lib/format';
+  import { QUALITIES, articuloHora, cityName, citySlug, confidenceText, confidenceTone, fmtAge, fmtPct, fmtSilver, fmtTime, qualityName } from '../lib/format';
+  import { brasilia, getLocale, tx } from '../lib/i18n.svelte';
   import { abrirUrl } from '../lib/links';
   import { lembrarRecente, lerRecentes, resumoPreco, urlItemNoSite, type Recente } from '../lib/ui-preco';
   import ErroCaixa from '../lib/ui/ErroCaixa.svelte';
   import ItemBusca from '../ui/ItemBusca.svelte';
 
-  const CHAVE_RECENTES = 'guarita-app-preco-recentes';
+  // Recentes por língua: o nome guardado é o da língua em que o item foi buscado.
+  const CHAVE_RECENTES = getLocale() === 'es' ? 'guarita-app-preco-recentes-es' : 'guarita-app-preco-recentes';
   const CHAVE_PREMIUM = 'guarita-app-premium';
 
   const ler = (k: string) => {
@@ -95,12 +97,12 @@
 </script>
 
 <div class="preco stack">
-  <ItemBusca bind:input={campo} onselect={escolher} autofocus label="Item para ver o preço" placeholder="Item (ex.: bolsa T4.1)" />
+  <ItemBusca bind:input={campo} onselect={escolher} autofocus label={tx('Item para ver o preço', 'Objeto para ver el precio')} placeholder={tx('Item (ex.: bolsa T4.1)', 'Objeto (ej.: bolsa T4.1)')} />
 
   {#if !alvo}
     {#if recentes.length}
       <div class="stack recentes">
-        <span class="kpi-label">Vistos há pouco</span>
+        <span class="kpi-label">{tx('Vistos há pouco', 'Vistos hace poco')}</span>
         <div class="row">
           {#each recentes as r (r.id)}
             <button type="button" class="chip-btn" onclick={() => escolher(r)} title={r.id}>{r.nome}</button>
@@ -108,7 +110,7 @@
         </div>
       </div>
     {:else}
-      <p class="muted small m0">Digite o nome do item e aperte Enter. Aceita nome em português ou inglês, tier e encantamento (ex.: “capa T6.2”).</p>
+      <p class="muted small m0">{tx('Digite o nome do item e aperte Enter. Aceita nome em português ou inglês, tier e encantamento (ex.: “capa T6.2”).', 'Escribe el nombre del objeto y presiona Enter. Acepta el nombre en español o en inglés, tier y encantamiento (ej.: “capa T6.2”).')}</p>
     {/if}
   {:else}
     <div class="cab">
@@ -117,48 +119,48 @@
         <strong title={alvo.id}>{alvo.nome}</strong>
         {#if tier}<span class="tag">{tier}</span>{/if}
       </div>
-      <label class="sr-only" for="preco-q">Qualidade</label>
+      <label class="sr-only" for="preco-q">{tx('Qualidade', 'Calidad')}</label>
       <select id="preco-q" class="input sel" value={qualidade} onchange={(e) => mudarQualidade(Number(e.currentTarget.value) as Quality)}>
-        {#each QUALITIES as q (q)}<option value={q}>{QUALITY_LABEL[q]}</option>{/each}
+        {#each QUALITIES as q (q)}<option value={q}>{qualityName(q)}</option>{/each}
       </select>
     </div>
 
     {#if erro}
       <ErroCaixa mensagem={erro} ontentar={() => carregar(true)} />
     {:else if carregando && !dado}
-      <p class="muted small m0" role="status">Buscando preços…</p>
+      <p class="muted small m0" role="status">{tx('Buscando preços…', 'Buscando precios…')}</p>
     {:else if resumo}
       {#if resumo.semDado}
-        <p class="callout small m0">Ninguém registrou preço deste item nas últimas horas. Confira no jogo.</p>
+        <p class="callout small m0">{tx('Ninguém registrou preço deste item nas últimas horas. Confira no jogo.', 'Nadie registró el precio de este objeto en las últimas horas. Revísalo en el juego.')}</p>
       {:else}
         {#if resumo.melhor}
           {@const m = resumo.melhor.quote}
           <div class="melhor callout {resumo.melhor.reliable ? 'good' : 'warn'}">
-            <span class="kpi-label">{resumo.melhor.reliable ? 'Mais barato confiável' : 'Mais barato visto (pouco confiável)'}</span>
+            <span class="kpi-label">{resumo.melhor.reliable ? tx('Mais barato confiável', 'Más barato confiable') : tx('Mais barato visto (pouco confiável)', 'Más barato visto (poco confiable)')}</span>
             <div class="melhor-linha">
               <span class="kpi num">{fmtSilver(m.sellMin)}</span>
-              <span class="small">em <strong class="city-name city-{citySlug(m.city)}">{m.city}</strong></span>
+              <span class="small">{tx('em', 'en')} <strong class="city-name city-{citySlug(m.city)}">{cityName(m.city)}</strong></span>
             </div>
-            <span class="small muted"><AgeDot min={m.ageMin} /> · selo {m.confidence.label}</span>
+            <span class="small muted"><AgeDot min={m.ageMin} /> · {tx(`selo ${m.confidence.label}`, `confianza ${confidenceText(m.confidence.label)}`)}</span>
           </div>
         {:else}
-          <p class="callout small m0">Sem ordem de venda nas cidades. Veja as ordens de compra abaixo.</p>
+          <p class="callout small m0">{tx('Sem ordem de venda nas cidades. Veja as ordens de compra abaixo.', 'No hay órdenes de venta en las ciudades. Mira las órdenes de compra abajo.')}</p>
         {/if}
 
         <div class="table-wrap">
           <table class="data compacta">
-            <caption class="sr-only">Preço por cidade</caption>
+            <caption class="sr-only">{tx('Preço por cidade', 'Precio por ciudad')}</caption>
             <thead>
-              <tr><th scope="col">Cidade</th><th scope="col" class="num">Venda</th><th scope="col" class="col-compra num">Compra</th><th scope="col">Idade</th><th scope="col" class="col-selo">Selo</th></tr>
+              <tr><th scope="col">{tx('Cidade', 'Ciudad')}</th><th scope="col" class="num">{tx('Venda', 'Venta')}</th><th scope="col" class="col-compra num">{tx('Compra', 'Compra')}</th><th scope="col">{tx('Idade', 'Antigüedad')}</th><th scope="col" class="col-selo">{tx('Selo', 'Confianza')}</th></tr>
             </thead>
             <tbody>
               {#each resumo.linhas as c (c.city)}
                 <tr class:highlight={resumo.melhor?.quote.city === c.city}>
-                  <th scope="row"><span class="city-name city-{citySlug(c.city)}">{c.city}</span></th>
+                  <th scope="row"><span class="city-name city-{citySlug(c.city)}">{cityName(c.city)}</span></th>
                   <td class="num">{fmtSilver(c.sellMin, true)}</td>
                   <td class="num col-compra">{fmtSilver(c.buyMax, true)}</td>
-                  <td><AgeDot min={c.ageMin} text={false} /><span class="idade">{fmtAge(c.ageMin).replace('há ', '')}</span></td>
-                  <td class="col-selo"><span class="tag {confidenceTone(c.confidence.label)}" title={c.confidence.reasons.join(' · ')}>{c.confidence.label}</span></td>
+                  <td><AgeDot min={c.ageMin} text={false} /><span class="idade">{fmtAge(c.ageMin).replace(/^(há|hace) /, '')}</span></td>
+                  <td class="col-selo"><span class="tag {confidenceTone(c.confidence.label)}" title={c.confidence.reasons.join(' · ')}>{confidenceText(c.confidence.label)}</span></td>
                 </tr>
               {/each}
             </tbody>
@@ -167,28 +169,37 @@
 
         <div class="flip stack">
           <div class="row flip-cab">
-            <span class="kpi-label">Flip para o Black Market</span>
+            <span class="kpi-label">{tx('Flip para o Black Market', 'Reventa al Mercado Negro')}</span>
             <label class="check chk"><input type="checkbox" checked={premium} onchange={(e) => mudarPremium(e.currentTarget.checked)} /><span class="small">Premium</span></label>
           </div>
           {#if resumo.flip}
             {@const f = resumo.flip}
-            <p class="small m0">
-              Compre em <strong>{f.flip.from}</strong> por <span class="num">{fmtSilver(f.flip.buyAt)}</span> e venda no Black Market por
-              <span class="num">{fmtSilver(f.flip.sellAt)}</span>: lucro de <strong class="good-text num">{fmtSilver(f.lucro)}</strong>
-              {#if f.roi !== null}({fmtPct(f.roi)}){/if}.
-            </p>
-            {#if f.velho}<p class="small warn-text m0">O Black Market muda rápido e este preço tem {f.flip.ageMin === null ? 'idade desconhecida' : `${f.flip.ageMin} min`}. Confira no jogo antes de comprar.</p>{/if}
+            {#if getLocale() === 'es'}
+              <p class="small m0">
+                Compra en <strong>{cityName(f.flip.from)}</strong> por <span class="num">{fmtSilver(f.flip.buyAt)}</span> y vende en el Mercado Negro por
+                <span class="num">{fmtSilver(f.flip.sellAt)}</span>: ganancia de <strong class="good-text num">{fmtSilver(f.lucro)}</strong>
+                {#if f.roi !== null}({fmtPct(f.roi)}){/if}.
+              </p>
+              {#if f.velho}<p class="small warn-text m0">El Mercado Negro cambia rápido y este precio tiene {f.flip.ageMin === null ? 'antigüedad desconocida' : `${f.flip.ageMin} min`}. Revísalo en el juego antes de comprar.</p>{/if}
+            {:else}
+              <p class="small m0">
+                Compre em <strong>{f.flip.from}</strong> por <span class="num">{fmtSilver(f.flip.buyAt)}</span> e venda no Black Market por
+                <span class="num">{fmtSilver(f.flip.sellAt)}</span>: lucro de <strong class="good-text num">{fmtSilver(f.lucro)}</strong>
+                {#if f.roi !== null}({fmtPct(f.roi)}){/if}.
+              </p>
+              {#if f.velho}<p class="small warn-text m0">O Black Market muda rápido e este preço tem {f.flip.ageMin === null ? 'idade desconhecida' : `${f.flip.ageMin} min`}. Confira no jogo antes de comprar.</p>{/if}
+            {/if}
           {:else}
-            <p class="small muted m0">Nenhum flip com lucro agora{premium ? '' : ' sem Premium'}.</p>
+            <p class="small muted m0">{tx(`Nenhum flip com lucro agora${premium ? '' : ' sem Premium'}.`, `Ninguna reventa con ganancia ahora${premium ? '' : ' sin Premium'}.`)}</p>
           {/if}
         </div>
       {/if}
 
       <div class="row rodape">
-        <span class="small muted">{buscadoEm ? `Preços de ${fmtTime(buscadoEm, undefined, false)} (Brasília)` : ''}</span>
+        <span class="small muted">{buscadoEm ? tx(`Preços de ${fmtTime(buscadoEm, undefined, false)} (${brasilia()})`, `Precios de ${articuloHora(fmtTime(buscadoEm, undefined, false))} ${fmtTime(buscadoEm, undefined, false)} (${brasilia()})`) : ''}</span>
         <span class="row">
-          <button type="button" class="btn mini-btn" onclick={() => carregar(true)} disabled={carregando}>{carregando ? 'Atualizando…' : 'Atualizar'}</button>
-          <button type="button" class="btn mini-btn" onclick={() => alvo && abrirUrl(urlItemNoSite(alvo.id, qualidade))}>Abrir no site</button>
+          <button type="button" class="btn mini-btn" onclick={() => carregar(true)} disabled={carregando}>{carregando ? tx('Atualizando…', 'Actualizando…') : tx('Atualizar', 'Actualizar')}</button>
+          <button type="button" class="btn mini-btn" onclick={() => alvo && abrirUrl(urlItemNoSite(alvo.id, qualidade))}>{tx('Abrir no site', 'Abrir en el sitio')}</button>
         </span>
       </div>
     {/if}

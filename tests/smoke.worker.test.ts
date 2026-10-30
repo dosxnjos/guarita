@@ -493,6 +493,72 @@ describe.skipIf(!RUN)('fumaça do worker contra as APIs reais', () => {
     expect(String(bad.body.error)).not.toMatch(/\b(você|não)\b/i);
   }, 60_000);
 
+  // ---------- Rodada 3: textos montados no servidor em espanhol ----------
+
+  /** Palavras que só existem no português dos textos montados (motivos, lições, nomes). */
+  const PT_ONLY = /\b(você|kills?|abate|sozinho|histórico|não|montaria|poção|guilda|prata|dossiê|matador)\b/i;
+
+  it('/api/player/:id?lang=es: mesmos números, motivos do perigo em espanhol', async () => {
+    const id = 'NwcyH-y1Q924YlQkAkn7nw';
+    const es = await call(`/api/player/${id}?lang=es`);
+    if (upstreamDown(es, '/api/player/:id?lang=es')) return;
+    expect(es.status).toBe(200);
+    const pt = await call(`/api/player/${id}`);
+    if (upstreamDown(pt, '/api/player/:id')) return;
+    const d = es.body as PlayerDossier;
+    const p = pt.body as PlayerDossier;
+    // Mesmo dado em cache: só os motivos mudam de língua.
+    expect([d.danger.score, d.danger.label, d.killFame, d.recentKills.length]).toEqual([p.danger.score, p.danger.label, p.killFame, p.recentKills.length]);
+    expect(d.danger.reasons).toHaveLength(p.danger.reasons.length);
+    for (const r of d.danger.reasons) expect(r).not.toMatch(PT_ONLY);
+    console.log(`[fumaça] dosier ES: ${d.danger.label} (${d.danger.score}): ${d.danger.reasons.join('; ')}`);
+  }, 180_000);
+
+  it('/api/player/:id/autopsy?lang=es: lições em espanhol', async () => {
+    const r = await call('/api/player/NwcyH-y1Q924YlQkAkn7nw/autopsy?lang=es');
+    if (upstreamDown(r, '/api/player/:id/autopsy?lang=es')) return;
+    expect(r.status).toBe(200);
+    const lessons = (r.body.lessons ?? []) as string[];
+    for (const l of lessons) expect(l).not.toMatch(PT_ONLY);
+    console.log(`[fumaça] autópsia ES: ${lessons.join(' | ').slice(0, 300)}`);
+  }, 180_000);
+
+  it('/api/losses?lang=es: nomes das fatias names-es, mesmos números', async () => {
+    const es = await call('/api/losses?days=1&limit=10&lang=es');
+    if (upstreamDown(es, '/api/losses?lang=es')) return;
+    expect(es.status).toBe(200);
+    const pt = (await call('/api/losses?days=1&limit=10')).body as LossesResponse;
+    const l = es.body as LossesResponse;
+    expect(l.items.map((i) => [i.id, i.count, i.price])).toEqual(pt.items.map((i) => [i.id, i.count, i.price]));
+    expect(l.items.find((i) => i.id === 'T4_BAG')?.name).toBe('Bolsa del iniciado (T4)');
+    expect(pt.items.find((i) => i.id === 'T4_BAG')?.name).toBe('Bolsa do Adepto (T4)');
+  }, 60_000);
+
+  it('/api/item/T4_BAG?lang=es, /api/clock?lang=es e POST /api/risk?lang=es', async () => {
+    const item = await call('/api/item/T4_BAG?lang=es');
+    if (!upstreamDown(item, '/api/item?lang=es')) {
+      expect(item.status).toBe(200);
+      const reasons = (item.body as ItemResponse).cities.flatMap((c) => c.confidence.reasons);
+      for (const r of reasons) expect(r).not.toMatch(/\b(visto há|livro|preço|pouco|acima|abaixo)\b/);
+    }
+    const clock = await call('/api/clock?lang=es');
+    expect(clock.status).toBe(200);
+    for (const f of (clock.body as ClockResponse).festivities) expect(typeof f.label).toBe('string');
+    const risk = await post('/api/risk?lang=es', { items: [{ id: 'T4_BAG', quality: 1 }] });
+    if (!upstreamDown(risk, '/api/risk?lang=es')) {
+      expect(risk.body.zones.find((z: { zone: string }) => z.zone === 'brumas').label).toBe('Nieblas');
+    }
+  }, 60_000);
+
+  it('POST /mcp com lingua "es": relogio e buscar_item em espanhol', async () => {
+    const clock = await post('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'relogio', arguments: { lingua: 'es' } } });
+    expect(clock.status).toBe(200);
+    expect(String(clock.body.result.content[0].text)).toContain('hora de Brasilia');
+    const item = await post('/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'buscar_item', arguments: { consulta: 'bolsa iniciado', lingua: 'es' } } });
+    expect(item.body.result.isError).toBeFalsy();
+    expect(String(item.body.result.content[0].text)).toContain('Bolsa del iniciado');
+  }, 60_000);
+
   it('/api/health e rota desconhecida', async () => {
     const h = await call('/api/health');
     expect(h.body.ok).toBe(true);

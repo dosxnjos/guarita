@@ -3,11 +3,12 @@
   // Só agregados; a captura é ligada e desligada no painel (Ajustes), com aviso.
   import { onMount } from 'svelte';
   import type { PriceRow } from '../../../shared/types';
-  import { fmtSilver, fmtInt, fmtTime } from '../lib/format';
+  import { articuloHora, fmtSilver, fmtInt, fmtTime } from '../lib/format';
   import { acompanharCaptura, estadoCaptura, novaSessao, sessaoCaptura } from '../lib/capture/captura';
   import { precosDoLoot } from '../lib/capture/precos';
-  import { ROTULO_FASE, duracaoAgora, fmtDuracao, marcaDoLoot, porHora, valorLoot } from '../lib/capture/sessao';
+  import { duracaoAgora, fmtDuracao, marcaDoLoot, porHora, rotuloFase, valorLoot } from '../lib/capture/sessao';
   import type { EstadoCaptura, RetratoSessao } from '../lib/capture/tipos';
+  import { getLocale, tx } from '../lib/i18n.svelte';
   import { isTauri } from '../lib/windows';
   import Carregando from '../lib/ui/Carregando.svelte';
   import ErroCaixa from '../lib/ui/ErroCaixa.svelte';
@@ -71,7 +72,7 @@
         }
       })();
     } else {
-      erro = 'A sessão só funciona dentro do app da Guarita.';
+      erro = tx('A sessão só funciona dentro do app da Guarita.', 'La sesión solo funciona dentro de la app de la Guarita.');
     }
     const t = setInterval(() => (agora = Date.now()), 1000);
     return () => {
@@ -99,63 +100,76 @@
 
 <div class="sessao stack">
   <div class="topo">
-    <span class="tag {ROTULO_FASE[fase][1]}" role="status" aria-live="polite">{ROTULO_FASE[fase][0]}</span>
-    {#if retrato?.zona}<span class="small muted zona" title={retrato.zona.id}>{retrato.zona.nome ?? retrato.zona.id}</span>{/if}
+    <span class="tag {rotuloFase(fase)[1]}" role="status" aria-live="polite">{rotuloFase(fase)[0]}</span>
+    <!-- O nome do mapa vem do world.txt do ao-bin-dumps, só em inglês (lang para o leitor de tela). -->
+    {#if retrato?.zona}<span class="small muted zona" lang="en" title={retrato.zona.id}>{retrato.zona.nome ?? retrato.zona.id}</span>{/if}
   </div>
 
   {#if erro}
     <ErroCaixa mensagem={erro} />
   {:else if !estado || !retrato}
-    <Carregando texto="Lendo a sessão…" />
+    <Carregando texto={tx('Lendo a sessão…', 'Leyendo la sesión…')} />
   {:else}
     {#if fase === 'desligada' && retrato.fatos === 0}
-      <p class="small m0">A captura está desligada. Para ver prata, fama e loot por hora, ligue em <strong>Ajustes › Captura do próprio jogador</strong>, no painel.</p>
+      {#if getLocale() === 'es'}
+        <p class="small m0">La captura está desactivada. Para ver plata, fama y botín por hora, actívala en <strong>Ajustes › Captura de tu propio personaje</strong>, en el panel.</p>
+      {:else}
+        <p class="small m0">A captura está desligada. Para ver prata, fama e loot por hora, ligue em <strong>Ajustes › Captura do próprio jogador</strong>, no painel.</p>
+      {/if}
     {:else if fase === 'sem-npcap' || fase === 'npcap-invalido' || fase === 'sem-interface' || fase === 'sem-permissao'}
-      <p class="small m0">A captura não conseguiu ler a rede. Veja o que falta em <strong>Ajustes › Captura do próprio jogador</strong>, no painel.</p>
+      {#if getLocale() === 'es'}
+        <p class="small m0">La captura no pudo leer la red. Mira qué falta en <strong>Ajustes › Captura de tu propio personaje</strong>, en el panel.</p>
+      {:else}
+        <p class="small m0">A captura não conseguiu ler a rede. Veja o que falta em <strong>Ajustes › Captura do próprio jogador</strong>, no painel.</p>
+      {/if}
     {:else if fase === 'aguardando-jogo'}
-      <p class="small muted m0">Aguardando o tráfego do Albion. Abra o jogo e entre num mapa.</p>
+      <p class="small muted m0">{tx('Aguardando o tráfego do Albion. Abra o jogo e entre num mapa.', 'Esperando el tráfico de Albion. Abre el juego y entra en un mapa.')}</p>
     {:else if fase === 'aguardando-mapa'}
-      <p class="small muted m0">Troque de mapa uma vez (entre por um portal) para a Guarita reconhecer o seu personagem.</p>
+      <p class="small muted m0">{tx('Troque de mapa uma vez (entre por um portal) para a Guarita reconhecer o seu personagem.', 'Cambia de mapa una vez (entra por un portal) para que la Guarita reconozca a tu personaje.')}</p>
     {/if}
 
     <dl class="numeros">
-      <div><dt>Tempo</dt><dd>{fmtDuracao(duracao)}</dd></div>
-      <div><dt>Mortes</dt><dd>{fmtInt(retrato.mortes)}</dd></div>
+      <div><dt>{tx('Tempo', 'Tiempo')}</dt><dd>{fmtDuracao(duracao)}</dd></div>
+      <div><dt>{tx('Mortes', 'Muertes')}</dt><dd>{fmtInt(retrato.mortes)}</dd></div>
       <div>
-        <dt>Prata recolhida</dt>
+        <dt>{tx('Prata recolhida', 'Plata recogida')}</dt>
         <dd>{fmtSilver(retrato.prata)}<span class="ritmo">{fmtRitmo(ritmo.prata, (n) => fmtSilver(n, true))}</span></dd>
       </div>
       <div>
-        <dt>Fama</dt>
+        <dt>{tx('Fama', 'Fama')}</dt>
         <dd>{fmtInt(Math.round(retrato.fama))}<span class="ritmo">{fmtRitmo(ritmo.fama, (n) => fmtInt(Math.round(n)))}</span></dd>
       </div>
       <div class="largo">
-        <dt>Loot (valor estimado)</dt>
+        <dt>{tx('Loot (valor estimado)', 'Botín (valor estimado)')}</dt>
         <dd>
           {loot && loot.linhas.length ? fmtSilver(loot.total) : '—'}<span class="ritmo">{fmtRitmo(ritmo.loot, (n) => fmtSilver(n, true))}</span>
         </dd>
       </div>
     </dl>
     {#if loot && loot.semPreco > 0}
-      <p class="small muted m0">{loot.semPreco} {loot.semPreco === 1 ? 'item sem preço ficou' : 'itens sem preço ficaram'} fora do valor.</p>
+      <p class="small muted m0">{loot.semPreco} {loot.semPreco === 1 ? tx('item sem preço ficou', 'objeto sin precio quedó') : tx('itens sem preço ficaram', 'objetos sin precio quedaron')} {tx('fora do valor.', 'fuera del valor.')}</p>
     {/if}
-    {#if erroPreco}<p class="small warn-text m0">Sem preço agora: {erroPreco}</p>{/if}
+    {#if erroPreco}<p class="small warn-text m0">{tx('Sem preço agora', 'Sin precio ahora')}: {erroPreco}</p>{/if}
     {#if retrato.saldoVariacao !== null}
-      <p class="small muted m0">Saldo de prata {retrato.saldoVariacao >= 0 ? 'subiu' : 'caiu'} {fmtSilver(Math.abs(retrato.saldoVariacao))} na sessão (inclui compras e vendas).</p>
+      {#if getLocale() === 'es'}
+        <p class="small muted m0">El saldo de plata {retrato.saldoVariacao >= 0 ? 'subió' : 'bajó'} {fmtSilver(Math.abs(retrato.saldoVariacao))} en la sesión (incluye compras y ventas).</p>
+      {:else}
+        <p class="small muted m0">Saldo de prata {retrato.saldoVariacao >= 0 ? 'subiu' : 'caiu'} {fmtSilver(Math.abs(retrato.saldoVariacao))} na sessão (inclui compras e vendas).</p>
+      {/if}
     {/if}
 
     <div class="rodape">
-      <span class="small muted">Desde {fmtTime(retrato.iniciadaEm, undefined, false)}</span>
+      <span class="small muted">{tx('Desde', `Desde ${articuloHora(fmtTime(retrato.iniciadaEm, undefined, false))}`)} {fmtTime(retrato.iniciadaEm, undefined, false)}</span>
       {#if confirmarZerar}
         <span class="row">
-          <button type="button" class="btn mini-btn" onclick={zerar} disabled={zerando}>Zerar</button>
-          <button type="button" class="btn mini-btn" onclick={() => (confirmarZerar = false)}>Cancelar</button>
+          <button type="button" class="btn mini-btn" onclick={zerar} disabled={zerando}>{tx('Zerar', 'Reiniciar')}</button>
+          <button type="button" class="btn mini-btn" onclick={() => (confirmarZerar = false)}>{tx('Cancelar', 'Cancelar')}</button>
         </span>
       {:else}
-        <button type="button" class="btn mini-btn" onclick={() => (confirmarZerar = true)}>Nova sessão</button>
+        <button type="button" class="btn mini-btn" onclick={() => (confirmarZerar = true)}>{tx('Nova sessão', 'Nueva sesión')}</button>
       {/if}
     </div>
-    <p class="small muted m0 nota">Valor do loot: mediana da venda mais barata nas cidades (qualidade normal), pela Guarita. É estimativa, não preço garantido.</p>
+    <p class="small muted m0 nota">{tx('Valor do loot: mediana da venda mais barata nas cidades (qualidade normal), pela Guarita. É estimativa, não preço garantido.', 'Valor del botín: mediana de la venta más barata en las ciudades (calidad normal), según la Guarita. Es una estimación, no un precio garantizado.')}</p>
   {/if}
 </div>
 

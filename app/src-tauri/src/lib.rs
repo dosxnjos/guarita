@@ -29,9 +29,11 @@ pub const CONFIG_STORE: &str = "config.json";
 pub const EV_VOZ_SILENCIADA: &str = "guarita://voz-silenciada";
 
 /// Um widget: janela pequena, sem moldura do Windows, criada sob demanda pelo rótulo.
+/// `title` e `title_es`: os mesmos de `WIDGET_TITLES` e `WIDGET_TITLES_ES` em `src/lib/windows.ts`.
 pub struct WidgetSpec {
     pub label: &'static str,
     pub title: &'static str,
+    pub title_es: &'static str,
     pub width: f64,
     pub height: f64,
     pub min_width: f64,
@@ -40,22 +42,60 @@ pub struct WidgetSpec {
 
 /// Lista fechada de widgets. Rótulo novo entra aqui, em `capabilities/widgets.json` e em `src/lib/windows.ts`.
 pub const WIDGETS: &[WidgetSpec] = &[
-    WidgetSpec { label: "preco", title: "Preço rápido", width: 360.0, height: 420.0, min_width: 280.0, min_height: 200.0 },
-    WidgetSpec { label: "dossie", title: "Dossiê", width: 380.0, height: 480.0, min_width: 300.0, min_height: 240.0 },
-    WidgetSpec { label: "relogio", title: "Relógio", width: 300.0, height: 220.0, min_width: 220.0, min_height: 140.0 },
-    WidgetSpec { label: "alertas", title: "Alertas", width: 360.0, height: 420.0, min_width: 280.0, min_height: 200.0 },
-    WidgetSpec { label: "despertador", title: "Despertador", width: 320.0, height: 360.0, min_width: 240.0, min_height: 180.0 },
-    WidgetSpec { label: "lente", title: "Lente de mercado", width: 380.0, height: 360.0, min_width: 280.0, min_height: 200.0 },
-    WidgetSpec { label: "sessao", title: "Sessão", width: 320.0, height: 320.0, min_width: 240.0, min_height: 180.0 },
-    WidgetSpec { label: "loot", title: "Loot", width: 360.0, height: 420.0, min_width: 260.0, min_height: 200.0 },
+    WidgetSpec { label: "preco", title: "Preço rápido", title_es: "Precio rápido", width: 360.0, height: 420.0, min_width: 280.0, min_height: 200.0 },
+    WidgetSpec { label: "dossie", title: "Dossiê", title_es: "Dosier", width: 380.0, height: 480.0, min_width: 300.0, min_height: 240.0 },
+    WidgetSpec { label: "relogio", title: "Relógio", title_es: "Reloj", width: 300.0, height: 220.0, min_width: 220.0, min_height: 140.0 },
+    WidgetSpec { label: "alertas", title: "Alertas", title_es: "Alertas", width: 360.0, height: 420.0, min_width: 280.0, min_height: 200.0 },
+    WidgetSpec { label: "despertador", title: "Despertador", title_es: "Despertador", width: 320.0, height: 360.0, min_width: 240.0, min_height: 180.0 },
+    WidgetSpec { label: "lente", title: "Lente de mercado", title_es: "Lente de mercado", width: 380.0, height: 360.0, min_width: 280.0, min_height: 200.0 },
+    WidgetSpec { label: "sessao", title: "Sessão", title_es: "Sesión", width: 320.0, height: 320.0, min_width: 240.0, min_height: 180.0 },
+    WidgetSpec { label: "loot", title: "Loot", title_es: "Botín", width: 360.0, height: 420.0, min_width: 260.0, min_height: 200.0 },
 ];
+
+impl WidgetSpec {
+    fn titulo(&self, es: bool) -> &'static str {
+        if es { self.title_es } else { self.title }
+    }
+}
+
+/// Itens da bandeja que mudam de texto com a língua.
+struct ItensBandeja {
+    abrir: MenuItem<Wry>,
+    widgets: Submenu<Wry>,
+    /// Na ordem de `WIDGETS`.
+    itens: Vec<MenuItem<Wry>>,
+    mudo: CheckMenuItem<Wry>,
+    sair: MenuItem<Wry>,
+}
 
 #[derive(Default)]
 struct AppState {
     /// Fechar o painel esconde na bandeja em vez de sair (opção da tela de ajustes; padrão: sair).
     close_to_tray: AtomicBool,
     muted: AtomicBool,
-    mute_item: Mutex<Option<CheckMenuItem<Wry>>>,
+    /// Língua da bandeja, dos títulos e das mensagens: espanhol (true) ou português (false, padrão). Vem do
+    /// `config.lingua` ao iniciar e do comando `definir_lingua` (o painel resolve o "automático").
+    espanhol: AtomicBool,
+    bandeja: Mutex<Option<ItensBandeja>>,
+}
+
+/// Texto na língua atual do app (português ou espanhol).
+fn tr(app: &AppHandle, pt: &str, es: &str) -> String {
+    if espanhol(app) { es.to_string() } else { pt.to_string() }
+}
+
+fn espanhol(app: &AppHandle) -> bool {
+    app.state::<AppState>().espanhol.load(Ordering::SeqCst)
+}
+
+/// Língua guardada na config (`lingua`: "pt", "es" ou "auto"). "auto" e ausente valem português até o painel
+/// informar a língua do sistema. Pura.
+fn espanhol_da_config(cfg: Option<&serde_json::Value>) -> bool {
+    cfg.and_then(|c| c.get("lingua")).and_then(|v| v.as_str()) == Some("es")
+}
+
+fn titulo_janela(s: &WidgetSpec, es: bool) -> String {
+    format!("Guarita · {}", s.titulo(es))
 }
 
 #[derive(Serialize)]
@@ -67,11 +107,19 @@ pub struct WidgetInfo {
     visible: bool,
 }
 
+fn spec_em(label: &str, es: bool) -> Result<&'static WidgetSpec, String> {
+    WIDGETS.iter().find(|w| w.label == label).ok_or_else(|| {
+        if es { format!("Widget desconocido: \"{label}\".") } else { format!("Widget desconhecido: \"{label}\".") }
+    })
+}
+
 fn spec(label: &str) -> Result<&'static WidgetSpec, String> {
-    WIDGETS
-        .iter()
-        .find(|w| w.label == label)
-        .ok_or_else(|| format!("Widget desconhecido: \"{label}\"."))
+    spec_em(label, false)
+}
+
+/// `spec` com a mensagem de erro na língua do app.
+fn spec_app(app: &AppHandle, label: &str) -> Result<&'static WidgetSpec, String> {
+    spec_em(label, espanhol(app))
 }
 
 fn build_widget(app: &AppHandle, s: &WidgetSpec) -> tauri::Result<WebviewWindow> {
@@ -80,7 +128,7 @@ fn build_widget(app: &AppHandle, s: &WidgetSpec) -> tauri::Result<WebviewWindow>
     let i = WIDGETS.iter().position(|w| w.label == s.label).unwrap_or(0) as f64;
     // Um bundle só: o front descobre qual widget desenhar pelo rótulo da janela (getCurrentWindow().label).
     WebviewWindowBuilder::new(app, s.label, WebviewUrl::App("index.html".into()))
-        .title(format!("Guarita · {}", s.title))
+        .title(titulo_janela(s, espanhol(app)))
         .position(120.0 + i * 36.0, 100.0 + i * 36.0)
         .inner_size(s.width, s.height)
         .min_inner_size(s.min_width, s.min_height)
@@ -100,7 +148,7 @@ fn show_and_focus(w: &WebviewWindow) {
 }
 
 fn open_widget(app: &AppHandle, label: &str) -> Result<(), String> {
-    let s = spec(label)?;
+    let s = spec_app(app, label)?;
     if let Some(w) = app.get_webview_window(s.label) {
         show_and_focus(&w);
         return Ok(());
@@ -151,10 +199,36 @@ fn marcar_widget_fechado(app: &AppHandle, label: &str) {
 fn set_muted(app: &AppHandle, on: bool) {
     let st = app.state::<AppState>();
     st.muted.store(on, Ordering::SeqCst);
-    if let Some(item) = st.mute_item.lock().ok().and_then(|g| g.clone()) {
+    if let Some(item) = st.bandeja.lock().ok().and_then(|g| g.as_ref().map(|b| b.mudo.clone())) {
         let _ = item.set_checked(on);
     }
     let _ = app.emit(EV_VOZ_SILENCIADA, on);
+}
+
+/// Troca a língua do lado Rust: textos da bandeja e títulos das janelas abertas. As mensagens dos comandos leem
+/// `AppState.espanhol` na hora.
+fn aplicar_lingua(app: &AppHandle, es: bool) {
+    app.state::<AppState>().espanhol.store(es, Ordering::SeqCst);
+    let t = |pt: &'static str, es_txt: &'static str| if es { es_txt } else { pt };
+    // Copia os itens e solta a trava antes de mexer no menu: set_text vai à thread principal e espera; se ela estiver
+    // no on_menu_event → set_muted (que também trava `bandeja`), segurar a trava aqui travaria o app.
+    let itens = app.state::<AppState>().bandeja.lock().ok().and_then(|g| {
+        g.as_ref().map(|b| (b.abrir.clone(), b.widgets.clone(), b.itens.clone(), b.mudo.clone(), b.sair.clone()))
+    });
+    if let Some((abrir, widgets, itens, mudo, sair)) = itens {
+        let _ = abrir.set_text(t("Abrir painel", "Abrir panel"));
+        let _ = widgets.set_text("Widgets");
+        for (item, s) in itens.iter().zip(WIDGETS) {
+            let _ = item.set_text(s.titulo(es));
+        }
+        let _ = mudo.set_text(t("Silenciar voz", "Silenciar voz"));
+        let _ = sair.set_text(t("Sair da Guarita", "Salir de la Guarita"));
+    }
+    for s in WIDGETS {
+        if let Some(w) = app.get_webview_window(s.label) {
+            let _ = w.set_title(&titulo_janela(s, es));
+        }
+    }
 }
 
 // ---------- comandos (permissões em build.rs + capabilities/*.json) ----------
@@ -169,7 +243,7 @@ async fn widget_open(app: AppHandle, label: String) -> Result<(), String> {
 /// Fecha o widget (a posição e o tamanho ficam salvos pelo window-state).
 #[tauri::command]
 async fn widget_close(app: AppHandle, label: String) -> Result<(), String> {
-    spec(&label)?;
+    spec_app(&app, &label)?;
     if let Some(w) = app.get_webview_window(&label) {
         w.close().map_err(|e| e.to_string())?;
     }
@@ -179,10 +253,10 @@ async fn widget_close(app: AppHandle, label: String) -> Result<(), String> {
 /// Traz o widget para a frente; erro se não estiver aberto.
 #[tauri::command]
 async fn widget_focus(app: AppHandle, label: String) -> Result<(), String> {
-    spec(&label)?;
-    let w = app
-        .get_webview_window(&label)
-        .ok_or_else(|| format!("O widget \"{label}\" não está aberto."))?;
+    spec_app(&app, &label)?;
+    let w = app.get_webview_window(&label).ok_or_else(|| {
+        tr(&app, &format!("O widget \"{label}\" não está aberto."), &format!("El widget \"{label}\" no está abierto."))
+    })?;
     show_and_focus(&w);
     Ok(())
 }
@@ -190,7 +264,7 @@ async fn widget_focus(app: AppHandle, label: String) -> Result<(), String> {
 /// Abre se estiver fechado ou escondido; fecha se estiver visível. Devolve se ficou aberto.
 #[tauri::command]
 async fn widget_toggle(app: AppHandle, label: String) -> Result<bool, String> {
-    spec(&label)?;
+    spec_app(&app, &label)?;
     match app.get_webview_window(&label) {
         Some(w) if w.is_visible().unwrap_or(false) => {
             w.close().map_err(|e| e.to_string())?;
@@ -203,13 +277,14 @@ async fn widget_toggle(app: AppHandle, label: String) -> Result<bool, String> {
 /// Estado de todos os widgets conhecidos.
 #[tauri::command]
 async fn widget_list(app: AppHandle) -> Vec<WidgetInfo> {
+    let es = espanhol(&app);
     WIDGETS
         .iter()
         .map(|s| {
             let w = app.get_webview_window(s.label);
             WidgetInfo {
                 label: s.label,
-                title: s.title,
+                title: s.titulo(es),
                 open: w.is_some(),
                 visible: w.map(|w| w.is_visible().unwrap_or(false)).unwrap_or(false),
             }
@@ -221,14 +296,18 @@ async fn widget_list(app: AppHandle) -> Vec<WidgetInfo> {
 #[tauri::command]
 async fn widget_set_on_top(app: AppHandle, label: String, on: bool) -> Result<(), String> {
     if label != PAINEL {
-        spec(&label)?;
+        spec_app(&app, &label)?;
     }
     if on && !sbi_aceito(&app) {
-        return Err("Para fixar por cima do jogo, leia e aceite o aviso sobre a regra da Sandbox Interactive.".into());
+        return Err(tr(
+            &app,
+            "Para fixar por cima do jogo, leia e aceite o aviso sobre a regra da Sandbox Interactive.",
+            "Para fijar la ventana sobre el juego, lee y acepta el aviso sobre la regla de Sandbox Interactive.",
+        ));
     }
-    let w = app
-        .get_webview_window(&label)
-        .ok_or_else(|| format!("A janela \"{label}\" não está aberta."))?;
+    let w = app.get_webview_window(&label).ok_or_else(|| {
+        tr(&app, &format!("A janela \"{label}\" não está aberta."), &format!("La ventana \"{label}\" no está abierta."))
+    })?;
     w.set_always_on_top(on).map_err(|e| e.to_string())
 }
 
@@ -264,22 +343,34 @@ async fn tray_set_muted(app: AppHandle, on: bool) {
     set_muted(&app, on);
 }
 
+/// Língua efetiva do app ("pt" ou "es"; o painel resolve o "automático" pela língua do Windows): bandeja, títulos
+/// das janelas e mensagens dos comandos. Outro valor vale português.
+#[tauri::command]
+async fn definir_lingua(app: AppHandle, lingua: String) {
+    aplicar_lingua(&app, lingua == "es");
+}
+
 // ---------- bandeja ----------
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let abrir = MenuItem::with_id(app, "painel", "Abrir painel", true, None::<&str>)?;
+    let es = espanhol(app);
+    let t = |pt: &'static str, es_txt: &'static str| if es { es_txt } else { pt };
+    let abrir = MenuItem::with_id(app, "painel", t("Abrir painel", "Abrir panel"), true, None::<&str>)?;
     let widgets = Submenu::with_id(app, "widgets", "Widgets", true)?;
+    let mut itens = Vec::with_capacity(WIDGETS.len());
     for s in WIDGETS {
-        widgets.append(&MenuItem::with_id(app, format!("w:{}", s.label), s.title, true, None::<&str>)?)?;
+        let item = MenuItem::with_id(app, format!("w:{}", s.label), s.titulo(es), true, None::<&str>)?;
+        widgets.append(&item)?;
+        itens.push(item);
     }
-    let mudo = CheckMenuItem::with_id(app, "silenciar", "Silenciar voz", true, false, None::<&str>)?;
-    let sair = MenuItem::with_id(app, "sair", "Sair da Guarita", true, None::<&str>)?;
+    let mudo = CheckMenuItem::with_id(app, "silenciar", t("Silenciar voz", "Silenciar voz"), true, false, None::<&str>)?;
+    let sair = MenuItem::with_id(app, "sair", t("Sair da Guarita", "Salir de la Guarita"), true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[&abrir, &widgets, &mudo, &PredefinedMenuItem::separator(app)?, &sair],
     )?;
-    if let Ok(mut g) = app.state::<AppState>().mute_item.lock() {
-        *g = Some(mudo.clone());
+    if let Ok(mut g) = app.state::<AppState>().bandeja.lock() {
+        *g = Some(ItensBandeja { abrir, widgets, itens, mudo, sair });
     }
 
     let mut tray = TrayIconBuilder::with_id("guarita")
@@ -346,6 +437,7 @@ pub fn run() {
             widgets_show_all,
             set_close_to_tray,
             tray_set_muted,
+            definir_lingua,
             capture::captura_estado,
             capture::captura_sessao,
             capture::captura_ligar,
@@ -356,6 +448,15 @@ pub fn run() {
             capture::captura_diagnostico
         ])
         .setup(|app| {
+            // Língua escolhida explicitamente nos ajustes já vale para a bandeja; "automático" fica em português
+            // até o painel informar a língua do Windows (definir_lingua, logo ao abrir).
+            let es = app
+                .handle()
+                .store(CONFIG_STORE)
+                .ok()
+                .map(|s| espanhol_da_config(s.get("config").as_ref()))
+                .unwrap_or(false);
+            app.state::<AppState>().espanhol.store(es, Ordering::SeqCst);
             build_tray(app.handle())?;
             log::info!("Guarita iniciada: painel criado, bandeja pronta");
             Ok(())
@@ -380,4 +481,40 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("erro ao iniciar a Guarita");
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    #[test]
+    fn lingua_da_config_so_espanhol_explicito() {
+        let cfg = |v: serde_json::Value| espanhol_da_config(Some(&v));
+        assert!(cfg(serde_json::json!({ "lingua": "es" })));
+        assert!(!cfg(serde_json::json!({ "lingua": "pt" })));
+        assert!(!cfg(serde_json::json!({ "lingua": "auto" })));
+        assert!(!cfg(serde_json::json!({ "lingua": 3 })));
+        assert!(!cfg(serde_json::json!({})));
+        assert!(!espanhol_da_config(None));
+    }
+
+    /// Os títulos daqui (bandeja e janela) são os mesmos de `WIDGET_TITLES`/`WIDGET_TITLES_ES` do front.
+    #[test]
+    fn titulos_iguais_aos_do_front() {
+        let ts = include_str!("../../src/lib/windows.ts");
+        let bloco = |nome: &str| {
+            let ini = ts.find(&format!("export const {nome}: Record<WidgetLabel, string> = {{")).expect(nome);
+            let fim = ini + ts[ini..].find("};").unwrap();
+            ts[ini..fim].to_string()
+        };
+        let (pt, es) = (bloco("WIDGET_TITLES"), bloco("WIDGET_TITLES_ES"));
+        for s in WIDGETS {
+            assert!(pt.contains(&format!("{}: '{}'", s.label, s.title)), "pt {}", s.label);
+            assert!(es.contains(&format!("{}: '{}'", s.label, s.title_es)), "es {}", s.label);
+        }
+        assert_eq!(titulo_janela(&WIDGETS[0], false), "Guarita · Preço rápido");
+        assert_eq!(titulo_janela(&WIDGETS[0], true), "Guarita · Precio rápido");
+        assert!(spec_em("x", true).err().unwrap().starts_with("Widget desconocido"));
+        assert!(spec_em("x", false).err().unwrap().starts_with("Widget desconhecido"));
+    }
 }

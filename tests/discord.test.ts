@@ -574,6 +574,11 @@ describe('render', () => {
     expect(dos).not.toMatch(/Cajado|Dossier|Poder de objeto/);
     // Português intacto.
     expect(JSON.stringify(renderDossier(d))).toContain('Cajado amaldiçoado (5×)');
+    // Rótulo do perigo igual ao do site e do MCP ("atención", não "precaución"); em PT o código segue "atenção".
+    const at = { ...d, danger: { ...d.danger, label: 'atenção' as const } };
+    expect(JSON.stringify(renderDossier(at, undefined, 'es'))).toContain('**atención**');
+    expect(JSON.stringify(renderDossier(at, undefined, 'es'))).not.toContain('precaución');
+    expect(JSON.stringify(renderDossier(at))).toContain('**atenção**');
   });
 });
 
@@ -682,6 +687,22 @@ describe('espanhol', () => {
     expect(data.components?.[0].components[0]).toMatchObject({ label: 'Abrir Guarita', url: 'https://guarita.pages.dev/es' });
     // português continua com a ajuda de antes
     expect(renderHelp().embeds![0].title).toBe('Guarita no Discord');
+  });
+
+  it('/dosier e /muerte em espanhol pedem à API os textos em espanhol (motivos do perigo e lições)', async () => {
+    const calls = mockFetch();
+    const { ctx, flush } = makeCtx();
+    m.searchPlayers.mockResolvedValue({ players: [{ id: 'X1', name: 'CalangoPeto', guild: '', alliance: '', killFame: 1, deathFame: 1 }] });
+    m.getDossier.mockResolvedValue({ ...dossier(), danger: { score: 70, label: 'perigoso', reasons: ['mata en solitario con IP alto (80% de los asesinatos)'] } });
+    await dispatch(es(cmd('dossie', [{ name: 'nome', type: 3, value: 'CalangoPeto' }])), env(), ctx);
+    await flush();
+    expect(m.getDossier).toHaveBeenCalledWith(expect.anything(), ctx, 'X1', 'es');
+    const dossierJson = JSON.stringify(calls[0].body);
+    expect(dossierJson).toContain('mata en solitario con IP alto (80% de los asesinatos)');
+    m.getAutopsy.mockResolvedValue({ death: null, killerDossier: null, lessons: [], rebuy: [], rebuyTotal: null });
+    await dispatch(es(cmd('morte', [{ name: 'nome', type: 3, value: 'CalangoPeto' }])), env(), ctx);
+    await flush();
+    expect(m.getAutopsy).toHaveBeenCalledWith(expect.anything(), ctx, 'X1', 'es');
   });
 
   it('lista de alertas, datas e idade em espanhol (horário de Brasília em 24 h)', () => {

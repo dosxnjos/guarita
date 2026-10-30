@@ -124,11 +124,12 @@ O navegador também carrega os ícones direto de `render.albiononline.com` (com 
   (HTMLRewriter no Workers; no Node, `applyMetaToHtml`) e gera `/sitemap.xml`; `public/og.png` sai de
   `node scripts/make-og.mjs`. `public/sw.js` (registrado no `src/main.ts`) faz rede primeiro na navegação e cai na
   `offline.html` sem rede; `/api/` nunca vem do cache.
-- **Extensão de navegador** (`extension/`, Manifest V3, JS puro): cartão com nome PT-BR e preço ao passar o mouse em
+- **Extensão de navegador** (`extension/`, Manifest V3, JS puro): cartão com nome (PT ou ES) e preço ao passar o mouse em
   ícones de item nos sites de Albion, popup com busca e relógio. Só o `background.js` faz requisição, e só para
   `guarita.pages.dev`. Pacote: `node extension/build.mjs`. Detalhe: [extension/README.md](../extension/README.md).
 - **App de PC v0.2**: captura passiva do próprio jogador (acima, em "App no PC").
 - Rodada 2: espanhol (`/es/...`, seção "Línguas" abaixo), `/status` e app 0.2.1 (abaixo).
+- Rodada 3: espanhol no que sobrou (API `lang=es`, MCP `lingua`, app 0.2.2, extensão 0.2.0; seção "Línguas").
 
 ### Rodada 2 (30/10/2026)
 
@@ -170,14 +171,22 @@ Português é o padrão e não tem prefixo (nenhuma URL em português muda); esp
 - **Código puro com texto** (`format.ts`, `player/format.ts`, `insights/format.ts`, `alertForm.ts`, `timers/presets.ts`,
   `hoje/view.ts`…): não importa `tx` (tem runes; o app de PC, o vitest e o `_worker.js` importam esses arquivos), e
   sim `currentLocale()` de `core.ts`, com `loc?: Locale` opcional no fim.
-- **API**: `/api/hoje` e `/api/forecast` aceitam `lang=es` (texto em espanhol, mesmos números); as demais devolvem
-  texto em PT (motivos do perigo, lições da autópsia, festividades, nomes de arma e de item nas perdas) e a tela em
-  espanhol traduz o que tem código ou troca o nome pelo índice ES.
+- **API** (`shared/lang.ts`, erros em `worker/api/langErrors.ts`): dossiê, autópsia, item, perdas, guilda, arriscar,
+  relógio, hoje e previsão aceitam `lang=es` (motivos do perigo e do selo, lições, zonas, festividades `label`, nomes nas
+  perdas, erros). Códigos não mudam; sem `lang` o PT é o de antes. O cache guarda o dado bruto e o texto se monta
+  depois, então ES não gasta subrequest a mais. Ficam sem `lang`: `/api/gold`, `/api/data-health` (só números).
+- **Front**: `src/lib/api.ts` manda `lang` = língua atual só em ES (a URL em PT não muda); o cache curto de
+  dossiê/autópsia/guilda (`src/lib/player/cache.ts`) leva a língua na chave (`cacheKey`).
+- **MCP**: argumento opcional `lingua` ('pt' | 'es') nas 6 ferramentas (texto, erros, nomes de item e links `/es/...`).
 - **Bot** (`worker/discord/i18n.ts`): a língua vem do `interaction.locale` (começa com `es` → espanhol) e é passada
   explícita até o fim (um isolate atende várias interações; língua global misturaria respostas). Comandos com
   `name_localizations`/`description_localizations` (es-ES, es-419); o nome localizado só aparece depois de
   `npm run discord:register -- --global`.
-- **App de PC e extensão**: só português.
+  Com `es`, `/dosier`, `/muerte` e `/perdidas` pedem `lang=es` à API.
+- **App de PC (0.2.2)**: PT e ES pela preferência `config.lingua` (Automático = língua do Windows); Rust por
+  `definir_lingua`. Detalhe: [app/README.md](../app/README.md) § Línguas.
+- **Extensão (0.2.0)**: tabela PT/ES própria em `extension/lib/core.js` (não `chrome.i18n`, que só segue o navegador);
+  `_locales/` só para o manifesto. Detalhe: [extension/README.md](../extension/README.md) § Línguas.
 - **Termos do jogo em espanhol**: [glossario-es.md](glossario-es.md).
 
 ## Limites que moldam o desenho

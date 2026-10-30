@@ -92,7 +92,7 @@ export const FIXED_ES: Readonly<Record<string, readonly [title: string, descript
   '/hoje': ['Qué hacer hoy · Guarita', 'Tres caminos para ganar plata hoy en Albion Online, con el capital y el tiempo que tienes y el cálculo a la vista.'],
   '/previsao': ['Previsión de precios · Guarita', 'Previsión de precios de objetos de Albion Online para los próximos días, con el acierto del modelo publicado.'],
   '/live': ['Panel para directos · Guarita', 'Panel con reloj, precios y killfeed para usar como fuente de navegador en OBS.'],
-  '/extensao': ['Extensión de navegador · Guarita', 'Extensión de la Guarita para Chrome, Edge y Firefox: nombre del objeto (en portugués) y precio al pasar el mouse en los sitios de Albion.'],
+  '/extensao': ['Extensión de navegador · Guarita', 'Extensión de la Guarita para Chrome, Edge y Firefox: nombre del objeto en español y precio al pasar el mouse en los sitios de Albion.'],
   '/status': ['Estado y costos · Guarita', 'Cuánto cuesta mantener la Guarita en línea, los límites del plan gratuito de Cloudflare, de dónde viene cada dato y la salud en vivo del sitio.'],
 };
 

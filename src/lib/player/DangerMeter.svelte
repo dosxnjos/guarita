@@ -1,6 +1,6 @@
 <script lang="ts">
   // Medidor de perigo: arco de 0 a 100, cor pelo rótulo, motivos em lista.
-  // Os motivos vêm prontos da API em PT-BR (sem código); na versão em espanhol continuam em PT até a API mandar códigos.
+  // Os motivos vêm prontos da API na língua pedida (api.dossier/autopsy mandam `lang=es` na versão em espanhol).
   import type { Danger } from '../../../shared/types';
   import { dangerHeadline, dangerTone } from './format';
   import { tx } from '../i18n/index.svelte';

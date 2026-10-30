@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Opções da Guarita</title>
+    <title data-i18n="optionsTitle">Opções da Guarita</title>
     <link rel="stylesheet" href="ui.css" />
     <style>
       main { max-width: 640px; margin: 0 auto; padding: 24px 16px 40px; display: grid; gap: 16px; }
@@ -20,12 +20,25 @@
     <main>
       <header>
         <img src="icons/icon-48.png" alt="" width="40" height="40" />
-        <h1>Opções da Guarita</h1>
+        <h1 data-i18n="optionsTitle">Opções da Guarita</h1>
       </header>
 
       <fieldset>
-        <legend>Cartão de preço nos sites</legend>
-        <p class="small muted" style="margin:0">
+        <legend data-i18n="langLegend">Língua</legend>
+        <p class="small muted" style="margin:0" data-i18n="langHelp">Língua do cartão, do popup e destas opções, e dos nomes de item.</p>
+        <div class="row">
+          <label for="lang" class="sr-only" data-i18n="langLegend">Língua</label>
+          <select id="lang">
+            <option value="auto" data-i18n="langAuto">Automático (língua do navegador)</option>
+            <option value="pt" lang="pt-BR">Português</option>
+            <option value="es" lang="es">Español</option>
+          </select>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="cardLegend">Cartão de preço nos sites</legend>
+        <p class="small muted" style="margin:0" data-i18n="cardHelp">
           Ao passar o mouse num ícone de item nestes sites, a Guarita mostra o nome em português e o preço. Desligue onde
           não quiser o cartão.
         </p>
@@ -33,12 +46,12 @@
       </fieldset>
 
       <fieldset>
-        <legend>Qualidade padrão</legend>
-        <p class="small muted" style="margin:0">
+        <legend data-i18n="qualityLegend">Qualidade padrão</legend>
+        <p class="small muted" style="margin:0" data-i18n="qualityHelp">
           Usada quando o ícone não diz a qualidade do item, e como ponto de partida na busca do popup.
         </p>
         <div class="row">
-          <label for="qual" class="sr-only">Qualidade padrão</label>
+          <label for="qual" class="sr-only" data-i18n="qualityLegend">Qualidade padrão</label>
           <select id="qual">
             <option value="1">Normal</option>
             <option value="2">Bom</option>
@@ -52,15 +65,15 @@
       <p id="salvo" class="small muted" role="status" aria-live="polite"></p>
 
       <fieldset>
-        <legend>Privacidade</legend>
+        <legend data-i18n="privacyLegend">Privacidade</legend>
         <p class="small" style="margin:0">
-          A extensão não coleta nada sobre você. Ela só lê o endereço da imagem do item embaixo do mouse e pede à Guarita o
-          preço daquele item (id e qualidade). Não há conta, rastreamento nem anúncio. Os preços vêm do
-          <a href="https://www.albion-online-data.com/" target="_blank" rel="noopener">Albion Data Project</a>, mantido por
-          jogadores.
+          <span data-i18n="privacyText">A extensão não coleta nada sobre você. Ela só lê o endereço da imagem do item embaixo do mouse e pede à Guarita o
+          preço daquele item (id e qualidade). Não há conta, rastreamento nem anúncio. Os preços vêm do</span>
+          <a href="https://www.albion-online-data.com/" target="_blank" rel="noopener">Albion Data Project</a><span data-i18n="privacyTail">, mantido por
+          jogadores.</span>
         </p>
         <p class="small muted" style="margin:0">
-          Não afiliado à Sandbox Interactive. Mais em <a href="https://guarita.pages.dev/extensao" target="_blank" rel="noopener">guarita.pages.dev/extensao</a>.
+          <span data-i18n="moreAt">Não afiliado à Sandbox Interactive. Mais em</span> <a id="more-link" href="https://guarita.pages.dev/extensao" target="_blank" rel="noopener">guarita.pages.dev/extensao</a>.
         </p>
       </fieldset>
     </main>

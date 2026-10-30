@@ -115,6 +115,8 @@ export interface Festivity {
   name: string;
   /** Rótulo em PT-BR (ex.: "Bônus de produção: bestas"). */
   labelPt: string;
+  /** Só com `?lang=es`: rótulo em espanhol (festivityLabelEs). */
+  label?: string;
   start: string; // ISO UTC
   end: string; // ISO UTC
 }
@@ -314,7 +316,10 @@ export interface RiskZone {
   lose: 'nada' | 'durabilidade' | 'tudo';
   /** Prata em risco (estimada) nessa zona. */
   amount: number;
+  /** Observação na língua pedida (pt padrão; `?lang=es` em espanhol). */
   note: string;
+  /** Só com `?lang=es`: rótulo da zona em espanhol (labelPt continua o português). */
+  label?: string;
 }
 
 export interface RiskQuote {

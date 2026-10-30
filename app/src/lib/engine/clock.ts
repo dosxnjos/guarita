@@ -6,8 +6,10 @@ import type { ClockResponse, Festivity } from '../../../../shared/types';
 import type { GuaritaApi } from '../api';
 import { MAX_BONUS_AVISADOS, type AvisosRelogioDados, type GuaritaConfig } from '../config';
 import type { Aviso } from '../notify';
-import { fmtDateTime, fmtTime } from '../format';
+import { articuloHora, fmtDateTime, fmtTime } from '../format';
 import { diasFalados, minutosFalados } from '../fala';
+import { festivityLabel } from '../../../../shared/festivities';
+import { currentLocale, type Locale } from '../../../../src/lib/i18n/core';
 
 export const INTERVALO_RELOGIO_MS = 2 * 60_000;
 /** Bônus acabando: avisa quando faltam até 30 min. */
@@ -135,8 +137,51 @@ export function eventoLigado(e: EventoRelogio, cfg: GuaritaConfig): boolean {
   return r.temporada;
 }
 
-/** Texto do aviso (notificação com hora de Brasília; voz curta). Pura. */
-export function avisoRelogio(e: EventoRelogio): Aviso {
+/** Texto do aviso em espanhol (mesma estrutura do português). Pura. */
+function avisoRelogioEs(e: EventoRelogio): Aviso {
+  switch (e.tipo) {
+    case 'servidorCaiu':
+      return {
+        titulo: e.status === 'manutenção' ? 'Servidor en mantenimiento' : 'Servidor fuera de línea',
+        corpo: `El servidor Americas ${e.status === 'manutenção' ? 'entró en mantenimiento' : 'está fuera de línea'}.`,
+        voz: e.status === 'manutenção' ? 'El servidor entró en mantenimiento.' : 'El servidor se cayó.',
+        prioridade: 'alta',
+      };
+    case 'servidorVoltou':
+      return { titulo: 'Servidor de vuelta', corpo: 'El servidor Americas volvió a estar en línea.', voz: 'El servidor volvió.', prioridade: 'alta' };
+    case 'bonusAcabando': {
+      const nome = festivityLabel(e.festividade, 'es');
+      const hora = fmtTime(e.festividade.end, undefined, false);
+      return {
+        titulo: 'Bonificación por terminar',
+        corpo: `${nome} termina en ${e.faltamMin} min, a ${articuloHora(hora)} ${hora} (hora de Brasilia).`,
+        voz: `${nome} termina en ${minutosFalados(e.faltamMin, 'es')}.`,
+        prioridade: 'normal',
+      };
+    }
+    case 'festividadeNova': {
+      const nome = festivityLabel(e.festividade, 'es');
+      return {
+        titulo: 'Empezó una bonificación',
+        corpo: `${nome}, hasta el ${fmtDateTime(e.festividade.end, undefined, true)} (hora de Brasilia).`,
+        voz: `Empezó: ${nome}.`,
+        prioridade: 'baixa',
+      };
+    }
+    case 'temporadaAcabando':
+      return {
+        titulo: 'Temporada por terminar',
+        corpo: `La ${e.nome || 'temporada'} termina alrededor del ${fmtDateTime(e.fim, undefined, true)} (hora de Brasilia): ${e.faltamDias === 1 ? 'falta cerca de 1 día' : `faltan cerca de ${e.faltamDias} días`}.`,
+        // "en unos cinco días"; um dia fica "en un día" (nunca "unos un día").
+        voz: `La temporada termina en ${Math.round(e.faltamDias) === 1 ? '' : 'unos '}${diasFalados(e.faltamDias, 'es')}.`,
+        prioridade: 'baixa',
+      };
+  }
+}
+
+/** Texto do aviso (notificação com hora de Brasília; voz curta) na língua pedida (padrão: a do app). Pura. */
+export function avisoRelogio(e: EventoRelogio, loc: Locale = currentLocale()): Aviso {
+  if (loc === 'es') return avisoRelogioEs(e);
   switch (e.tipo) {
     case 'servidorCaiu':
       return {
@@ -152,7 +197,7 @@ export function avisoRelogio(e: EventoRelogio): Aviso {
       return {
         titulo: 'Bônus acabando',
         corpo: `${e.festividade.labelPt} termina em ${e.faltamMin} min, às ${fmtTime(e.festividade.end, undefined, false)} (horário de Brasília).`,
-        voz: `${e.festividade.labelPt} acaba em ${minutosFalados(e.faltamMin)}.`,
+        voz: `${e.festividade.labelPt} acaba em ${minutosFalados(e.faltamMin, loc)}.`,
         prioridade: 'normal',
       };
     case 'festividadeNova':
@@ -166,7 +211,7 @@ export function avisoRelogio(e: EventoRelogio): Aviso {
       return {
         titulo: 'Temporada acabando',
         corpo: `A ${e.nome || 'temporada'} termina por volta de ${fmtDateTime(e.fim, undefined, true)} (horário de Brasília): ${e.faltamDias === 1 ? 'falta cerca de 1 dia' : `faltam cerca de ${e.faltamDias} dias`}.`,
-        voz: `A temporada acaba em cerca de ${diasFalados(e.faltamDias)}.`,
+        voz: `A temporada acaba em cerca de ${diasFalados(e.faltamDias, loc)}.`,
         prioridade: 'baixa',
       };
   }

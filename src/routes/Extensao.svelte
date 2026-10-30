@@ -9,7 +9,8 @@
   import { getLocale, href, tx } from '../lib/i18n/index.svelte';
   let { params: _params = {} }: { params?: Record<string, string> } = $props();
   // Texto com marcação no meio (negrito, código, link) vai em {#if es} … {:else} … {/if}, com o português intacto no else.
-  // A extensão em si é só em português (nome do item e textos): a página em espanhol diz isso em vez de prometer.
+  // A extensão fala português e espanhol desde a 0.2.0 (opção de idioma; nomes de item do índice ES): a página em
+  // espanhol descreve a extensão em espanhol, e a ilustração do cartão acompanha a língua da página.
   const es = $derived(getLocale() === 'es');
 
   let download = $state<EstadoDownload>({ tipo: 'conferindo' });
@@ -27,10 +28,10 @@
   const CODIGO = 'https://github.com/dosxnjos/guarita/tree/main/extension';
 
   const RECURSOS = $derived<[titulo: string, desc: string][]>([
-    [tx('Cartão ao passar o mouse', 'Tarjeta al pasar el mouse'), tx('Nos sites de Albion da lista, pare o mouse sobre o ícone de um item: aparece o nome em português, o tier, o melhor preço confiável para comprar, há quanto tempo foi visto e o selo de confiança.', 'En los sitios de Albion de la lista, detén el mouse sobre el ícono de un objeto: aparece el nombre (en portugués), el tier, el mejor precio confiable para comprar, hace cuánto se vio y el sello de confianza.')],
-    [tx('Busca rápida de preço', 'Búsqueda rápida de precios'), tx('Clique no ícone da Guarita na barra do navegador e digite o nome do item, em português ou em inglês.', 'Haz clic en el ícono de la Guarita en la barra del navegador y escribe el nombre del objeto, en portugués o en inglés.')],
+    [tx('Cartão ao passar o mouse', 'Tarjeta al pasar el mouse'), tx('Nos sites de Albion da lista, pare o mouse sobre o ícone de um item: aparece o nome em português, o tier, o melhor preço confiável para comprar, há quanto tempo foi visto e o selo de confiança.', 'En los sitios de Albion de la lista, detén el mouse sobre el ícono de un objeto: aparece el nombre en español, el tier, el mejor precio confiable para comprar, hace cuánto se vio y su nivel de confianza.')],
+    [tx('Busca rápida de preço', 'Búsqueda rápida de precios'), tx('Clique no ícone da Guarita na barra do navegador e digite o nome do item, em português ou em inglês.', 'Haz clic en el ícono de la Guarita en la barra del navegador y escribe el nombre del objeto, en español o en inglés.')],
     [tx('Mini relógio', 'Mini reloj'), tx('Hora de Brasília e do servidor, status do servidor, bônus do dia e cotação do ouro, no mesmo popup.', 'Hora de Brasilia y del servidor, estado del servidor, bonificaciones del día y cotización del oro, en el mismo popup.')],
-    [tx('Do seu jeito', 'A tu manera'), tx('Nas opções, desligue o cartão nos sites onde não quiser e escolha a qualidade padrão dos preços.', 'En las opciones, desactiva la tarjeta en los sitios donde no la quieras y elige la calidad predeterminada de los precios.')],
+    [tx('Do seu jeito', 'A tu manera'), tx('Nas opções, desligue o cartão nos sites onde não quiser e escolha a qualidade padrão dos preços.', 'En las opciones, elige el idioma (español o portugués; por defecto, el del navegador), desactiva la tarjeta en los sitios donde no la quieras y elige la calidad predeterminada de los precios.')],
   ]);
 
   const SITES = $derived<[site: string, endereco: string][]>([
@@ -44,7 +45,7 @@
 
   const PERMISSOES = $derived<[permissao: string, porque: string][]>([
     [tx('Ler e alterar dados nos sites de Albion da lista', 'Leer y cambiar datos en los sitios de Albion de la lista'), tx('Para encontrar os ícones de item na página e desenhar o cartão por cima. Só nesses sites; em nenhum outro a extensão roda.', 'Para encontrar los íconos de objetos en la página y dibujar la tarjeta encima. Solo en esos sitios; en ningún otro funciona la extensión.')],
-    [tx('Acessar guarita.pages.dev', 'Acceder a guarita.pages.dev'), tx('Para buscar o preço, a lista de nomes em português e o relógio na API da Guarita.', 'Para buscar el precio, la lista de nombres en portugués y el reloj en la API de la Guarita.')],
+    [tx('Acessar guarita.pages.dev', 'Acceder a guarita.pages.dev'), tx('Para buscar o preço, a lista de nomes em português e o relógio na API da Guarita.', 'Para buscar el precio, la lista de nombres en español y el reloj en la API de la Guarita.')],
     [tx('Armazenamento', 'Almacenamiento'), tx('Para guardar no seu navegador as suas opções e a lista de nomes dos itens (atualizada uma vez por dia).', 'Para guardar en tu navegador tus opciones y la lista de nombres de los objetos (actualizada una vez al día).')],
   ]);
 
@@ -52,7 +53,7 @@
     [tx('Pode dar banimento?', '¿Me pueden banear?'), tx('Não. A extensão só funciona em sites, no navegador: não toca no jogo, não lê o cliente e não manda nada ao servidor do Albion. Os preços são os mesmos do site da Guarita.', 'No. La extensión solo funciona en sitios web, en el navegador: no toca el juego, no lee el cliente y no envía nada al servidor de Albion. Los precios son los mismos del sitio de la Guarita.')],
     [tx('Por que o preço às vezes está velho ou falta?', '¿Por qué a veces el precio está viejo o falta?'), tx('Os preços vêm do Albion Data Project, alimentado por jogadores que usam o cliente do projeto. Item pouco negociado fica sem preço recente; por isso o cartão mostra a idade e o selo de confiança.', 'Los precios vienen del Albion Data Project, que alimentan los jugadores que usan el cliente del proyecto. Un objeto poco negociado se queda sin precio reciente; por eso la tarjeta muestra la antigüedad y el sello de confianza.')],
     [tx('O cartão não aparece', 'La tarjeta no aparece'), tx('Confira se o site está ligado nas opções da extensão e recarregue a página. Ele só aparece sobre o ícone oficial do item (render.albiononline.com) e espera o mouse parar por um instante.', 'Revisa si el sitio está activado en las opciones de la extensión y recarga la página. Solo aparece sobre el ícono oficial del objeto (render.albiononline.com) y espera a que el mouse se detenga un instante.')],
-    [tx('Aparece "muitas consultas em pouco tempo"', 'Aparece "muitas consultas em pouco tempo" (muchas consultas en poco tiempo)'), tx('A extensão faz no máximo 20 consultas de item por minuto, para não sobrecarregar o serviço gratuito. Espere alguns segundos; itens já vistos voltam da memória na hora.', 'La extensión hace como máximo 20 consultas de objetos por minuto, para no sobrecargar el servicio gratuito. Espera unos segundos; los objetos ya vistos vuelven de la memoria al instante.')],
+    [tx('Aparece "muitas consultas em pouco tempo"', 'Aparece "Demasiadas consultas en poco tiempo"'), tx('A extensão faz no máximo 20 consultas de item por minuto, para não sobrecarregar o serviço gratuito. Espere alguns segundos; itens já vistos voltam da memória na hora.', 'La extensión hace como máximo 20 consultas de objetos por minuto, para no sobrecargar el servicio gratuito. Espera unos segundos; los objetos ya vistos vuelven de la memoria al instante.')],
     [tx('Funciona no celular?', '¿Funciona en el celular?'), tx('Não: navegadores de celular, em geral, não aceitam extensões. No celular, use o site da Guarita.', 'No: los navegadores de celular, en general, no aceptan extensiones. En el celular, usa el sitio de la Guarita.')],
   ]);
 </script>
@@ -83,7 +84,7 @@
     <p class="small muted" style="margin:8px 0 0">
       {tx(
         'Chrome, Edge e Firefox no computador. Gratuita e de código aberto. Nas lojas de extensões, em breve.',
-        'Chrome, Edge y Firefox en la computadora. Gratuita y de código abierto. Por ahora, la extensión está en portugués. En las tiendas de extensiones, próximamente.',
+        'Chrome, Edge y Firefox en la computadora. Gratuita y de código abierto, en español y en portugués. En las tiendas de extensiones, próximamente.',
       )}
     </p>
   </header>
@@ -102,7 +103,20 @@
       <rect x="24" y="146" width="160" height="10" rx="5" class="s-linha" />
       <rect x="24" y="166" width="180" height="10" rx="5" class="s-linha" />
       <path d="M128 92 l0 22 l6 -6 l5 11 l4 -2 l-5 -11 l8 0 z" class="s-cursor" />
-      <!-- Cartão como a extensão desenha (ela é só em português): o conteúdo fica em português nas duas línguas. -->
+      <!-- Cartão como a extensão desenha, na língua da página (os textos são os de extension/lib/core.js). -->
+      {#if es}
+        <g transform="translate(250 46)" lang="es">
+          <rect width="286" height="150" rx="10" class="s-janela" />
+          <text x="14" y="26" class="s-titulo">Bolsa del iniciado</text>
+          <rect x="14" y="36" width="34" height="18" rx="9" class="s-tag" /><text x="31" y="49" text-anchor="middle" class="s-tagtxt">T4</text>
+          <text x="14" y="76" class="s-mudo">Mejor precio confiable para comprar</text>
+          <text x="14" y="100" class="s-valor">4,120 plata</text>
+          <text x="122" y="100" class="s-texto">en Martlock</text>
+          <circle cx="18" cy="120" r="4" class="s-ok" />
+          <text x="28" y="124" class="s-mudo">visto hace 8 min · confianza alta</text>
+          <text x="272" y="142" text-anchor="end" class="s-link">Ver en la Guarita</text>
+        </g>
+      {:else}
       <g transform="translate(250 46)" lang="pt-BR">
         <rect width="286" height="150" rx="10" class="s-janela" />
         <text x="14" y="26" class="s-titulo">Bolsa do Adepto</text>
@@ -114,6 +128,7 @@
         <text x="28" y="124" class="s-mudo">visto há 8 min · selo alta</text>
         <text x="272" y="142" text-anchor="end" class="s-link">Ver na Guarita</text>
       </g>
+      {/if}
     </svg>
     <figcaption id="ext-legenda" class="small muted">{tx('Ilustração. O cartão some quando o mouse sai do ícone, quando você rola a página ou aperta Esc.', 'Ilustración. La tarjeta desaparece cuando el mouse sale del ícono, cuando te desplazas por la página o presionas Esc.')}</figcaption>
   </figure>
@@ -143,13 +158,13 @@
     <p style="margin:0">
       Mientras la extensión no llegue a las tiendas, la instalación es manual y toma un minuto. El archivo viene de las
       <a href={RELEASES_URL} target="_blank" rel="noopener">releases de GitHub</a> de la Guarita, con el nombre
-      <code>{download.tipo === 'pronto' ? download.instalador.nome : 'guarita-extensao-0.1.0.zip'}</code> (el número cambia en cada versión).
+      <code>{download.tipo === 'pronto' ? download.instalador.nome : 'guarita-extensao-0.2.0.zip'}</code> (el número cambia en cada versión).
     </p>
   {:else}
     <p style="margin:0">
       Enquanto a extensão não chega às lojas, a instalação é manual e leva um minuto. O arquivo vem das
       <a href={RELEASES_URL} target="_blank" rel="noopener">releases do GitHub</a> da Guarita, com o nome
-      <code>{download.tipo === 'pronto' ? download.instalador.nome : 'guarita-extensao-0.1.0.zip'}</code> (o número muda a cada versão).
+      <code>{download.tipo === 'pronto' ? download.instalador.nome : 'guarita-extensao-0.2.0.zip'}</code> (o número muda a cada versão).
     </p>
   {/if}
   {#if download.tipo === 'em-breve'}

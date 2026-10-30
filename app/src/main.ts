@@ -3,7 +3,8 @@ import App from './App.svelte';
 import '../../src/app.css';
 import './app.css';
 import { loadConfig, onConfigChange } from './lib/config';
-import { EV_VOZ_SILENCIADA, PAINEL, applyOpacity, currentLabel, isTauri, setCloseToTray } from './lib/windows';
+import { EV_VOZ_SILENCIADA, PAINEL, applyOpacity, currentLabel, definirLingua, isTauri, setCloseToTray } from './lib/windows';
+import { aplicarPreferencia, type Locale, type PrefLingua } from './lib/i18n.svelte';
 import { setSilenciada } from './lib/voice';
 import { listen } from '@tauri-apps/api/event';
 
@@ -15,6 +16,25 @@ async function iniciar() {
 
   await loadConfig().catch((e) => console.error('config', e));
   onConfigChange((c) => applyOpacity(c.janelas[label]?.opacidade ?? 1));
+
+  // Língua: aplicada antes de montar a tela (nada pisca em português). Toda janela ouve a mesma config; só o painel
+  // avisa o Rust (bandeja, títulos, mensagens dos comandos). "Automático" acompanha a troca de idioma do Windows.
+  let prefLingua: PrefLingua = 'auto';
+  let linguaRust: Locale | null = null;
+  const aplicar = () => {
+    const l = aplicarPreferencia(prefLingua);
+    if (label === PAINEL && isTauri() && l !== linguaRust) {
+      linguaRust = l;
+      void definirLingua(l).catch((e) => console.error('língua', e));
+    }
+  };
+  onConfigChange((c) => {
+    prefLingua = c.lingua;
+    aplicar();
+  });
+  window.addEventListener('languagechange', () => {
+    if (prefLingua === 'auto') aplicar();
+  });
 
   if (isTauri()) {
     await listen<boolean>(EV_VOZ_SILENCIADA, (e) => setSilenciada(e.payload));

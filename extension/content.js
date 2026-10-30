@@ -1,7 +1,8 @@
 // Content script: nos sites de Albion da lista, passar o mouse (ou o foco do teclado) num ícone oficial de item
-// (render.albiononline.com/v1/item/<ID>.png) mostra um cartão com o nome em PT-BR, o tier e o melhor preço
-// confiável com idade e selo. Só lê o endereço da imagem; não lê mais nada da página e não manda nada além do id do
-// item e da qualidade para o fundo da extensão (que consulta a Guarita).
+// (render.albiononline.com/v1/item/<ID>.png) mostra um cartão com o nome em PT-BR (ou em espanhol, pela opção de
+// língua ou pela língua do navegador), o tier e o melhor preço confiável com idade e selo. Só lê o endereço da imagem;
+// não lê mais nada da página e não manda nada além do id do item, da qualidade e da língua para o fundo da extensão
+// (que consulta a Guarita).
 (function () {
   'use strict';
   const C = globalThis.GuaritaCore;
@@ -17,6 +18,7 @@
 
   let enabled = false;
   let defaultQuality = 1;
+  let loc = 'pt'; // língua do cartão (opção salva ou a do navegador)
   let dwellTimer = 0;
   let hideTimer = 0;
   let seq = 0;
@@ -25,10 +27,19 @@
   let root = null;
   let box = null;
 
+  function uiLanguage() {
+    try {
+      return ext.i18n && ext.i18n.getUILanguage ? ext.i18n.getUILanguage() : '';
+    } catch {
+      return '';
+    }
+  }
+
   function readOptions(raw) {
     const o = C.normalizeOptions(raw);
     enabled = o.sites[site.key] !== false;
     defaultQuality = o.quality;
+    loc = C.resolveLocale(o.lang, uiLanguage());
     if (!enabled) hide(true);
   }
 
@@ -100,7 +111,10 @@
   `;
 
   function ensureBox() {
-    if (box) return box;
+    if (box) {
+      box.setAttribute('lang', C.t(loc, 'htmlLang')); // a língua pode ter mudado nas opções com o cartão aberto
+      return box;
+    }
     host = document.createElement('guarita-cartao');
     root = host.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
@@ -110,6 +124,7 @@
     // aria-describedby no ícone não atravessaria o Shadow DOM fechado; quem anuncia é a região viva.
     box.setAttribute('role', 'tooltip');
     box.setAttribute('aria-live', 'polite');
+    box.setAttribute('lang', C.t(loc, 'htmlLang'));
     box.addEventListener('mouseenter', () => clearTimeout(hideTimer));
     box.addEventListener('mouseleave', () => scheduleHide());
     root.append(style, box);
@@ -128,7 +143,7 @@
     const foot = el('div', 'foot');
     foot.append(el('span', 'muted', 'Guarita · Albion Data Project'));
     if (url) {
-      const a = el('a', '', 'Ver na Guarita');
+      const a = el('a', '', C.t(loc, 'viewOnGuarita'));
       a.href = url;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
@@ -139,14 +154,14 @@
 
   function renderLoading(it) {
     const b = ensureBox();
-    b.replaceChildren(el('p', 'name', it.id), el('p', 'muted', 'Consultando o preço…'), footer(C.itemPageUrl(it.id, it.quality || defaultQuality)));
+    b.replaceChildren(el('p', 'name', it.id), el('p', 'muted', C.t(loc, 'loadingPrice')), footer(C.itemPageUrl(it.id, it.quality || defaultQuality, loc)));
     b.setAttribute('aria-busy', 'true');
   }
 
   function renderError(res, it) {
     const b = ensureBox();
     b.removeAttribute('aria-busy');
-    b.replaceChildren(el('p', 'name', it.id), el('p', 'err', res.error || 'Não foi possível consultar a Guarita.'), footer(res.url || C.itemPageUrl(it.id, it.quality || defaultQuality)));
+    b.replaceChildren(el('p', 'name', it.id), el('p', 'err', res.error || C.t(loc, 'errGeneric')), footer(res.url || C.itemPageUrl(it.id, it.quality || defaultQuality, loc)));
   }
 
   function renderCard(card) {
@@ -161,12 +176,12 @@
     }
     if (card.best) {
       const line = el('div', 'meta');
-      line.append(el('span', 'price', card.best.priceText), el('span', 'city', `em ${card.best.city}`));
+      line.append(el('span', 'price', card.best.priceText), el('span', 'city', `${C.t(loc, 'cityIn')} ${card.best.city}`));
       const meta = el('div', 'meta');
       const dot = el('span', `dot ${card.best.ageTone}`);
       dot.setAttribute('aria-hidden', 'true');
-      meta.append(dot, el('span', 'muted', `visto ${card.best.ageText}`), el('span', `tag ${card.best.badgeTone}`, card.best.badge));
-      parts.push(el('span', 'muted', card.best.reliable ? 'Melhor preço confiável para comprar' : 'Mais barato visto para comprar'), line, meta);
+      meta.append(dot, el('span', 'muted', `${C.t(loc, 'seen')} ${card.best.ageText}`), el('span', `tag ${card.best.badgeTone}`, card.best.badge));
+      parts.push(el('span', 'muted', C.t(loc, card.best.reliable ? 'bestReliable' : 'cheapestSeen')), line, meta);
     }
     if (card.note) parts.push(el('p', 'note', card.note));
     parts.push(footer(card.url));
@@ -203,10 +218,10 @@
     place(anchor);
     let req;
     try {
-      req = ext.runtime.sendMessage({ type: 'item', id: it.id, q });
+      req = ext.runtime.sendMessage({ type: 'item', id: it.id, q, lang: loc });
     } catch {
       // Extensão atualizada ou removida com a página aberta: o contexto antigo morreu.
-      renderError({ error: 'A extensão foi atualizada. Recarregue a página.' }, it);
+      renderError({ error: C.t(loc, 'extUpdated') }, it);
       place(anchor);
       return;
     }
@@ -219,7 +234,7 @@
       },
       () => {
         if (my !== seq) return;
-        renderError({ error: 'A extensão foi atualizada. Recarregue a página.' }, it);
+        renderError({ error: C.t(loc, 'extUpdated') }, it);
         place(anchor);
       },
     );

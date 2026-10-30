@@ -8,8 +8,10 @@
   import { ageTone, ageToneLabel, fmtAge, fmtInt, fmtSilver } from '../lib/format';
   import { acompanharCaptura, estadoCaptura, sessaoCaptura } from '../lib/capture/captura';
   import { precosDoLoot } from '../lib/capture/precos';
-  import { ROTULO_FASE, marcaDoLoot, valorLoot } from '../lib/capture/sessao';
+  import { marcaDoLoot, rotuloFase, valorLoot } from '../lib/capture/sessao';
   import type { EstadoCaptura, RetratoSessao } from '../lib/capture/tipos';
+  import { getLocale, tx } from '../lib/i18n.svelte';
+  // Índice da língua do app: em espanhol, o nome do item vem do items-index-es.json.
   import { carregarItens } from '../lib/ui-itens';
   import { isTauri } from '../lib/windows';
   import Carregando from '../lib/ui/Carregando.svelte';
@@ -27,7 +29,7 @@
   const fase = $derived(estado?.fase ?? 'desligada');
 
   function nomeDe(id: string | null, idx: number): { nome: string; tier: string } {
-    if (!id) return { nome: `Item nº ${idx}`, tier: '' };
+    if (!id) return { nome: tx(`Item nº ${idx}`, `Objeto n.º ${idx}`), tier: '' };
     const t = indice ? findItem(indice, id) : undefined;
     return t ? { nome: t[1] || t[2] || id, tier: tierLabel(t[3], t[4]) } : { nome: id, tier: '' };
   }
@@ -64,7 +66,7 @@
     let off = () => {};
     let parar = false;
     if (!isTauri()) {
-      erro = 'O loot só aparece dentro do app da Guarita.';
+      erro = tx('O loot só aparece dentro do app da Guarita.', 'El botín solo aparece dentro de la app de la Guarita.');
       return;
     }
     void (async () => {
@@ -90,32 +92,34 @@
 
 <div class="loot stack">
   <div class="topo">
-    <span class="tag {ROTULO_FASE[fase][1]}" role="status" aria-live="polite">{ROTULO_FASE[fase][0]}</span>
+    <span class="tag {rotuloFase(fase)[1]}" role="status" aria-live="polite">{rotuloFase(fase)[0]}</span>
     {#if loot && loot.linhas.length}
-      <strong class="total" aria-label="Valor estimado do loot">{fmtSilver(loot.total)}</strong>
+      <strong class="total" aria-label={tx('Valor estimado do loot', 'Valor estimado del botín')}>{fmtSilver(loot.total)}</strong>
     {/if}
   </div>
 
   {#if erro}
     <ErroCaixa mensagem={erro} />
   {:else if !estado || !retrato || !loot}
-    <Carregando texto="Lendo o loot…" />
+    <Carregando texto={tx('Lendo o loot…', 'Leyendo el botín…')} />
   {:else if !loot.linhas.length}
     {#if fase === 'capturando'}
-      <p class="small muted m0">Nenhum item pego nesta sessão ainda. O que você pegar de corpos, baús e do chão aparece aqui.</p>
+      <p class="small muted m0">{tx('Nenhum item pego nesta sessão ainda. O que você pegar de corpos, baús e do chão aparece aqui.', 'Todavía no recogiste ningún objeto en esta sesión. Lo que recojas de cuerpos, cofres y del suelo aparece aquí.')}</p>
     {:else if fase === 'aguardando-mapa'}
-      <p class="small muted m0">Troque de mapa uma vez (entre por um portal) para a Guarita reconhecer o seu personagem.</p>
+      <p class="small muted m0">{tx('Troque de mapa uma vez (entre por um portal) para a Guarita reconhecer o seu personagem.', 'Cambia de mapa una vez (entra por un portal) para que la Guarita reconozca a tu personaje.')}</p>
     {:else if fase === 'aguardando-jogo'}
-      <p class="small muted m0">Aguardando o tráfego do Albion. Abra o jogo e entre num mapa.</p>
+      <p class="small muted m0">{tx('Aguardando o tráfego do Albion. Abra o jogo e entre num mapa.', 'Esperando el tráfico de Albion. Abre el juego y entra en un mapa.')}</p>
+    {:else if getLocale() === 'es'}
+      <p class="small m0">La captura está desactivada o sin acceso a la red. Revísala en <strong>Ajustes › Captura de tu propio personaje</strong>, en el panel.</p>
     {:else}
       <p class="small m0">A captura está desligada ou sem acesso à rede. Veja em <strong>Ajustes › Captura do próprio jogador</strong>, no painel.</p>
     {/if}
   {:else}
     <div class="table-wrap">
       <table class="data tabela">
-        <caption class="sr-only">Itens pegos nesta sessão, com valor estimado</caption>
+        <caption class="sr-only">{tx('Itens pegos nesta sessão, com valor estimado', 'Objetos recogidos en esta sesión, con su valor estimado')}</caption>
         <thead>
-          <tr><th>Item</th><th class="num">Qtd.</th><th class="num">Valor</th></tr>
+          <tr><th>{tx('Item', 'Objeto')}</th><th class="num">{tx('Qtd.', 'Cant.')}</th><th class="num">{tx('Valor', 'Valor')}</th></tr>
         </thead>
         <tbody>
           {#each loot.linhas as l (l.indice)}
@@ -140,7 +144,7 @@
                     <span class="age {ageTone(l.idadeMin)}" aria-hidden="true"></span>{fmtAge(l.idadeMin)}
                   </span>
                 {:else}
-                  <span class="muted">{buscandoPreco ? '…' : 'sem preço'}</span>
+                  <span class="muted">{buscandoPreco ? '…' : tx('sem preço', 'sin precio')}</span>
                 {/if}
               </td>
             </tr>
@@ -148,11 +152,18 @@
         </tbody>
       </table>
     </div>
-    {#if erroPreco}<p class="small warn-text m0">Sem preço agora: {erroPreco}</p>{/if}
-    <p class="small muted m0 nota">
-      Valor: mediana da venda mais barata nas cidades (qualidade normal), pela Guarita.{#if loot.semPreco} Itens sem preço ficam fora do total.{/if}
-      A prata pega dos corpos entra na sessão, não aqui.
-    </p>
+    {#if erroPreco}<p class="small warn-text m0">{tx('Sem preço agora', 'Sin precio ahora')}: {erroPreco}</p>{/if}
+    {#if getLocale() === 'es'}
+      <p class="small muted m0 nota">
+        Valor: mediana de la venta más barata en las ciudades (calidad normal), según la Guarita.{#if loot.semPreco} Los objetos sin precio quedan fuera del total.{/if}
+        La plata recogida de los cuerpos entra en la sesión, no aquí.
+      </p>
+    {:else}
+      <p class="small muted m0 nota">
+        Valor: mediana da venda mais barata nas cidades (qualidade normal), pela Guarita.{#if loot.semPreco} Itens sem preço ficam fora do total.{/if}
+        A prata pega dos corpos entra na sessão, não aqui.
+      </p>
+    {/if}
   {/if}
 </div>
 

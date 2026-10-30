@@ -1,7 +1,7 @@
 <script lang="ts">
   // Selo de confiança 0–100. Clique (ou toque) mostra os motivos; no mouse, o title também mostra.
   import type { Confidence } from '../../../shared/types';
-  // Os motivos vêm da API em português (pendência do espanhol: a API devolver códigos); o rótulo é traduzido aqui.
+  // Os motivos vêm da API na língua pedida (api.item manda `lang=es` em espanhol); o rótulo (código) é traduzido aqui.
   import { confidenceText, confidenceTone } from '../format';
   import { getLocale } from '../i18n/index.svelte';
   let { confidence }: { confidence: Confidence } = $props();

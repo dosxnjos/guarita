@@ -8,11 +8,205 @@
   const TZ_BR = 'America/Sao_Paulo';
   const DASH = '—';
 
+  // ---------- línguas ----------
+  // Português é o padrão (como no site); espanhol neutro latino (es-419, "tú"), termos do cliente oficial
+  // (docs/glossario-es.md). Toda função com texto ou número aceita `loc` ('pt' | 'es') no fim; sem ele, 'pt', igual a
+  // antes. O texto da interface mora aqui e não no chrome.i18n.getMessage: o getMessage segue sempre a língua do
+  // navegador e não obedeceria à opção "Português/Español". O _locales/ guarda só o nome e a descrição do manifest.
+
+  const LANG_OPTIONS = ['auto', 'pt', 'es'];
+
+  /** Língua efetiva: a escolhida nas opções ou, em "auto", a do navegador (começa com "es" → espanhol). */
+  function resolveLocale(pref, uiLanguage) {
+    if (pref === 'pt' || pref === 'es') return pref;
+    return String(uiLanguage || '').toLowerCase().startsWith('es') ? 'es' : 'pt';
+  }
+
+  const isEs = (loc) => loc === 'es';
+
+  /** Locale do Intl: pt-BR ou espanhol latino (es-419 agrupa milhar com vírgula, "4,120", como o site). */
+  function intlLocale(loc) {
+    return isEs(loc) ? 'es-419' : 'pt-BR';
+  }
+
+  /** Textos da interface (popup, opções, cartão e mensagens do fundo). Chave igual nas duas línguas (o teste confere). */
+  const STR = {
+    pt: {
+      htmlLang: 'pt-BR',
+      // popup
+      popupTitle: 'Guarita',
+      opts: 'Opções',
+      permText: 'Para consultar preços, a extensão precisa de acesso a',
+      permBtn: 'Permitir acesso',
+      searchTitle: 'Preço de item',
+      searchLabel: 'Nome do item',
+      searchPlaceholder: 'Ex.: bolsa adepto, capa de thetford 4.1',
+      quality: 'Qualidade',
+      results: 'Resultados',
+      searching: 'Buscando…',
+      resultOne: 'resultado',
+      resultMany: 'resultados',
+      noHits: 'Nenhum item com esse nome.',
+      loadingPrice: 'Consultando o preço…',
+      openOnGuarita: 'Abrir na Guarita',
+      allCities: 'Ver todas as cidades na Guarita',
+      noResponse: 'A extensão não respondeu. Feche e abra o popup.',
+      clockTitle: 'Relógio do Americas',
+      brasilia: 'Brasília',
+      serverUtc: 'Servidor (UTC)',
+      clockLoading: 'Carregando o status do servidor…',
+      gold: 'Ouro',
+      festActive: 'Bônus e eventos ativos',
+      until: 'até',
+      noFest: 'Nenhum bônus de festividade agora.',
+      fullClock: 'Relógio completo na Guarita',
+      pricesFrom: 'Preços do',
+      notAffiliated: 'Não afiliado à Sandbox Interactive.',
+      // cartão
+      viewOnGuarita: 'Ver na Guarita',
+      cityIn: 'em',
+      seen: 'visto',
+      bestReliable: 'Melhor preço confiável para comprar',
+      cheapestSeen: 'Mais barato visto para comprar',
+      noPriceNote: 'Nenhum preço recente nas cidades. O dado vem de quem joga com o cliente do Albion Data Project.',
+      weakNote: 'Nenhuma cidade com preço confiável agora; este é o mais barato visto.',
+      silver: 'prata',
+      extUpdated: 'A extensão foi atualizada. Recarregue a página.',
+      // opções
+      optionsTitle: 'Opções da Guarita',
+      langLegend: 'Língua',
+      langHelp: 'Língua do cartão, do popup e destas opções, e dos nomes de item.',
+      langAuto: 'Automático (língua do navegador)',
+      cardLegend: 'Cartão de preço nos sites',
+      cardHelp: 'Ao passar o mouse num ícone de item nestes sites, a Guarita mostra o nome em português e o preço. Desligue onde não quiser o cartão.',
+      qualityLegend: 'Qualidade padrão',
+      qualityHelp: 'Usada quando o ícone não diz a qualidade do item, e como ponto de partida na busca do popup.',
+      privacyLegend: 'Privacidade',
+      privacyText: 'A extensão não coleta nada sobre você. Ela só lê o endereço da imagem do item embaixo do mouse e pede à Guarita o preço daquele item (id e qualidade). Não há conta, rastreamento nem anúncio. Os preços vêm do',
+      privacyTail: ', mantido por jogadores.',
+      moreAt: 'Não afiliado à Sandbox Interactive. Mais em',
+      saved: 'Opções salvas.',
+      saveFailed: 'Não foi possível salvar as opções.',
+      noSitePermission: 'Sem permissão do navegador para',
+      cardOn: 'Cartão ligado em',
+      cardOff: 'Cartão desligado em',
+      // erros (fundo)
+      errTimeout: 'A Guarita demorou demais para responder. Tente de novo.',
+      errOffline: 'Sem conexão com a Guarita. Confira a internet ou a permissão de acesso da extensão.',
+      errUnexpected: 'Resposta inesperada da Guarita.',
+      errEmptyIndex: 'Índice de itens vazio.',
+      errInvalidItem: 'Item inválido.',
+      errLimited: 'Muitas consultas em pouco tempo. Espere {s} s ou abra o item na Guarita.',
+      errItem: 'Erro ao consultar a Guarita.',
+      errSearch: 'Não foi possível carregar a lista de itens.',
+      errClock: 'Não foi possível consultar o relógio.',
+      errBadMessage: 'Mensagem inválida.',
+      errUnknownMessage: 'Mensagem desconhecida.',
+      errInternal: 'Erro interno da extensão.',
+      err404: 'Item não encontrado na Guarita.',
+      err429: 'A Guarita está recebendo muitas consultas. Tente de novo em instantes.',
+      err5xx: 'A Guarita não conseguiu buscar o preço agora. Tente de novo em instantes.',
+      errGeneric: 'Não foi possível consultar a Guarita.',
+    },
+    es: {
+      htmlLang: 'es',
+      popupTitle: 'Guarita',
+      opts: 'Opciones',
+      permText: 'Para consultar precios, la extensión necesita acceso a',
+      permBtn: 'Permitir acceso',
+      searchTitle: 'Precio de objeto',
+      searchLabel: 'Nombre del objeto',
+      searchPlaceholder: 'Ej.: bolsa iniciado, capa de thetford 4.1',
+      quality: 'Calidad',
+      results: 'Resultados',
+      searching: 'Buscando…',
+      resultOne: 'resultado',
+      resultMany: 'resultados',
+      noHits: 'Ningún objeto con ese nombre.',
+      loadingPrice: 'Consultando el precio…',
+      openOnGuarita: 'Abrir en la Guarita',
+      allCities: 'Ver todas las ciudades en la Guarita',
+      noResponse: 'La extensión no respondió. Cierra y vuelve a abrir el popup.',
+      clockTitle: 'Reloj de Americas',
+      brasilia: 'Brasilia',
+      serverUtc: 'Servidor (UTC)',
+      clockLoading: 'Cargando el estado del servidor…',
+      gold: 'Oro',
+      festActive: 'Bonificaciones y eventos activos',
+      until: 'hasta',
+      noFest: 'Ninguna bonificación de festividad por ahora.',
+      fullClock: 'Reloj completo en la Guarita',
+      pricesFrom: 'Precios del',
+      notAffiliated: 'No afiliado a Sandbox Interactive.',
+      viewOnGuarita: 'Ver en la Guarita',
+      cityIn: 'en',
+      seen: 'visto',
+      bestReliable: 'Mejor precio confiable para comprar',
+      cheapestSeen: 'Más barato visto para comprar',
+      noPriceNote: 'No hay precios recientes en las ciudades. Los datos vienen de quienes juegan con el cliente del Albion Data Project.',
+      weakNote: 'Ninguna ciudad tiene un precio confiable ahora; este es el más barato visto.',
+      silver: 'plata',
+      extUpdated: 'La extensión se actualizó. Recarga la página.',
+      optionsTitle: 'Opciones de la Guarita',
+      langLegend: 'Idioma',
+      langHelp: 'Idioma de la tarjeta, del popup, de estas opciones y de los nombres de objetos.',
+      langAuto: 'Automático (idioma del navegador)',
+      cardLegend: 'Tarjeta de precio en los sitios',
+      cardHelp: 'Al pasar el mouse sobre el ícono de un objeto en estos sitios, la Guarita muestra el nombre en español y el precio. Desactívala donde no quieras la tarjeta.',
+      qualityLegend: 'Calidad predeterminada',
+      qualityHelp: 'Se usa cuando el ícono no indica la calidad del objeto y como punto de partida en la búsqueda del popup.',
+      privacyLegend: 'Privacidad',
+      privacyText: 'La extensión no recopila nada sobre ti. Solo lee la dirección de la imagen del objeto que está bajo el mouse y le pide a la Guarita el precio de ese objeto (id y calidad). No hay cuenta, rastreo ni anuncios. Los precios vienen del',
+      privacyTail: ', mantenido por jugadores.',
+      moreAt: 'No afiliado a Sandbox Interactive. Más en',
+      saved: 'Opciones guardadas.',
+      saveFailed: 'No se pudieron guardar las opciones.',
+      noSitePermission: 'Sin permiso del navegador para',
+      cardOn: 'Tarjeta activada en',
+      cardOff: 'Tarjeta desactivada en',
+      errTimeout: 'La Guarita tardó demasiado en responder. Inténtalo de nuevo.',
+      errOffline: 'Sin conexión con la Guarita. Revisa tu internet o el permiso de acceso de la extensión.',
+      errUnexpected: 'Respuesta inesperada de la Guarita.',
+      errEmptyIndex: 'Índice de objetos vacío.',
+      errInvalidItem: 'Id de objeto no válido.',
+      errLimited: 'Demasiadas consultas en poco tiempo. Espera {s} s o abre el objeto en la Guarita.',
+      errItem: 'Error al consultar la Guarita.',
+      errSearch: 'No se pudo cargar la lista de objetos.',
+      errClock: 'No se pudo consultar el reloj.',
+      errBadMessage: 'Mensaje no válido.',
+      errUnknownMessage: 'Mensaje desconocido.',
+      errInternal: 'Error interno de la extensión.',
+      err404: 'Objeto no encontrado en la Guarita.',
+      err429: 'La Guarita está recibiendo muchas consultas. Inténtalo de nuevo en unos instantes.',
+      err5xx: 'La Guarita no pudo obtener el precio ahora. Inténtalo de nuevo en unos instantes.',
+      errGeneric: 'No se pudo consultar la Guarita.',
+    },
+  };
+
+  /**
+   * Traduz as páginas da extensão (popup e opções): data-i18n troca o texto; data-i18n-placeholder e
+   * data-i18n-aria-label trocam o atributo. O HTML já vem com o português (o teste confere que é igual à tabela), então
+   * em português isto não muda nada. root: o document (recebido, sem tocar em global).
+   */
+  function applyI18n(root, loc) {
+    for (const el of root.querySelectorAll('[data-i18n]')) el.textContent = t(loc, el.getAttribute('data-i18n'));
+    for (const el of root.querySelectorAll('[data-i18n-placeholder]')) el.setAttribute('placeholder', t(loc, el.getAttribute('data-i18n-placeholder')));
+    for (const el of root.querySelectorAll('[data-i18n-aria-label]')) el.setAttribute('aria-label', t(loc, el.getAttribute('data-i18n-aria-label')));
+  }
+
+  /** Texto da chave na língua; {x} vira vars.x. Chave sem tradução cai no português (nunca some). */
+  function t(loc, key, vars) {
+    const table = STR[isEs(loc) ? 'es' : 'pt'];
+    let s = table[key] !== undefined ? table[key] : STR.pt[key] !== undefined ? STR.pt[key] : key;
+    if (vars) for (const k of Object.keys(vars)) s = s.split(`{${k}}`).join(String(vars[k]));
+    return s;
+  }
+
   // ---------- sites onde o cartão aparece (espelho do content_scripts.matches do manifest) ----------
 
-  /** key: chave nas opções; hosts: nomes exatos de host; matches: padrões do manifest. */
+  /** key: chave nas opções; label/labelEs: nome na lista; hosts: nomes exatos de host; matches: padrões do manifest. */
   const SITES = [
-    { key: 'wiki', label: 'Wiki oficial do Albion', hosts: ['wiki.albiononline.com'], matches: ['https://wiki.albiononline.com/*'] },
+    { key: 'wiki', label: 'Wiki oficial do Albion', labelEs: 'Wiki oficial de Albion', hosts: ['wiki.albiononline.com'], matches: ['https://wiki.albiononline.com/*'] },
     {
       key: 'killboard',
       label: 'Killboard oficial',
@@ -59,17 +253,31 @@
     return site.matches.slice();
   }
 
+  /** Nome do site na língua (os nomes próprios ficam iguais). */
+  function siteLabel(site, loc) {
+    return isEs(loc) && site.labelEs ? site.labelEs : site.label;
+  }
+
   // ---------- opções ----------
 
   const QUALITY_LABEL = { 1: 'Normal', 2: 'Bom', 3: 'Excepcional', 4: 'Excelente', 5: 'Obra-prima' };
+  /** Nomes do cliente oficial em espanhol (glossário: Excepcional = Notable, Excelente = Sobresaliente). */
+  const QUALITY_LABEL_ES = { 1: 'Normal', 2: 'Bueno', 3: 'Notable', 4: 'Sobresaliente', 5: 'Obra maestra' };
+
+  function qualityLabel(q, loc) {
+    return (isEs(loc) ? QUALITY_LABEL_ES : QUALITY_LABEL)[q] || '';
+  }
 
   function defaultOptions() {
     const sites = {};
     for (const s of SITES) sites[s.key] = true;
-    return { sites, quality: 1 };
+    return { sites, quality: 1, lang: 'auto' };
   }
 
-  /** Qualquer coisa vinda do storage vira opções válidas (site desconhecido some, qualidade fora de 1–5 vira 1). */
+  /**
+   * Qualquer coisa vinda do storage vira opções válidas (site desconhecido some, qualidade fora de 1–5 vira 1,
+   * língua fora de auto/pt/es vira auto).
+   */
   function normalizeOptions(raw) {
     const out = defaultOptions();
     if (!raw || typeof raw !== 'object') return out;
@@ -77,6 +285,7 @@
       for (const s of SITES) if (typeof raw.sites[s.key] === 'boolean') out.sites[s.key] = raw.sites[s.key];
     }
     out.quality = parseQuality(raw.quality) || 1;
+    out.lang = LANG_OPTIONS.includes(raw.lang) ? raw.lang : 'auto';
     return out;
   }
 
@@ -133,22 +342,25 @@
   // ---------- formatação (mesma régua do site, src/lib/format.ts) ----------
 
   const nfInt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+  const nfIntEs = new Intl.NumberFormat('es-419', { maximumFractionDigits: 0 });
   const isNum = (n) => typeof n === 'number' && Number.isFinite(n);
 
-  function fmtSilver(n) {
-    return isNum(n) ? nfInt.format(Math.round(n)) : DASH;
+  function fmtSilver(n, loc) {
+    return isNum(n) ? (isEs(loc) ? nfIntEs : nfInt).format(Math.round(n)) : DASH;
   }
 
-  /** Idade em minutos → "agora", "há 12 min", "há 2 h 5 min", "há 3 h", "há 2 dias". */
-  function fmtAge(min) {
-    if (!isNum(min)) return 'sem dado';
+  /** Idade em minutos → "agora", "há 12 min", "há 2 h 5 min", "há 3 h", "há 2 dias" (es: "ahora", "hace 12 min"…). */
+  function fmtAge(min, loc) {
+    const E = isEs(loc);
+    if (!isNum(min)) return E ? 'sin datos' : 'sem dado';
     const m = Math.max(0, Math.round(min));
-    if (m < 1) return 'agora';
-    if (m < 60) return `há ${m} min`;
+    const ago = E ? 'hace' : 'há';
+    if (m < 1) return E ? 'ahora' : 'agora';
+    if (m < 60) return `${ago} ${m} min`;
     const h = Math.floor(m / 60);
-    if (h < 3) return m % 60 ? `há ${h} h ${m % 60} min` : `há ${h} h`;
-    if (h < 48) return `há ${h} h`;
-    return `há ${Math.floor(h / 24)} dias`;
+    if (h < 3) return m % 60 ? `${ago} ${h} h ${m % 60} min` : `${ago} ${h} h`;
+    if (h < 48) return `${ago} ${h} h`;
+    return E ? `hace ${Math.floor(h / 24)} días` : `há ${Math.floor(h / 24)} dias`;
   }
 
   /** Até 1 h verde, até 6 h âmbar, mais velho cinza (bolinha .age do site). */
@@ -163,11 +375,18 @@
     return label === 'alta' ? 'good' : label === 'média' ? 'warn' : label === 'baixa' ? 'bad' : '';
   }
 
+  /** Selo do cartão: "selo alta" em português; "confianza alta/media/baja" em espanhol (glossário). */
+  function confidenceBadge(label, loc) {
+    if (!isEs(loc)) return `selo ${label}`;
+    const es = { alta: 'alta', 'média': 'media', baixa: 'baja', 'sem dado': 'sin datos' }[label];
+    return `confianza ${es || label}`;
+  }
+
   /** Hora em Brasília (ou outro fuso), "21:42" ou "21:42:05". */
-  function fmtTime(v, tz, seconds) {
+  function fmtTime(v, tz, seconds, loc) {
     const d = v instanceof Date ? v : new Date(v);
     if (Number.isNaN(d.getTime())) return DASH;
-    return new Intl.DateTimeFormat('pt-BR', {
+    return new Intl.DateTimeFormat(intlLocale(loc), {
       timeZone: tz || TZ_BR,
       hour: '2-digit',
       minute: '2-digit',
@@ -193,9 +412,15 @@
     return { quote: withSell.slice().sort(byPrice)[0], reliable: false };
   }
 
-  function itemPageUrl(id, quality) {
+  /** Página do item no site, na língua: /item/<ID> em português, /es/item/<ID> em espanhol. */
+  function itemPageUrl(id, quality, loc) {
     const q = parseQuality(quality) || 1;
-    return `${BASE}/item/${encodeURIComponent(id)}${q === 1 ? '' : `?q=${q}`}`;
+    return `${BASE}${isEs(loc) ? '/es' : ''}/item/${encodeURIComponent(id)}${q === 1 ? '' : `?q=${q}`}`;
+  }
+
+  /** Página do site na língua ("/relogio" → "/es/relogio"). */
+  function sitePageUrl(path, loc) {
+    return `${BASE}${isEs(loc) ? '/es' : ''}${path}`;
   }
 
   function apiItemUrl(id, quality) {
@@ -205,13 +430,14 @@
 
   /**
    * Modelo do cartão (o que a tela mostra), a partir da resposta de /api/item e do nome no índice.
-   * names: { pt, en } ou null (índice indisponível: mostra o id).
+   * names: { pt, en } ou null (índice indisponível: mostra o id). Em espanhol, `pt` traz o nome do índice ES (o
+   * items-index-es.json tem o mesmo formato, com o espanhol no lugar do português).
    */
-  function buildCard(id, quality, item, names) {
+  function buildCard(id, quality, item, names, loc) {
     const { tier, ench } = tierFromId(id);
     const q = parseQuality(quality) || 1;
     const name = (names && (names.pt || names.en)) || id;
-    const tags = [tierLabel(tier, ench), q > 1 ? QUALITY_LABEL[q] : ''].filter(Boolean);
+    const tags = [tierLabel(tier, ench), q > 1 ? qualityLabel(q, loc) : ''].filter(Boolean);
     const best = item ? cheapestReliable(item.cities) : null;
     const card = {
       id,
@@ -219,12 +445,12 @@
       name,
       nameEn: names && names.en && names.en !== name ? names.en : '',
       tags,
-      url: itemPageUrl(id, q),
+      url: itemPageUrl(id, q, loc),
       best: null,
       note: '',
     };
     if (!best) {
-      card.note = 'Nenhum preço recente nas cidades. O dado vem de quem joga com o cliente do Albion Data Project.';
+      card.note = t(loc, 'noPriceNote');
       return card;
     }
     const c = best.quote;
@@ -232,35 +458,45 @@
     card.best = {
       city: c.city,
       price: c.sellMin,
-      priceText: `${fmtSilver(c.sellMin)} prata`,
-      ageText: fmtAge(c.ageMin),
+      priceText: `${fmtSilver(c.sellMin, loc)} ${t(loc, 'silver')}`,
+      ageText: fmtAge(c.ageMin, loc),
       ageTone: ageTone(c.ageMin),
-      badge: `selo ${label}`,
+      badge: confidenceBadge(label, loc),
       badgeTone: confidenceTone(label),
       reliable: best.reliable,
     };
-    if (!best.reliable) card.note = 'Nenhuma cidade com preço confiável agora; este é o mais barato visto.';
+    if (!best.reliable) card.note = t(loc, 'weakNote');
     return card;
   }
 
   // ---------- relógio ----------
 
   const SERVER_LABEL = { online: 'Servidor online', offline: 'Servidor offline', 'manutenção': 'Em manutenção', desconhecido: 'Status desconhecido' };
+  const SERVER_LABEL_ES = { online: 'Servidor en línea', offline: 'Servidor fuera de línea', 'manutenção': 'En mantenimiento', desconhecido: 'Estado desconocido' };
   const SERVER_TONE = { online: 'good', offline: 'bad', 'manutenção': 'warn', desconhecido: '' };
 
+  /**
+   * Rótulo da festividade: em espanhol, o `label` que /api/clock?lang=es acrescenta (o `labelPt` continua o
+   * português nas duas línguas); sem ele (API antiga), o rótulo PT.
+   */
+  function festivityText(f, loc) {
+    if (isEs(loc) && typeof f.label === 'string' && f.label) return f.label;
+    return f.labelPt || f.name || (isEs(loc) ? 'Festividad' : 'Festividade');
+  }
+
   /** O que o mini relógio mostra a partir de /api/clock. now: Date de agora (para festividade ativa). */
-  function clockModel(clock, now) {
-    const t = now instanceof Date ? now.getTime() : Date.now();
+  function clockModel(clock, now, loc) {
+    const nowMs = now instanceof Date ? now.getTime() : Date.now();
     const status = clock && clock.server && SERVER_LABEL[clock.server.status] ? clock.server.status : 'desconhecido';
     const fest = (clock && Array.isArray(clock.festivities) ? clock.festivities : [])
-      .filter((f) => f && Date.parse(f.start) <= t && t < Date.parse(f.end))
-      .map((f) => ({ label: f.labelPt || f.name || 'Festividade', endsAt: fmtTime(f.end, TZ_BR, false) }));
+      .filter((f) => f && Date.parse(f.start) <= nowMs && nowMs < Date.parse(f.end))
+      .map((f) => ({ label: festivityText(f, loc), endsAt: fmtTime(f.end, TZ_BR, false, loc) }));
     const gold = clock && clock.gold ? clock.gold : null;
     return {
-      serverLabel: SERVER_LABEL[status],
+      serverLabel: (isEs(loc) ? SERVER_LABEL_ES : SERVER_LABEL)[status],
       serverTone: SERVER_TONE[status],
       festivities: fest,
-      goldText: gold && isNum(gold.price) ? `${fmtSilver(gold.price)} prata` : DASH,
+      goldText: gold && isNum(gold.price) ? `${fmtSilver(gold.price, loc)} ${t(loc, 'silver')}` : DASH,
     };
   }
 
@@ -270,6 +506,16 @@
   const TIER_WORDS = new Map(
     Object.entries({
       calouro: 1, novato: 2, iniciante: 3, jornaleiro: 3, adepto: 4, perito: 5, mestre: 6, graomestre: 7, anciao: 8,
+      beginner: 1, novice: 2, journeyman: 3, adept: 4, adepts: 4, expert: 5, experts: 5, master: 6, masters: 6,
+      grandmaster: 7, grandmasters: 7, elder: 8, elders: 8,
+    }),
+  );
+  // Espanhol (só com loc 'es', para a busca em português não mudar): tiers como no nome do item no cliente ES
+  // ("Bolsa del iniciado" = T4; "obrero" = T3; glossário), mais os do inglês.
+  const STOPWORDS_ES = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y', 'of', 'the', 'and']);
+  const TIER_WORDS_ES = new Map(
+    Object.entries({
+      principiante: 1, novato: 2, obrero: 3, iniciado: 4, experto: 5, maestro: 6, granmaestro: 7, anciano: 8,
       beginner: 1, novice: 2, journeyman: 3, adept: 4, adepts: 4, expert: 5, experts: 5, master: 6, masters: 6,
       grandmaster: 7, grandmasters: 7, elder: 8, elders: 8,
     }),
@@ -311,11 +557,15 @@
 
   /**
    * Busca tolerante: toda palavra precisa aparecer no nome PT, EN ou no id; "t4", "4.1", "adepto" filtram o tier.
-   * Ordem: casa o começo do nome PT, depois nome mais curto, depois tier menor.
+   * Ordem: casa o começo do nome PT, depois nome mais curto, depois tier menor. Com loc 'es' o índice é o espanhol
+   * (o nome ES ocupa o lugar do PT) e as palavras de tier são as do cliente em espanhol ("iniciado", "gran maestro").
    */
-  function searchIndex(prepared, query, limit) {
+  function searchIndex(prepared, query, limit, loc) {
     const max = limit || 8;
     if (!prepared || !prepared.rows) return [];
+    const E = isEs(loc);
+    const tierWords = E ? TIER_WORDS_ES : TIER_WORDS;
+    const stopwords = E ? STOPWORDS_ES : STOPWORDS;
     const words = normalize(query).split(' ').filter(Boolean);
     let tier = 0;
     let ench = -1;
@@ -339,16 +589,21 @@
         ench = Number(w);
         continue;
       }
-      if (w === 'grao' && next === 'mestre') {
+      if (!E && w === 'grao' && next === 'mestre') {
         tier = 7;
         i++;
         continue;
       }
-      if (TIER_WORDS.has(w)) {
-        tier = TIER_WORDS.get(w);
+      if (E && w === 'gran' && next === 'maestro') {
+        tier = 7;
+        i++;
         continue;
       }
-      if (STOPWORDS.has(w)) continue;
+      if (tierWords.has(w)) {
+        tier = tierWords.get(w);
+        continue;
+      }
+      if (stopwords.has(w)) continue;
       terms.push(w);
     }
     if (!terms.length && !tier) return [];
@@ -426,13 +681,16 @@
     return t - stored.fetchedAt < (ttlMs || 24 * 3600 * 1000) && stored.fetchedAt <= t;
   }
 
-  /** Mensagem de erro em PT-BR para o status HTTP da API da Guarita. */
-  function httpErrorMessage(status, apiMessage) {
-    if (status === 404) return 'Item não encontrado na Guarita.';
-    if (status === 429) return 'A Guarita está recebendo muitas consultas. Tente de novo em instantes.';
-    if (typeof apiMessage === 'string' && apiMessage && apiMessage.length < 200) return apiMessage;
-    if (status >= 500) return 'A Guarita não conseguiu buscar o preço agora. Tente de novo em instantes.';
-    return 'Não foi possível consultar a Guarita.';
+  /**
+   * Mensagem de erro para o status HTTP da API da Guarita. Em português repassa a mensagem curta da API; em espanhol
+   * não (a API responde em português, e o texto vazaria no cartão em espanhol).
+   */
+  function httpErrorMessage(status, apiMessage, loc) {
+    if (status === 404) return t(loc, 'err404');
+    if (status === 429) return t(loc, 'err429');
+    if (!isEs(loc) && typeof apiMessage === 'string' && apiMessage && apiMessage.length < 200) return apiMessage;
+    if (status >= 500) return t(loc, 'err5xx');
+    return t(loc, 'errGeneric');
   }
 
   g.GuaritaCore = {
@@ -440,6 +698,17 @@
     TZ_BR,
     SITES,
     QUALITY_LABEL,
+    QUALITY_LABEL_ES,
+    LANG_OPTIONS,
+    STR,
+    t,
+    applyI18n,
+    resolveLocale,
+    intlLocale,
+    siteLabel,
+    qualityLabel,
+    confidenceBadge,
+    sitePageUrl,
     siteFor,
     siteOrigins,
     defaultOptions,
