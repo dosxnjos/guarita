@@ -1,0 +1,5 @@
+# Cache dos arquivos com hash do Vite. Hoje todo pedido passa pelo _worker.js (modo avançado), e o Pages não aplica
+# este arquivo ao que sai do worker: quem põe o cabeçalho de verdade é worker/lib/cacheHeaders.ts. Fica aqui para o
+# caso de o asset passar a ser servido direto (por exemplo, com um _routes.json que tire /assets/* do worker).
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

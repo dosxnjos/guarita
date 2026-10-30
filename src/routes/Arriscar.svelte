@@ -4,9 +4,10 @@
   import { api } from '../lib/api';
   import { go } from '../lib/router';
   import type { RiskQuote } from '../../shared/types';
-  import { ZONE_RULES, zoneRule } from '../../shared/zones';
-  import { QUALITIES, QUALITY_LABEL, fmtDateTime } from '../lib/format';
+  import { ZONE_RULES } from '../../shared/zones';
+  import { QUALITIES, cityName, fmtDateTime, qualityName } from '../lib/format';
   import { itemHref } from '../lib/player/format';
+  import { getLocale, href, tx } from '../lib/i18n/index.svelte';
   import ItemPicker from '../lib/player/ItemPicker.svelte';
   import ItemIcon from '../lib/player/ItemIcon.svelte';
   import Money from '../lib/ui/Money.svelte';
@@ -15,7 +16,7 @@
   import Loading from '../lib/ui/Loading.svelte';
   import {
     MAX_PIECES, PRESETS, coverageText, loseLabel, loseTone, newPiece, parseSetParam, piecesSignature, presetPieces,
-    readyPieces, setParam, type Piece,
+    presetText, readyPieces, setParam, zoneText, type Piece,
   } from '../lib/novato/arriscar';
 
   // params não usado: o set vive em ?set= no endereço (dá para compartilhar)
@@ -93,7 +94,8 @@
   }
 
   $effect(() => {
-    document.title = 'Quanto vale arriscar · Guarita';
+    // mesmo título de worker/seo.ts (FIXED_ROUTES e FIXED_ES)
+    document.title = tx('Quanto vale arriscar · Guarita', 'Cuánto vale arriesgar · Guarita');
     // untrack: o cálculo lê as peças, e o efeito não pode rodar de novo a cada peça mudada
     if (fromUrl.length) untrack(() => calc());
   });
@@ -101,17 +103,21 @@
 
 <section class="page stack">
   <header>
-    <h1>Quanto vale arriscar</h1>
-    <p class="muted">Monte o set que você pretende usar, veja quanto ele custa hoje no mercado e o que você perde se morrer em cada tipo de zona.</p>
+    <h1>{tx('Quanto vale arriscar', 'Cuánto vale arriesgar')}</h1>
+    <p class="muted">{tx(
+      'Monte o set que você pretende usar, veja quanto ele custa hoje no mercado e o que você perde se morrer em cada tipo de zona.',
+      'Arma el set que piensas usar, mira cuánto cuesta hoy en el mercado y qué pierdes si mueres en cada tipo de zona.',
+    )}</p>
   </header>
 
   <div class="card stack">
-    <h2 class="h3">Começar de um exemplo</h2>
+    <h2 class="h3">{tx('Começar de um exemplo', 'Empezar con un ejemplo')}</h2>
     <div class="presets">
       {#each PRESETS as p (p.id)}
+        {@const pt = presetText(p, getLocale())}
         <button type="button" class="btn preset" onclick={() => applyPreset(p.id)}>
-          <strong>{p.label}</strong>
-          <span class="muted small">{p.hint}</span>
+          <strong>{pt.label}</strong>
+          <span class="muted small">{pt.hint}</span>
         </button>
       {/each}
     </div>
@@ -119,50 +125,54 @@
 
   <form class="card stack" onsubmit={submit} aria-labelledby="set-titulo">
     <div class="section-head first">
-      <h2 class="h3" id="set-titulo">Seu set</h2>
-      <span class="muted small">{pieces.length} de {MAX_PIECES} peças</span>
+      <h2 class="h3" id="set-titulo">{tx('Seu set', 'Tu set')}</h2>
+      <span class="muted small">{tx(`${pieces.length} de ${MAX_PIECES} peças`, `${pieces.length} de ${MAX_PIECES} piezas`)}</span>
     </div>
 
     <ol class="pieces">
       {#each pieces as p, i (p.key)}
         <li class="piece">
           <div class="piece-item">
-            <label class="small" for="peca-{p.key}">Peça {i + 1}</label>
+            <label class="small" for="peca-{p.key}">{tx(`Peça ${i + 1}`, `Pieza ${i + 1}`)}</label>
             <ItemPicker bind:itemId={p.itemId} bind:itemName={p.itemName} inputId="peca-{p.key}" />
           </div>
           <div class="piece-q">
-            <label class="small" for="qual-{p.key}">Qualidade</label>
+            <label class="small" for="qual-{p.key}">{tx('Qualidade', 'Calidad')}</label>
             <select id="qual-{p.key}" class="input" bind:value={p.quality}>
-              {#each QUALITIES as q (q)}<option value={q}>{QUALITY_LABEL[q]}</option>{/each}
+              {#each QUALITIES as q (q)}<option value={q}>{qualityName(q)}</option>{/each}
             </select>
           </div>
-          <button type="button" class="btn remove" onclick={() => removePiece(p.key)} aria-label="Remover a peça {i + 1}">Remover</button>
+          <button type="button" class="btn remove" onclick={() => removePiece(p.key)} aria-label={tx(`Remover a peça ${i + 1}`, `Quitar la pieza ${i + 1}`)}>{tx('Remover', 'Quitar')}</button>
         </li>
       {/each}
     </ol>
 
     <div class="row">
-      <button type="button" class="btn" onclick={addPiece} disabled={pieces.length >= MAX_PIECES}>Adicionar peça</button>
-      <button type="submit" class="btn primary" disabled={!ready.length || loading}>{loading ? 'Calculando…' : 'Calcular'}</button>
-      <button type="button" class="linkbtn small" onclick={clearAll}>Limpar</button>
+      <button type="button" class="btn" onclick={addPiece} disabled={pieces.length >= MAX_PIECES}>{tx('Adicionar peça', 'Agregar pieza')}</button>
+      <button type="submit" class="btn primary" disabled={!ready.length || loading}>{loading ? tx('Calculando…', 'Calculando…') : tx('Calcular', 'Calcular')}</button>
+      <button type="button" class="linkbtn small" onclick={clearAll}>{tx('Limpar', 'Limpiar')}</button>
     </div>
-    {#if pieces.length >= MAX_PIECES}<p class="muted small">Limite de {MAX_PIECES} peças por cálculo.</p>{/if}
+    {#if pieces.length >= MAX_PIECES}<p class="muted small">{tx(`Limite de ${MAX_PIECES} peças por cálculo.`, `Límite de ${MAX_PIECES} piezas por cálculo.`)}</p>{/if}
   </form>
 
   <div aria-live="polite" class="stack">
     {#if loading && !quote}
-      <div class="card"><Loading lines={4} label="Consultando os preços…" /></div>
+      <div class="card"><Loading lines={4} label={tx('Consultando os preços…', 'Consultando los precios…')} /></div>
     {:else if error}
-      <ErrorBox title="Não deu para calcular" message={error} onretry={calc} />
+      <ErrorBox title={tx('Não deu para calcular', 'No se pudo calcular')} message={error} onretry={calc} />
     {:else if quote}
       {#if outdated}
-        <p class="callout warn small">As peças mudaram depois do último cálculo. Toque em <strong>Calcular</strong> para atualizar.</p>
+        {#if getLocale() === 'es'}
+          <p class="callout warn small">Las piezas cambiaron después del último cálculo. Toca <strong>Calcular</strong> para actualizar.</p>
+        {:else}
+          <p class="callout warn small">As peças mudaram depois do último cálculo. Toque em <strong>Calcular</strong> para atualizar.</p>
+        {/if}
       {/if}
 
       <div class="card stack">
         <div class="total">
-          <span class="kpi-label">Custo do set hoje</span>
-          <span class="kpi"><Money value={quote.total || null} />{#if quote.total}<span class="kpi-unit">prata</span>{/if}</span>
+          <span class="kpi-label">{tx('Custo do set hoje', 'Costo del set hoy')}</span>
+          <span class="kpi"><Money value={quote.total || null} />{#if quote.total}<span class="kpi-unit">{tx('prata', 'plata')}</span>{/if}</span>
           <span class="muted small">{coverageText(quote)}</span>
         </div>
         <ul class="lines">
@@ -170,67 +180,81 @@
             <li class="line">
               <ItemIcon id={it.id} quality={it.quality} alt="" size={40} />
               <span class="line-name">
-                <a href={itemHref(it.id, it.quality)} onclick={go}>{names.get(it.id) || it.id}</a>
-                <span class="muted small">{it.city ? `${QUALITY_LABEL[it.quality]} · mais barato em ${it.city}` : QUALITY_LABEL[it.quality]}</span>
+                <a href={href(itemHref(it.id, it.quality))} onclick={go}>{names.get(it.id) || it.id}</a>
+                <span class="muted small">{it.city
+                  ? tx(`${qualityName(it.quality)} · mais barato em ${it.city}`, `${qualityName(it.quality)} · más barato en ${cityName(it.city)}`)
+                  : qualityName(it.quality)}</span>
               </span>
               <span class="line-price">
                 {#if it.price != null}
                   <Money value={it.price} />
                   <AgeDot min={it.ageMin} />
                 {:else}
-                  <span class="muted small">sem preço</span>
+                  <span class="muted small">{tx('sem preço', 'sin precio')}</span>
                 {/if}
               </span>
             </li>
           {/each}
         </ul>
-        <p class="muted small">
-          Menor preço de venda entre as cidades reais e Caerleon, na qualidade escolhida ou melhor, pelo Albion Online Data Project.
-          Preço visto há muito tempo pode ter mudado. Consulta de {fmtDateTime(quote.fetchedAt)} (horário de Brasília).
-        </p>
+        <p class="muted small">{tx(
+          `Menor preço de venda entre as cidades reais e Caerleon, na qualidade escolhida ou melhor, pelo Albion Online Data Project. Preço visto há muito tempo pode ter mudado. Consulta de ${fmtDateTime(quote.fetchedAt)} (horário de Brasília).`,
+          `Precio de venta más bajo entre las ciudades reales y Caerleon, en la calidad elegida o mejor, según el Albion Online Data Project. Un precio visto hace mucho tiempo puede haber cambiado. Consulta del ${fmtDateTime(quote.fetchedAt)} (horario de Brasilia).`,
+        )}</p>
       </div>
 
-      <h2 class="section-head">O que você perde em cada zona</h2>
+      <h2 class="section-head">{tx('O que você perde em cada zona', 'Qué pierdes en cada zona')}</h2>
       <div class="grid zones">
         {#each quote.zones as z (z.zone)}
-          {@const rule = zoneRule(z.zone)}
+          {@const zt = zoneText(z.zone, getLocale())}
           <article class="card zone zone-{loseTone(z.lose)}">
             <header class="zone-head">
-              <h3 class="h4">{z.labelPt}</h3>
+              <h3 class="h4">{getLocale() === 'es' ? zt.label : z.labelPt}</h3>
               <span class="tag {loseTone(z.lose)}">{loseLabel(z.lose)}</span>
             </header>
             <p class="zone-amount">
               {#if z.lose === 'tudo'}
                 <Money value={z.amount || null} />
-                <span class="muted small">{z.amount ? 'de prata em risco' : 'sem preço para estimar'}</span>
+                <span class="muted small">{z.amount ? tx('de prata em risco', 'de plata en riesgo') : tx('sem preço para estimar', 'sin precio para estimar')}</span>
               {:else}
-                <span>Só o reparo</span>
+                <span>{tx('Só o reparo', 'Solo la reparación')}</span>
               {/if}
             </p>
-            <p class="small"><strong>Quem ataca:</strong> {rule.who}</p>
-            <p class="small"><strong>Ao morrer:</strong> {rule.death}</p>
-            <p class="muted small">{z.note}</p>
+            <p class="small"><strong>{tx('Quem ataca:', 'Quién ataca:')}</strong> {zt.who}</p>
+            <p class="small"><strong>{tx('Ao morrer:', 'Al morir:')}</strong> {zt.death}</p>
+            <p class="muted small">{getLocale() === 'es' ? zt.note : z.note}</p>
           </article>
         {/each}
       </div>
     {:else}
       <div class="card stack">
-        <h2 class="h3">Regras de perda por zona</h2>
+        <h2 class="h3">{tx('Regras de perda por zona', 'Reglas de pérdida por zona')}</h2>
         <ul class="rules">
           {#each ZONE_RULES as r (r.zone)}
-            <li><strong>{r.labelPt}:</strong> <span class="tag {loseTone(r.lose)}">{loseLabel(r.lose)}</span> {r.death}</li>
+            {@const zt = zoneText(r.zone, getLocale())}
+            <li><strong>{zt.label}:</strong> <span class="tag {loseTone(r.lose)}">{loseLabel(r.lose)}</span> {zt.death}</li>
           {/each}
         </ul>
-        <p class="muted small">Escolha as peças e toque em Calcular para ver o valor em risco em cada zona.</p>
+        <p class="muted small">{tx(
+          'Escolha as peças e toque em Calcular para ver o valor em risco em cada zona.',
+          'Elige las piezas y toca Calcular para ver el valor en riesgo en cada zona.',
+        )}</p>
       </div>
     {/if}
   </div>
 
-  <p class="callout small">
-    As regras resumem o que o jogo aplica hoje e podem mudar com atualizações; confira sempre o tipo da zona no mapa antes de entrar.
-    O valor em risco não inclui o que você carrega na bolsa nem o custo de reparo.
-    Leia também os <a href="/golpes" onclick={go}>golpes mais comuns</a> e o <a href="/glossario" onclick={go}>glossário</a>.
-  </p>
+  {#if getLocale() === 'es'}
+    <p class="callout small">
+      Las reglas resumen lo que el juego aplica hoy y pueden cambiar con las actualizaciones; revisa siempre el tipo de zona en el mapa antes de entrar.
+      El valor en riesgo no incluye lo que llevas en la bolsa ni el costo de reparación.
+      Lee también las <a href={href('/golpes')} onclick={go}>estafas más comunes</a> y el <a href={href('/glossario')} onclick={go}>glosario</a>.
+    </p>
+  {:else}
+    <p class="callout small">
+      As regras resumem o que o jogo aplica hoje e podem mudar com atualizações; confira sempre o tipo da zona no mapa antes de entrar.
+      O valor em risco não inclui o que você carrega na bolsa nem o custo de reparo.
+      Leia também os <a href={href('/golpes')} onclick={go}>golpes mais comuns</a> e o <a href={href('/glossario')} onclick={go}>glossário</a>.
+    </p>
+  {/if}
 </section>
 
 <style>

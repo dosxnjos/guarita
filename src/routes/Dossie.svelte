@@ -5,8 +5,9 @@
   import type { PlayerDossier } from '../../shared/types';
   import { cached } from '../lib/player/cache';
   import {
-    famBars, fmtAgo, fmtCompact, fmtDateBR, fmtDec, fmtNum, fmtPct, gatherLabel, isStale, playerHref, pveLabel,
+    famBars, fmtAgo, fmtCompact, fmtDateBR, fmtDec, fmtNum, fmtPct, gatherLabel, isStale, playerHref, pveLabel, weaponLabel,
   } from '../lib/player/format';
+  import { href, tx } from '../lib/i18n/index.svelte';
   import DangerMeter from '../lib/player/DangerMeter.svelte';
   import BarList from '../lib/player/BarList.svelte';
   import EventList from '../lib/player/EventList.svelte';
@@ -40,95 +41,101 @@
   });
 
   $effect(() => {
-    document.title = data ? `${data.name} · Dossiê · Guarita` : 'Dossiê · Guarita';
+    // Sem dado, igual a worker/seo.ts (routeMeta de /jogador/:id).
+    const word = tx('Dossiê', 'Dosier');
+    document.title = data ? `${data.name} · ${word} · Guarita` : `${word} · Guarita`;
   });
 
-  const pve = $derived(famBars(data?.pve, pveLabel));
-  const gather = $derived(famBars(data?.gathering, gatherLabel));
+  const pve = $derived(famBars(data?.pve, (k) => pveLabel(k)));
+  const gather = $derived(famBars(data?.gathering, (k) => gatherLabel(k)));
+  // A API manda o rótulo da arma só em PT (labelPt); weaponLabel troca pelo termo do jogo em espanhol.
   const weapons = $derived(
-    (data?.weapons ?? []).map((w) => ({ key: w.type, label: w.labelPt || w.type, value: w.count, icon: w.type })),
+    (data?.weapons ?? []).map((w) => ({ key: w.type, label: (w.labelPt && weaponLabel(w.labelPt)) || w.type, value: w.count, icon: w.type })),
   );
   const totalFights = $derived((data?.recentKills.length ?? 0) + (data?.recentDeaths.length ?? 0));
 </script>
 
 <section class="page stack">
-  <p class="small"><a href="/jogador" onclick={go}>← Buscar outro jogador</a></p>
+  <p class="small"><a href={href('/jogador')} onclick={go}>{tx('← Buscar outro jogador', '← Buscar otro jugador')}</a></p>
 
   {#if loading}
-    <h1>Dossiê</h1>
-    <Patient lines={6} what="o dossiê no killboard oficial" />
+    <h1>{tx('Dossiê', 'Dosier')}</h1>
+    <Patient lines={6} what={tx('o dossiê no killboard oficial', 'el dosier en el killboard oficial')} />
   {:else if error}
-    <h1>Dossiê</h1>
+    <h1>{tx('Dossiê', 'Dosier')}</h1>
     <ErrorBox message={error} onretry={() => load(id, true)} />
   {:else if data}
     <header class="card head">
       <div>
         <h1>{data.name}</h1>
         <p class="org">
-          {#if data.guild}<span>Guilda <strong>{data.guild}</strong></span>{:else}<span class="muted">Sem guilda</span>{/if}
-          {#if data.alliance}<span>Aliança <strong>[{data.alliance}]</strong></span>{/if}
+          {#if data.guild}<span>{tx('Guilda', 'Gremio')} <strong>{data.guild}</strong></span>{:else}<span class="muted">{tx('Sem guilda', 'Sin gremio')}</span>{/if}
+          {#if data.alliance}<span>{tx('Aliança', 'Alianza')} <strong>[{data.alliance}]</strong></span>{/if}
         </p>
       </div>
       <p class="muted small fetched">
-        Atualizado {fmtAgo(data.fetchedAt)}
-        {#if isStale(data.fetchedAt)}<span class="tag warn">dado antigo</span>{/if}
-        <button class="btn small" type="button" onclick={() => load(id, true)}>Atualizar</button>
+        {tx('Atualizado', 'Actualizado')} {fmtAgo(data.fetchedAt)}
+        {#if isStale(data.fetchedAt)}<span class="tag warn">{tx('dado antigo', 'datos antiguos')}</span>{/if}
+        <button class="btn small" type="button" onclick={() => load(id, true)}>{tx('Atualizar', 'Actualizar')}</button>
       </p>
     </header>
 
     <div class="card">
-      <h2 class="first">Nível de perigo</h2>
+      <h2 class="first">{tx('Nível de perigo', 'Nivel de peligro')}</h2>
       <DangerMeter danger={data.danger} />
     </div>
 
     <div class="stats">
-      <div class="card stat"><span class="muted small">Fama de abate</span><strong class="num">{fmtCompact(data.killFame)}</strong></div>
-      <div class="card stat"><span class="muted small">Fama de morte</span><strong class="num">{fmtCompact(data.deathFame)}</strong></div>
-      <div class="card stat"><span class="muted small">Razão kill/morte</span><strong class="num">{fmtDec(data.ratio)}</strong></div>
-      <div class="card stat"><span class="muted small">IP médio recente</span><strong class="num">{fmtNum(data.avgIp)}</strong></div>
-      <div class="card stat"><span class="muted small">Kills sozinho</span><strong class="num">{fmtPct(data.soloRate)}</strong></div>
+      <div class="card stat"><span class="muted small">{tx('Fama de abate', 'Fama por asesinatos')}</span><strong class="num">{fmtCompact(data.killFame)}</strong></div>
+      <div class="card stat"><span class="muted small">{tx('Fama de morte', 'Fama por muertes')}</span><strong class="num">{fmtCompact(data.deathFame)}</strong></div>
+      <div class="card stat"><span class="muted small">{tx('Razão kill/morte', 'Relación asesinatos/muertes')}</span><strong class="num">{fmtDec(data.ratio)}</strong></div>
+      <div class="card stat"><span class="muted small">{tx('IP médio recente', 'IP medio reciente')}</span><strong class="num">{fmtNum(data.avgIp)}</strong></div>
+      <div class="card stat"><span class="muted small">{tx('Kills sozinho', 'Asesinatos en solitario')}</span><strong class="num">{fmtPct(data.soloRate)}</strong></div>
       <div class="card stat">
-        <span class="muted small">Grupo médio (jogadores)</span>
+        <span class="muted small">{tx('Grupo médio (jogadores)', 'Grupo medio (jugadores)')}</span>
         <strong class="num">{fmtDec(data.avgGroup)}</strong>
       </div>
     </div>
-    <p class="muted small">IP, solo e grupo vêm das {fmtNum(totalFights)} lutas recentes que o killboard mostra.</p>
+    <p class="muted small">{tx(
+      `IP, solo e grupo vêm das ${fmtNum(totalFights)} lutas recentes que o killboard mostra.`,
+      `El IP, los asesinatos en solitario y el grupo salen de las ${fmtNum(totalFights)} peleas recientes que muestra el killboard.`,
+    )}</p>
 
     {#if data.recentDeaths.length}
-      <a class="btn primary autopsy" href="{playerHref(data.id)}/morte" onclick={go}>Autópsia da última morte →</a>
+      <a class="btn primary autopsy" href={href(`${playerHref(data.id)}/morte`)} onclick={go}>{tx('Autópsia da última morte →', 'Autopsia de la última muerte →')}</a>
     {:else}
-      <p class="muted small">Sem mortes recentes no killboard, então não há autópsia para mostrar.</p>
+      <p class="muted small">{tx('Sem mortes recentes no killboard, então não há autópsia para mostrar.', 'No hay muertes recientes en el killboard, así que no hay autopsia para mostrar.')}</p>
     {/if}
 
     <div class="grid">
       <div class="card">
-        <h2 class="first">Armas mais usadas</h2>
-        <BarList rows={weapons} unit="×" empty="Sem kills ou mortes recentes para ver as armas." />
+        <h2 class="first">{tx('Armas mais usadas', 'Armas más usadas')}</h2>
+        <BarList rows={weapons} unit="×" empty={tx('Sem kills ou mortes recentes para ver as armas.', 'No hay asesinatos ni muertes recientes para ver las armas.')} />
       </div>
       <div class="card">
-        <h2 class="first">Fama PvE <span class="muted small num">{fmtCompact(pve.total)}</span></h2>
-        <BarList rows={pve.bars} empty="Sem fama PvE registrada." />
+        <h2 class="first">{tx('Fama PvE', 'Fama PvE')} <span class="muted small num">{fmtCompact(pve.total)}</span></h2>
+        <BarList rows={pve.bars} empty={tx('Sem fama PvE registrada.', 'No hay fama PvE registrada.')} />
       </div>
       <div class="card">
-        <h2 class="first">Coleta <span class="muted small num">{fmtCompact(gather.total)}</span></h2>
-        <BarList rows={gather.bars} empty="Sem fama de coleta registrada." />
+        <h2 class="first">{tx('Coleta', 'Recolección')} <span class="muted small num">{fmtCompact(gather.total)}</span></h2>
+        <BarList rows={gather.bars} empty={tx('Sem fama de coleta registrada.', 'No hay fama de recolección registrada.')} />
       </div>
     </div>
 
     <div class="grid">
       <div>
-        <h2>Últimas kills</h2>
-        <EventList events={data.recentKills} mode="kill" empty="Nenhuma kill recente no killboard." />
+        <h2>{tx('Últimas kills', 'Últimos asesinatos')}</h2>
+        <EventList events={data.recentKills} mode="kill" empty={tx('Nenhuma kill recente no killboard.', 'No hay asesinatos recientes en el killboard.')} />
       </div>
       <div>
-        <h2>Últimas mortes</h2>
-        <EventList events={data.recentDeaths} mode="death" empty="Nenhuma morte recente no killboard." />
+        <h2>{tx('Últimas mortes', 'Últimas muertes')}</h2>
+        <EventList events={data.recentDeaths} mode="death" empty={tx('Nenhuma morte recente no killboard.', 'No hay muertes recientes en el killboard.')} />
       </div>
     </div>
 
     <p class="muted small">
-      Horários em Brasília. Dados públicos do killboard oficial, que podem atrasar alguns minutos. Consulta feita em
-      {fmtDateBR(data.fetchedAt)}. A Guarita nunca detecta jogadores dentro do jogo.
+      {tx('Horários em Brasília. Dados públicos do killboard oficial, que podem atrasar alguns minutos. Consulta feita em', 'Horarios de Brasilia. Datos públicos del killboard oficial, que pueden retrasarse algunos minutos. Consulta hecha el')}
+      {fmtDateBR(data.fetchedAt)}. {tx('A Guarita nunca detecta jogadores dentro do jogo.', 'La Guarita nunca detecta jugadores dentro del juego.')}
     </p>
   {/if}
 </section>

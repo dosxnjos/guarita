@@ -1,5 +1,10 @@
 // Push no navegador: registra /sw.js, inscreve com a chave VAPID e guarda o id da inscrição. Dono: módulo (e).
+// Mensagens de erro na língua atual, lida na hora da chamada (espelho não reativo de i18n/core.ts). O texto que vem do
+// servidor (data.error) continua como o servidor mandou.
+import { currentLocale } from './i18n/core';
+
 const STORAGE_KEY = 'guarita.sub';
+const tr = (pt: string, es: string): string => (currentLocale() === 'es' ? es : pt);
 
 export function pushSupported(): boolean {
   return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -69,7 +74,10 @@ async function postSubscription(sub: PushSubscription, subId: string | null): Pr
  */
 export async function enablePush(): Promise<string> {
   if (!pushSupported()) {
-    throw new Error('Este navegador não aceita notificações. No iPhone, instale a Guarita na tela de início antes (Compartilhar → Adicionar à Tela de Início).');
+    throw new Error(tr(
+      'Este navegador não aceita notificações. No iPhone, instale a Guarita na tela de início antes (Compartilhar → Adicionar à Tela de Início).',
+      'Este navegador no acepta notificaciones. En iPhone, primero instala la Guarita en la pantalla de inicio (Compartir → Agregar a inicio).',
+    ));
   }
   const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
   await navigator.serviceWorker.ready;
@@ -78,13 +86,24 @@ export async function enablePush(): Promise<string> {
   if (permission !== 'granted') {
     throw new Error(
       permission === 'denied'
-        ? 'As notificações estão bloqueadas para este site. Libere nas configurações do navegador (ícone de cadeado ao lado do endereço) e tente de novo.'
-        : 'Sem permissão para notificar. Toque em "Permitir" quando o navegador perguntar.',
+        ? tr(
+          'As notificações estão bloqueadas para este site. Libere nas configurações do navegador (ícone de cadeado ao lado do endereço) e tente de novo.',
+          'Las notificaciones están bloqueadas para este sitio. Permítelas en la configuración del navegador (ícono del candado junto a la dirección) e intenta de nuevo.',
+        )
+        : tr(
+          'Sem permissão para notificar. Toque em "Permitir" quando o navegador perguntar.',
+          'Sin permiso para notificar. Toca "Permitir" cuando el navegador pregunte.',
+        ),
     );
   }
 
   const vapidRes = await fetch('/api/push/vapid');
-  if (!vapidRes.ok) throw new Error(await errorText(vapidRes, 'Não foi possível ativar as notificações agora. Tente de novo em instantes.'));
+  if (!vapidRes.ok) {
+    throw new Error(await errorText(vapidRes, tr(
+      'Não foi possível ativar as notificações agora. Tente de novo em instantes.',
+      'No se pudieron activar las notificaciones ahora. Intenta de nuevo en unos instantes.',
+    )));
+  }
   const { key } = (await vapidRes.json()) as { key: string };
   const appKey = b64urlToBytes(key);
 
@@ -104,7 +123,12 @@ export async function enablePush(): Promise<string> {
     sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
     res = await postSubscription(sub, null);
   }
-  if (!res.ok) throw new Error(await errorText(res, 'Não foi possível registrar as notificações. Tente de novo em instantes.'));
+  if (!res.ok) {
+    throw new Error(await errorText(res, tr(
+      'Não foi possível registrar as notificações. Tente de novo em instantes.',
+      'No se pudieron registrar las notificaciones. Intenta de nuevo en unos instantes.',
+    )));
+  }
   const { subId } = (await res.json()) as { subId: string };
   saveSubId(subId);
   return subId;
@@ -129,7 +153,9 @@ export async function disablePush(): Promise<void> {
       body: JSON.stringify(endpoint ? { subId, endpoint } : { subId }),
     }).catch(() => null);
     // Falha de rede: o navegador já cancelou; o servidor apaga a inscrição sozinho no próximo envio (410).
-    if (res && !res.ok && res.status !== 403) throw new Error(await errorText(res, 'Não foi possível desativar no servidor agora.'));
+    if (res && !res.ok && res.status !== 403) {
+      throw new Error(await errorText(res, tr('Não foi possível desativar no servidor agora.', 'No se pudo desactivar en el servidor ahora.')));
+    }
   }
   saveSubId(null);
 }

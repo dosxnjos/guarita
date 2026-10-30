@@ -13,6 +13,7 @@
   import AgeDot from '../lib/ui/AgeDot.svelte';
   import Loading from '../lib/ui/Loading.svelte';
   import ErrorBox from '../lib/ui/ErrorBox.svelte';
+  import { getLocale, href, tx } from '../lib/i18n/index.svelte';
 
   let { params: _params = {} }: { params?: Record<string, string> } = $props();
 
@@ -25,7 +26,10 @@
   let data = $state<LossesResponse | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(true);
-  /** Nomes completados pelo índice do navegador quando o servidor devolveu só o id. */
+  /**
+   * Nomes completados pelo índice do navegador quando o servidor devolveu só o id. Em espanhol, todos: a API manda o
+   * nome em PT e o loadIndex() já carrega o índice ES.
+   */
   let names = $state<Record<string, string>>({});
   let seq = 0;
 
@@ -45,7 +49,8 @@
   }
 
   async function fillNames(r: LossesResponse) {
-    const missing = r.items.filter((i) => i.name === i.id && !names[i.id]);
+    const all = getLocale() === 'es';
+    const missing = r.items.filter((i) => (all || i.name === i.id) && !names[i.id]);
     if (!missing.length) return;
     try {
       const index = await loadIndex();
@@ -73,7 +78,8 @@
   }
 
   $effect(() => {
-    document.title = 'Perdas no PvP · Guarita';
+    // Igual a worker/seo.ts (FIXED_ROUTES e FIXED_ES).
+    document.title = tx('Perdas no PvP · Guarita', 'Pérdidas en PvP · Guarita');
     load(initialDays);
   });
 
@@ -84,79 +90,91 @@
 
 <section class="page stack">
   <header>
-    <h1>Perdas no PvP</h1>
+    <h1>{tx('Perdas no PvP', 'Pérdidas en PvP')}</h1>
     <p class="muted">
-      O que a guerra consome: os itens que mais se perdem nas mortes PvP do servidor Americas, com o preço atual.
-      Quem morre precisa repor o set, e isso gera demanda para quem crafta e vende. Nas zonas de saque total boa parte
-      do que cai é saqueada e volta ao mercado; só uma parte é destruída na morte.
+      {tx(
+        'O que a guerra consome: os itens que mais se perdem nas mortes PvP do servidor Americas, com o preço atual. Quem morre precisa repor o set, e isso gera demanda para quem crafta e vende. Nas zonas de saque total boa parte do que cai é saqueada e volta ao mercado; só uma parte é destruída na morte.',
+        'Lo que consume la guerra: los objetos que más se pierden en las muertes PvP del servidor Americas, con el precio actual. Quien muere necesita reponer su equipo, y eso genera demanda para quien fabrica y vende. En las zonas de botín completo, buena parte de lo que cae se saquea y vuelve al mercado; solo una parte se destruye al morir.',
+      )}
     </p>
   </header>
 
   <div class="controls">
-    <div class="seg" role="group" aria-label="Período">
-      <button type="button" aria-pressed={days === 1} onclick={() => pick(1)}>Hoje</button>
-      <button type="button" aria-pressed={days === 7} onclick={() => pick(7)}>7 dias</button>
+    <div class="seg" role="group" aria-label={tx('Período', 'Período')}>
+      <button type="button" aria-pressed={days === 1} onclick={() => pick(1)}>{tx('Hoje', 'Hoy')}</button>
+      <button type="button" aria-pressed={days === 7} onclick={() => pick(7)}>{tx('7 dias', '7 días')}</button>
     </div>
-    <div class="seg" role="group" aria-label="Ordenar por">
-      <button type="button" aria-pressed={sort === 'count'} onclick={() => (sort = 'count')}>Mais perdidos</button>
-      <button type="button" aria-pressed={sort === 'value'} onclick={() => (sort = 'value')}>Maior valor</button>
+    <div class="seg" role="group" aria-label={tx('Ordenar por', 'Ordenar por')}>
+      <button type="button" aria-pressed={sort === 'count'} onclick={() => (sort = 'count')}>{tx('Mais perdidos', 'Más perdidos')}</button>
+      <button type="button" aria-pressed={sort === 'value'} onclick={() => (sort = 'value')}>{tx('Maior valor', 'Mayor valor')}</button>
     </div>
   </div>
 
   {#if days === 1}
-    <p class="muted small hint">“Hoje” é o dia do jogo, que vira às 21h de Brasília (meia-noite UTC).</p>
+    <p class="muted small hint">{tx('“Hoje” é o dia do jogo, que vira às 21h de Brasília (meia-noite UTC).', '“Hoy” es el día del juego, que cambia a las 21 h de Brasilia (medianoche UTC).')}</p>
   {/if}
 
   <div aria-live="polite">
     {#if loading && !data}
-      <Loading lines={6} height={44} label="Carregando as perdas" />
+      <Loading lines={6} height={44} label={tx('Carregando as perdas', 'Cargando las pérdidas')} />
     {:else if error && !data}
       <ErrorBox message={error} onretry={() => load(days)} />
     {:else if data}
       <div class="stack" class:dim={loading}>
         <div class="callout small">
           <strong>{coverageText(data.since, data.sampleKills)}</strong>
-          A Guarita guarda uma parte das mortes do killboard público, não todas. Use os números como proporção do que
-          mais se perde, não como o total do servidor.
+          {tx(
+            'A Guarita guarda uma parte das mortes do killboard público, não todas. Use os números como proporção do que mais se perde, não como o total do servidor.',
+            'La Guarita guarda una parte de las muertes del killboard público, no todas. Usa los números como proporción de lo que más se pierde, no como el total del servidor.',
+          )}
         </div>
 
         {#if error}<ErrorBox message={error} onretry={() => load(days)} />{/if}
 
         {#if items.length === 0}
           <p class="empty card">
-            Nenhuma perda coletada {periodLabel(data.days)} ainda.
-            {#if data.days === 1}Logo depois das 21h o dia do jogo recomeça; veja os últimos 7 dias.{/if}
+            {tx(`Nenhuma perda coletada ${periodLabel(data.days)} ainda.`, `Todavía no se registró ninguna pérdida ${data.days <= 1 ? 'hoy' : `en los ${periodLabel(data.days)}`}.`)}
+            {#if data.days === 1}{tx('Logo depois das 21h o dia do jogo recomeça; veja os últimos 7 dias.', 'Justo después de las 21 h el día del juego vuelve a empezar; mira los últimos 7 días.')}{/if}
           </p>
         {:else}
           <div class="stats">
-            <div class="card stat"><span class="kpi-label">Valor perdido</span><strong class="kpi"><Money value={totals.value} compact /></strong>
-              <span class="muted small">soma dos {totals.priced} itens com preço, em prata</span></div>
-            <div class="card stat"><span class="kpi-label">Mortes na amostra</span><strong class="kpi num">{plural(data.sampleKills, 'morte', 'mortes')}</strong>
+            <div class="card stat"><span class="kpi-label">{tx('Valor perdido', 'Valor perdido')}</span><strong class="kpi"><Money value={totals.value} compact /></strong>
+              <span class="muted small">{tx(`soma dos ${totals.priced} itens com preço, em prata`, `suma de los ${totals.priced} objetos con precio, en plata`)}</span></div>
+            <div class="card stat"><span class="kpi-label">{tx('Mortes na amostra', 'Muertes en la muestra')}</span><strong class="kpi num">{tx(plural(data.sampleKills, 'morte', 'mortes'), plural(data.sampleKills, 'muerte', 'muertes'))}</strong>
               <span class="muted small">{periodLabel(data.days)}</span></div>
           </div>
 
-          <ol class="losses" aria-label="Itens mais perdidos, {periodLabel(data.days)}">
+          <ol class="losses" aria-label={tx(`Itens mais perdidos, ${periodLabel(data.days)}`, `Objetos más perdidos, ${periodLabel(data.days)}`)}>
             {#each items as it, i (it.id)}
               <li class="card">
                 <span class="rank num muted small" aria-hidden="true">{i + 1}</span>
                 <ItemIcon id={it.id} size={44} alt="" />
                 <div class="main">
-                  <a class="name" href={itemHref(it.id)} onclick={go}>{label(it.id, it.name)}</a>
-                  <span class="muted small">Perdido {plural(it.count, 'vez', 'vezes')}</span>
+                  <a class="name" href={href(itemHref(it.id))} onclick={go}>{label(it.id, it.name)}</a>
+                  <span class="muted small">{tx(`Perdido ${plural(it.count, 'vez', 'vezes')}`, `Perdido ${plural(it.count, 'vez', 'veces')}`)}</span>
                 </div>
                 <dl class="nums">
-                  <div><dt class="muted small">Preço</dt><dd><Money value={it.price} compact />
+                  <div><dt class="muted small">{tx('Preço', 'Precio')}</dt><dd><Money value={it.price} compact />
                     {#if it.price !== null}<AgeDot min={it.ageMin} text={false} />{/if}</dd></div>
-                  <div><dt class="muted small">Valor perdido</dt><dd><strong><Money value={it.value} compact /></strong></dd></div>
+                  <div><dt class="muted small">{tx('Valor perdido', 'Valor perdido')}</dt><dd><strong><Money value={it.value} compact /></strong></dd></div>
                 </dl>
               </li>
             {/each}
           </ol>
 
           <p class="muted small">
-            Preço: menor venda entre as cidades reais e Caerleon, qualidade normal, no Albion Online Data Project.
-            {#if totals.unpriced}{totals.unpriced} {totals.unpriced === 1 ? 'item ficou' : 'itens ficaram'} sem preço recente.{/if}
-            Valor perdido = vezes perdido × preço. Atualizado em {fmtDateTime(data.fetchedAt)} (Brasília).
+            {tx(
+              'Preço: menor venda entre as cidades reais e Caerleon, qualidade normal, no Albion Online Data Project.',
+              'Precio: la venta más baja entre las ciudades reales y Caerleon, calidad normal, en el Albion Online Data Project.',
+            )}
+            {#if totals.unpriced}{tx(
+              `${totals.unpriced} ${totals.unpriced === 1 ? 'item ficou' : 'itens ficaram'} sem preço recente.`,
+              `${totals.unpriced} ${totals.unpriced === 1 ? 'objeto quedó' : 'objetos quedaron'} sin precio reciente.`,
+            )}{/if}
+            {tx(
+              `Valor perdido = vezes perdido × preço. Atualizado em ${fmtDateTime(data.fetchedAt)} (Brasília).`,
+              `Valor perdido = veces perdido × precio. Actualizado el ${fmtDateTime(data.fetchedAt)} (Brasilia).`,
+            )}
           </p>
         {/if}
       </div>
@@ -164,8 +182,11 @@
   </div>
 
   <p class="callout small">
-    É histórico do killboard público, com atraso de minutos: não mostra quem está por perto nem avisa de inimigos.
-    <a href="/permitido" onclick={go}>Entenda o que fazemos e o que nunca faremos.</a>
+    {tx(
+      'É histórico do killboard público, com atraso de minutos: não mostra quem está por perto nem avisa de inimigos.',
+      'Es historial del killboard público, con minutos de retraso: no muestra quién está cerca ni avisa de enemigos.',
+    )}
+    <a href={href('/permitido')} onclick={go}>{tx('Entenda o que fazemos e o que nunca faremos.', 'Entiende lo que hacemos y lo que nunca haremos.')}</a>
   </p>
 </section>
 

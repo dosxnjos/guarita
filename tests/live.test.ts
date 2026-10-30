@@ -191,4 +191,20 @@ describe('liveBonuses', () => {
   it('lista vazia', () => {
     expect(liveBonuses([], now)).toEqual({ production: [], productionMsLeft: null, activities: [], seasonal: [] });
   });
+  it('em espanhol: rótulos pelo Kind/nome, nunca o português da API', () => {
+    const g = (kind: number, category: string, name: string, labelPt: string) =>
+      ({ kind, category, name, labelPt, start: '2026-10-29T10:00:00Z', end: '2026-10-30T10:00:00Z' });
+    const es = liveBonuses([
+      g(0, '', 'HALLOWEEN2026', 'Halloween 2026'),
+      g(1, 'ACTIVITIES', 'FACTIONPOINTS', 'Pontos de facção em dobro'),
+      g(2, 'GENERAL', 'COMMON_CROSSBOW', 'Bônus de produção: bestas comuns'),
+      g(2, 'GENERAL', 'RARE_BOW', 'Bônus de produção: arcos raras'),
+    ], now, 'es');
+    expect(es).toEqual({
+      production: ['ballestas comunes', 'arcos raros'],
+      productionMsLeft: 4 * 3600_000,
+      activities: ['Puntos de facción dobles'],
+      seasonal: ['Halloween 2026'],
+    });
+  });
 });

@@ -161,8 +161,18 @@ números). **Validação ao vivo ainda pendente**: nada abaixo foi visto com o j
   fragmento e tipos "zero" de 0 byte multiplicando `Valor`. Remontagem guarda só os pedaços que chegaram (2 MB por
   fluxo, 1 MB por mensagem) e o Protocol18 tem orçamento de valores por mensagem (`Leitor::gastar`).
 - **Tabela remota apontando outra porta ou campo** → `de_json` aceita só 5055/5056 e `de_json_remota` limita o
-  salto de `versao` (+1000); id de mapa só com formato de id e, com o `world.txt` carregado, só se existir nele. A
-  URL segue a `main` sem assinatura (pendência, decisão do Gabriel: chave de assinatura).
+  salto de `versao` (+1000); id de mapa só com formato de id e, com o `world.txt` carregado, só se existir nele. Desde
+  a 0.2.1 a remota só vale com `capture-codes.json.sig` válido (próximo item).
+- **Tabela nova publicada no `main` e o app segue com a antiga ("tabela remota recusada (assinatura)" no log e no
+  diagnóstico)** → mudou `capture-codes.json` sem assinar, ou o `.sig` foi para outro commit. Mudou
+  `capture-codes.json` → rode `npm run codes:sign` (em `app/`) e commite os dois juntos; a versão 0.2.0 ignora o
+  `.sig`. O `cargo test` pega o esquecimento (`assinatura_commitada_vale_para_a_tabela_atual`). Logo depois do push
+  o CDN do `raw.githubusercontent.com` pode servir por alguns minutos a tabela nova com a assinatura velha: o app
+  recusa, não guarda a cópia e tenta de novo na próxima abertura. A assinatura vale para os bytes exatos: salvar o
+  JSON com CRLF quebra (o script recusa; `app/.gitattributes` impede o Git de converter).
+- **`npm run codes:sign` diz que a chave do Doppler não é a embutida** → `GUARITA_CODES_SIGN_KEY` foi trocada sem
+  atualizar `CHAVE_PUBLICA_B64` em `src-tauri/src/capture/codigos.rs` (ou o contrário). `node ../scripts/sign-codes.mjs
+  --publica` (com `doppler run`) mostra a pública da chave atual. `--gerar` nunca sobrescreve o segredo.
 - **Loot "sem preço" mesmo depois de a lista de itens chegar** → a marca que decide buscar preço só olhava
   quantidades; agora inclui o id (`marcaDoLoot`).
 - **Loot como "Item nº 1234" e sem preço** → falta a lista `items.txt` do ao-bin-dumps (sem rede na primeira vez).

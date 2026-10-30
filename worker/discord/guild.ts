@@ -7,6 +7,8 @@ import { cachedJsonMeta } from '../lib/cache';
 import { aodpPrices } from '../lib/aodp';
 import { Budget, GameinfoError, GI_TTL, gameinfoCached, gameinfoFetch } from '../lib/gameinfo';
 import { GEAR_CITIES, buildRebuy, idsForOneCall, normalizeEvents, type SlimEvent } from '../api/player';
+import { commandName } from './commands';
+import { tx, type Locale } from './i18n';
 
 const API = 'https://discord.com/api/v10';
 const UA = 'DiscordBot (https://guarita.pages.dev, 0.1)';
@@ -82,7 +84,13 @@ export async function getGuildFeed(env: Env, guildIdDiscord: string): Promise<Gu
 
 export async function saveGuildFeed(env: Env, feed: NewGuildFeed): Promise<GuildFeed> {
   const { status, data } = await hubCall(env, '/guild-feeds', jsonInit('POST', feed));
-  if (status === 503) throw new FeedError(data?.error ?? 'o killfeed de guildas está cheio agora; tente de novo mais tarde');
+  // O texto do Hub vem em português; em espanhol vale a versão fixa (o 503 do Hub só acontece com o feed cheio).
+  if (status === 503) {
+    throw new FeedError(
+      data?.error ?? 'o killfeed de guildas está cheio agora; tente de novo mais tarde',
+      'El killfeed de gremios está lleno ahora; inténtalo de nuevo más tarde.',
+    );
+  }
   if (status !== 200 && status !== 201) throw new Error(`hub: falha ao salvar o feed (${status})`);
   return data as GuildFeed;
 }
@@ -93,8 +101,20 @@ export async function setGuildFeedEnabled(env: Env, feed: GuildFeed, enabled: bo
   return data as GuildFeed;
 }
 
-/** Erro com texto pronto para o usuário (o interactions.ts converte em UserError). */
-export class FeedError extends Error {}
+/** Erro com texto pronto para o usuário (o interactions.ts converte em UserError); `es` é o mesmo texto em espanhol. */
+export class FeedError extends Error {
+  constructor(
+    message: string,
+    readonly es?: string,
+  ) {
+    super(message);
+  }
+
+  /** Texto na língua de quem pediu (sem versão em espanhol, cai no português). */
+  textFor(loc: Locale): string {
+    return loc === 'es' && this.es ? this.es : this.message;
+  }
+}
 
 // ---------- gameinfo: guilda ----------
 
@@ -211,28 +231,47 @@ export async function channelInGuild(env: Env, channelId: string, guildId: strin
   }
 }
 
-/** Texto para o servidor quando o bot não consegue escrever no canal (403/404 do Discord). */
-export function channelProblem(status: number, channelId: string): string | null {
+/**
+ * Texto para o servidor quando o bot não consegue escrever no canal (403/404 do Discord). Em espanhol, as permissões
+ * com o nome que o cliente do Discord em espanhol mostra.
+ */
+export function channelProblem(status: number, channelId: string, loc: Locale = 'pt'): string | null {
   if (status === 403) {
-    return (
+    return tx(
+      loc,
       `Não consegui escrever em <#${channelId}>. Confira se a Guarita está neste servidor e se tem, nesse canal, ` +
-      'as permissões Ver canal, Enviar mensagens e Inserir links.'
+        'as permissões Ver canal, Enviar mensagens e Inserir links.',
+      `No pude escribir en <#${channelId}>. Revisa si Guarita está en este servidor y si tiene, en ese canal, ` +
+        'los permisos Ver canal, Enviar mensajes e Insertar enlaces.',
     );
   }
-  if (status === 404) return `Não achei o canal <#${channelId}>. Ele pode ter sido apagado ou a Guarita não o enxerga.`;
+  if (status === 404) {
+    return tx(
+      loc,
+      `Não achei o canal <#${channelId}>. Ele pode ter sido apagado ou a Guarita não o enxerga.`,
+      `No encontré el canal <#${channelId}>. Puede que lo hayan borrado o que Guarita no lo vea.`,
+    );
+  }
   return null;
 }
 
 /** Aviso que o /guilda mostra quando o cron desligou o feed sozinho. */
-export function feedWarning(feed: GuildFeed | null): string | null {
+export function feedWarning(feed: GuildFeed | null, loc: Locale = 'pt'): string | null {
   if (!feed || feed.enabled || !feed.lastError) return null;
   const where = `<#${feed.channelId}>`;
   if (feed.lastError === 'canal_sumiu') {
-    return `⚠️ O killfeed foi desligado: o canal ${where} não existe mais ou a Guarita não o enxerga. Configure de novo com /guilda configurar.`;
+    return tx(
+      loc,
+      `⚠️ O killfeed foi desligado: o canal ${where} não existe mais ou a Guarita não o enxerga. Configure de novo com /guilda configurar.`,
+      `⚠️ El killfeed se desactivó: el canal ${where} ya no existe o Guarita no lo ve. Configúralo otra vez con ${commandName('guilda configurar', loc)}.`,
+    );
   }
-  return (
+  return tx(
+    loc,
     `⚠️ O killfeed foi desligado: a Guarita perdeu a permissão de escrever em ${where} (ou saiu do servidor). ` +
-    'Devolva as permissões Ver canal, Enviar mensagens e Inserir links e use /guilda feed ligar.'
+      'Devolva as permissões Ver canal, Enviar mensagens e Inserir links e use /guilda feed ligar.',
+    `⚠️ El killfeed se desactivó: Guarita perdió el permiso para escribir en ${where} (o salió del servidor). ` +
+      `Devuelve los permisos Ver canal, Enviar mensajes e Insertar enlaces y usa ${commandName('guilda feed ligar', loc)}.`,
   );
 }
 
@@ -286,7 +325,9 @@ export async function loadRegear(ctx: ExecutionContext, eventId: string, victimI
     timeoutMs: EVENT_TIMEOUT_MS,
   });
   const event = res.data;
-  if (event.victim.id !== victimId) throw new FeedError('Este botão não corresponde à morte registrada no killboard.');
+  if (event.victim.id !== victimId) {
+    throw new FeedError('Este botão não corresponde à morte registrada no killboard.', 'Este botón no corresponde a la muerte registrada en el killboard.');
+  }
   const gear = event.victim.gear;
   const ids = idsForOneCall(gear.map((g) => g.id));
   let rows: PriceRow[] = [];

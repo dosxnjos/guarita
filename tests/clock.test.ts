@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { filterFestivities, getClock, normalizeStatus, parseStatusText, routeClock, summarizeGold } from '../worker/api/clock';
-import { festivityLabelPt, readableName } from '../shared/festivities';
+import { festivityLabel, festivityLabelEs, festivityLabelPt, readableName } from '../shared/festivities';
 import { normalizeFestivities, normalizeGold } from '../worker/lib/aodp';
 import type { Env } from '../worker/env';
 import { aodpFixtureRoute, fixture, mockCaches, mockFetch } from './helpers/net';
@@ -27,6 +27,21 @@ describe('rótulos das festividades', () => {
     expect(festivityLabelPt(0, '', 'LUNARNEWYEAR2027')).toBe('Ano Novo Lunar 2027');
     expect(festivityLabelPt(0, '', 'SOMETHING_NEW')).toBe('Something new');
     expect(readableName('COMMON_LEATHER_ARMOR')).toBe('Common leather armor');
+  });
+  it('espanhol: os quatro tipos da fixture e os desconhecidos, sem português', () => {
+    const labels = normalizeFestivities(fixture('festivities.json')).map((f) => festivityLabelEs(f.kind, f.category, f.name));
+    expect(labels).toEqual(['Halloween 2026', 'Puntos de facción dobles', 'Bonificación de producción: ballestas comunes', 'Bonificación de producción: chaquetas de cuero comunes']);
+    expect(festivityLabelEs(1, 'ACTIVITIES', 'MISTS_WISPS')).toBe('Bonificación de actividad: mists wisps');
+    expect(festivityLabelEs(2, 'GENERAL', 'COMMON_SPACESHIP')).toBe('Bonificación: common spaceship');
+    expect(festivityLabelEs(2, 'GENERAL', 'PLATE_HELMET')).toBe('Bonificación de producción: cascos de placas');
+    expect(festivityLabelEs(2, 'GENERAL', 'RARE_SWORD')).toBe('Bonificación de producción: espadas raras');
+    expect(festivityLabelEs(2, 'GENERAL', 'AVALONIAN_HAMMER')).toBe('Bonificación de producción: martillos avalonianos');
+    expect(festivityLabelEs(0, '', 'LUNARNEWYEAR2027')).toBe('Año Nuevo Lunar 2027');
+    expect(festivityLabelEs(2, 'GENERAL', 'SHAPESHIFTER')).toBe('Bonificación de producción: bastones cambiaformas');
+    expect(festivityLabelEs(2, 'GENERAL', 'KNUCKLES')).toBe('Bonificación de producción: guantes');
+    const f = { kind: 2, category: 'GENERAL', name: 'COMMON_CROSSBOW', labelPt: 'Bônus de produção: bestas comuns' };
+    expect(festivityLabel(f, 'pt')).toBe('Bônus de produção: bestas comuns');
+    expect(festivityLabel(f, 'es')).toBe('Bonificación de producción: ballestas comunes');
   });
 });
 

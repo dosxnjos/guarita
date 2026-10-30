@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { PriceRow } from '../../shared/types';
-import { DADOS_IDADE_MAX_MS, parseItensTxt, parseMapasTxt, textoComCopia, type CopiaTexto } from '../src/lib/capture/dados';
+import {
+  CHAVE_CODIGOS_ASSINADOS,
+  DADOS_IDADE_MAX_MS,
+  URL_ASSINATURA,
+  URL_CODIGOS,
+  codigosAssinados,
+  parseItensTxt,
+  parseMapasTxt,
+  textoComCopia,
+  type CopiaTexto,
+} from '../src/lib/capture/dados';
 import {
   DURACAO_MIN_RITMO_MS,
   duracaoAgora,
@@ -158,6 +168,58 @@ describe('dados do ao-bin-dumps', () => {
     };
     expect(await textoComCopia('u', { baixar: falha, copia, agora: () => DADOS_IDADE_MAX_MS + 1 })).toBe('v1');
     await expect(textoComCopia('outra', { baixar: falha, copia, agora: () => 0 })).rejects.toThrow('sem rede');
+  });
+});
+
+describe('tabela de códigos assinada', () => {
+  const memoria = () => {
+    const guardado = new Map<string, { texto: string; salvoEm: number }>();
+    const copia: CopiaTexto = {
+      ler: async (u) => guardado.get(u) ?? null,
+      gravar: async (u, texto, salvoEm) => void guardado.set(u, { texto, salvoEm }),
+    };
+    return { guardado, copia };
+  };
+
+  it('baixa a tabela e o .sig da mesma pasta e só guarda o par depois de aceito', async () => {
+    const { guardado, copia } = memoria();
+    const pedidos: string[] = [];
+    const baixar = async (u: string) => {
+      pedidos.push(u);
+      return u === URL_ASSINATURA ? 'QUJD\n' : '{"versao":2}';
+    };
+    const b = await codigosAssinados({ baixar, copia, agora: () => 0 });
+    expect(URL_ASSINATURA).toBe(`${URL_CODIGOS}.sig`);
+    expect(pedidos.sort()).toEqual([URL_CODIGOS, URL_ASSINATURA].sort());
+    expect(b).toMatchObject({ json: '{"versao":2}', assinatura: 'QUJD' });
+    // Recusada pelo Rust (guardar não chamado): nada guardado, baixa de novo na próxima.
+    expect(guardado.size).toBe(0);
+    await b.guardar();
+    expect(guardado.has(CHAVE_CODIGOS_ASSINADOS)).toBe(true);
+    // Não mistura com a cópia da 0.2.0 (tabela solta em URL_CODIGOS).
+    expect(guardado.has(URL_CODIGOS)).toBe(false);
+    pedidos.length = 0;
+    expect(await codigosAssinados({ baixar, copia, agora: () => 1000 })).toMatchObject({ assinatura: 'QUJD' });
+    expect(pedidos).toEqual([]);
+  });
+
+  it('.sig ausente vira assinatura null (o Rust recusa e registra); sem rede cai na cópia velha', async () => {
+    const { copia } = memoria();
+    const semSig = async (u: string) => {
+      if (u === URL_ASSINATURA) throw new Error('HTTP 404');
+      return '{"versao":3}';
+    };
+    expect(await codigosAssinados({ baixar: semSig, copia, agora: () => 0 })).toMatchObject({ json: '{"versao":3}', assinatura: null });
+    const ok = await codigosAssinados({ baixar: async (u) => (u === URL_ASSINATURA ? 'c2ln' : '{"versao":4}'), copia, agora: () => 0 });
+    await ok.guardar();
+    const falha = async () => {
+      throw new Error('sem rede');
+    };
+    expect(await codigosAssinados({ baixar: falha, copia, agora: () => DADOS_IDADE_MAX_MS + 1 })).toMatchObject({
+      json: '{"versao":4}',
+      assinatura: 'c2ln',
+    });
+    await expect(codigosAssinados({ baixar: falha, copia: memoria().copia, agora: () => 0 })).rejects.toThrow('sem rede');
   });
 });
 

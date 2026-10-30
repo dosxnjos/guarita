@@ -1,8 +1,12 @@
 // Previsão (módulo d): textos e geometria do gráfico, sem DOM. Testado em tests/forecast.test.ts.
+// Textos nas duas línguas: `loc` no fim (padrão: a língua atual do site, como em format.ts).
 import type { City, ForecastResponse, Quality } from '../../../shared/types';
 import { ALL_CITIES } from '../../../shared/market';
 import { BACKTEST_DAYS, dayNumber, weekday } from '../../../shared/forecast';
 import { extent, linePath, niceTicks, scale } from '../ui/chart';
+import { currentLocale, intlLocaleFor, type Locale } from '../i18n/core';
+
+const cityEs = (c: string, loc: Locale) => (loc === 'es' && c === 'Black Market' ? 'Mercado Negro' : c);
 
 export type ForecastKind = 'empty' | 'model' | 'naive';
 
@@ -16,7 +20,19 @@ export function forecastKind(r: ForecastResponse): ForecastKind {
  * Frase curta para o leitor de tela (região role="status"). Gráfico, tabela e método ficam fora de aria-live: o
  * leitor releria tudo a cada troca de cidade ou qualidade.
  */
-export function anuncioPrevisao(s: { loading: boolean; error: string; data: ForecastResponse | null }): string {
+export function anuncioPrevisao(s: { loading: boolean; error: string; data: ForecastResponse | null }, loc: Locale = currentLocale()): string {
+  if (loc === 'es') {
+    if (s.loading) return 'Calculando la previsión…';
+    if (s.error && !s.data) return `No se pudo calcular la previsión: ${s.error}`;
+    if (!s.data) return '';
+    const c = cityEs(s.data.city, loc);
+    if (s.error) return `No se pudo actualizar. Mostrando la última previsión de ${c}.`;
+    const k = forecastKind(s.data);
+    if (k === 'empty') return `No hay previsión para este objeto en ${c}.`;
+    return k === 'naive'
+      ? `Previsión cargada para ${c}: el modelo no superó a la estimación ingenua, así que vale el último precio repetido.`
+      : `Previsión cargada para ${c}.`;
+  }
   if (s.loading) return 'Calculando a previsão…';
   if (s.error && !s.data) return `Não deu para calcular a previsão: ${s.error}`;
   if (!s.data) return '';
@@ -37,13 +53,22 @@ export function errorGain(r: ForecastResponse): number | null {
 
 /** "25%" (sem sinal, inteiro): o mesmo arredondamento em todo texto da previsão. */
 export const pct = (f: number) => `${Math.round(Math.abs(f) * 100)}%`;
-const silver = (n: number) => Math.round(n).toLocaleString('pt-BR');
+const silver = (n: number, loc: Locale = 'pt') => Math.round(n).toLocaleString(intlLocaleFor(loc));
 
 /** Frase do placar para a tela. */
-export function scoreText(r: ForecastResponse): string {
+export function scoreText(r: ForecastResponse, loc: Locale = currentLocale()): string {
   const { maeModel, maeNaive, days } = r.backtest;
-  if (maeModel === null || maeNaive === null) return 'Sem placar: faltam dias com venda para testar a previsão.';
   const g = errorGain(r);
+  if (loc === 'es') {
+    if (maeModel === null || maeNaive === null) return 'Sin marcador: faltan días con venta para probar la previsión.';
+    const base = `En la prueba de los últimos ${BACKTEST_DAYS} días (${days} ${days === 1 ? 'ronda' : 'rondas'}), el modelo se equivocó en promedio ${silver(maeModel, loc)} de plata y repetir el último día se equivocó ${silver(maeNaive, loc)}.`;
+    if (g === null) return base;
+    if (r.backtest.beatsNaive) return `${base} Es un ${pct(g)} menos de error.`;
+    return g === 0
+      ? `${base} Empate: la página muestra la previsión ingenua.`
+      : `${base} El modelo se equivocó un ${pct(g)} más, así que la página muestra la previsión ingenua.`;
+  }
+  if (maeModel === null || maeNaive === null) return 'Sem placar: faltam dias com venda para testar a previsão.';
   const base = `No teste dos últimos ${BACKTEST_DAYS} dias (${days} ${days === 1 ? 'rodada' : 'rodadas'}), o modelo errou em média ${silver(maeModel)} prata e repetir o último dia errou ${silver(maeNaive)}.`;
   if (g === null) return base;
   if (r.backtest.beatsNaive) return `${base} São ${pct(g)} menos erro.`;
@@ -59,11 +84,12 @@ export function relativeError(r: ForecastResponse): number | null {
 }
 
 const WD = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
-/** "31/10 (sáb)" a partir de "2026-10-31". */
-export function dayLabel(ymd: string): string {
+const WD_ES = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+/** "31/10 (sáb)" a partir de "2026-10-31" (es: "30/10 (vie)"). */
+export function dayLabel(ymd: string, loc: Locale = currentLocale()): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd);
   if (!m) return ymd;
-  return `${m[3]}/${m[2]} (${WD[weekday(dayNumber(ymd))]})`;
+  return `${m[3]}/${m[2]} (${(loc === 'es' ? WD_ES : WD)[weekday(dayNumber(ymd))]})`;
 }
 
 /** Link da página de previsão (city null = automática). */

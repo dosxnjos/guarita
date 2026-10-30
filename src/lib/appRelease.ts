@@ -1,6 +1,8 @@
 // Página /app: qual instalador oferecer. Consulta a última release pública do GitHub (dosxnjos/guarita) no navegador
 // de quem abre a página, para o botão nunca prometer um download que não existe (sem release = "Em breve").
 // Pura, exceto buscarInstalador. Só o instalador NSIS (`*-setup.exe`) é oferecido: um arquivo só, sem dúvida de qual baixar.
+// Textos com `loc` opcional no fim (padrão: a língua atual do site, como em src/lib/format.ts).
+import { currentLocale, intlLocaleFor, type Locale } from './i18n/core';
 
 export const RELEASES_URL = 'https://github.com/dosxnjos/guarita/releases';
 export const RELEASE_API = 'https://api.github.com/repos/dosxnjos/guarita/releases/latest';
@@ -80,17 +82,23 @@ export function compararVersao(a: string, b: string): number {
 /** Versão do app a partir da qual existe a captura da sessão (widgets Sessão e Loot). */
 export const VERSAO_CAPTURA = '0.2.0';
 
-/** Tamanho com vírgula, ex.: "2,4 MB"; abaixo de 1 MB em KB ("24 KB"), senão o zip da extensão viraria "0,0 MB". */
-export function fmtTamanho(bytes: number): string {
+/**
+ * Tamanho com vírgula, ex.: "2,4 MB"; abaixo de 1 MB em KB ("24 KB"), senão o zip da extensão viraria "0,0 MB".
+ * Em espanhol, o número segue o es-419 ("2.4 MB"). Sem `loc`, a língua atual do site (espelho em i18n/core.ts).
+ */
+export function fmtTamanho(bytes: number, loc: Locale = currentLocale()): string {
   if (!bytes) return '';
-  if (bytes < 1048576) return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString('pt-BR')} KB`;
-  return `${(bytes / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} MB`;
+  const l = intlLocaleFor(loc);
+  if (bytes < 1048576) return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString(l)} KB`;
+  return `${(bytes / 1048576).toLocaleString(l, { maximumFractionDigits: 1, minimumFractionDigits: 1 })} MB`;
 }
 
-/** Texto do botão, ex.: "Baixar para Windows (versão 0.1.0, 2,4 MB)". Pura. */
-export function rotuloBaixar(i: Instalador): string {
-  const extra = [i.versao ? `versão ${i.versao}` : '', fmtTamanho(i.tamanhoBytes)].filter(Boolean).join(', ');
-  return extra ? `Baixar para Windows (${extra})` : 'Baixar para Windows';
+/** Texto do botão, ex.: "Baixar para Windows (versão 0.1.0, 2,4 MB)" / "Descargar para Windows (versión 0.1.0, 2.4 MB)". Pura. */
+export function rotuloBaixar(i: Instalador, loc: Locale = currentLocale()): string {
+  const es = loc === 'es';
+  const extra = [i.versao ? `${es ? 'versión' : 'versão'} ${i.versao}` : '', fmtTamanho(i.tamanhoBytes, loc)].filter(Boolean).join(', ');
+  const base = es ? 'Descargar para Windows' : 'Baixar para Windows';
+  return extra ? `${base} (${extra})` : base;
 }
 
 async function buscar(url: string, escolher: (j: unknown) => Instalador | null, fetcher: typeof fetch, timeoutMs: number): Promise<EstadoDownload> {

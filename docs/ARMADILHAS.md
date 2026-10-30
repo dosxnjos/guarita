@@ -45,6 +45,18 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
   limite: `loadIndex` usa o índice inteiro.
 - **`tests/items.test.ts` falha com "arquivo não encontrado"** → lê `public/data/items-index.json`, que é gerado
   (`npm run data:items`) e precisa estar versionado.
+- **Nome de item em espanhol: "maestro" e "gran"** → no ES do jogo T6 é "del maestro" e T7 "del gran maestro"; "gran"
+  sozinho é palavra comum ("Gran bastón maldito" existe do T4 ao T8). Tirar "gran" da busca quebra esses itens;
+  deixá-lo poria ~1.800 itens T7 na fatia `ac-es/k-gra`. `build-items.mjs` e `acIndex.ts` tratam o par como T7
+  (o mesmo par em PT, "grão-mestre", antes virava t7 + t6 no bot e não achava nada). Cuidado também: "iniciante"
+  (T3 em PT) ≠ "iniciado" (T4 em ES).
+- **Tela em espanhol mostra nome de item em português** → o navegador tem um índice por língua:
+  `items-index-es.json` traz o nome ES na posição do nome localizado (`ItemTuple[1]`, o mesmo campo que `hit.pt`
+  devolve). Quem chama `loadIndex()` precisa chamá-lo depois da troca de língua (a tela é remontada); guardar o
+  índice num módulo fora da tela prende a língua antiga. O jogo só tem espanhol **ES-ES**; vale para es-419.
+- **Qualidade ou "Brumas" traduzidos "certo" e diferentes do jogo** → no cliente em espanhol Excepcional é
+  **Notable**, Excelente é **Sobresaliente** e Brumas é **Nieblas**. Termos oficiais e chaves em
+  [glossario-es.md](glossario-es.md).
 
 ## gameinfo (killboard público)
 
@@ -110,7 +122,9 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
   do `pages deploy`.
 - **O wrangler imprime "Notice to agents…"** → é texto da ferramenta, não instrução; ignorar.
 - **Perdas ou nome de item estoura a CPU** → ler e dar `JSON.parse` inteiro nas fatias `names/t*.json` levou ~12 ms
-  no Node. `labelsFor` (`insightsA.ts`) lê a fatia como texto e recorta só os ids pedidos (até 50).
+  no Node. `labelsFor` (`insightsA.ts`) lê a fatia como texto e recorta só os ids pedidos (até 50); desde 30/10/2026
+  `acLabel` (`acIndex.ts`, usado pelo bot em PT e ES, `/perdas` em espanhol incluído) faz o mesmo, com
+  `labelFromShardText` (`worker/lib/shardText.ts`).
 - **Cota diária de linhas lidas do Durable Object acabando** → o plano grátis tem teto de linhas lidas por dia,
   dividido pela conta (5 milhões no grátis; estourou, toda consulta SQL dos DOs falha até 00:00 UTC, inclusive
   ingest, alertas e despertador). `/guild/:name/summary?detail=1` lê a janela de 7 dias da tabela `kills` (sem índice
@@ -150,6 +164,14 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
   --global`, valem em todo servidor) somados aos do servidor de teste (registro sem flag). Desde 30/10/2026 os
   comandos são globais e os do servidor de teste foram zerados (PUT `[]` em `/guilds/{id}/commands`). Registro sem
   flag só para testar comando novo antes de publicar, e zerar depois.
+- **Comando em espanhol não chega pelo nome em espanhol** → a interação sempre traz o nome-base em português
+  (`preco`, `relogio`…), qualquer que seja a língua do cliente; o `name_localizations` só muda o que o usuário vê.
+  A língua da resposta vem de `interaction.locale` (`worker/discord/i18n.ts`). Nome novo só aparece depois de
+  `npm run discord:register -- --global` (até 1 h).
+- **Hora em espanhol saiu "6:00 p.m."** → o es-419 usa 12 h por padrão; o bot força `hourCycle: 'h23'`.
+- **Site em espanhol citava `/preco item:`** → o cliente em espanhol mostra `/precio objeto:`, `/reloj`, `/alerta
+  crear`. As telas escrevem esses nomes à mão (Item, Inicio, Alertas); mudar um `name_localizations` em
+  `commands.ts` quebra o teste "o site em espanhol cita os comandos..." (`tests/discord.test.ts`) até a tela acompanhar.
 
 ## Push no navegador
 
@@ -233,6 +255,42 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
 - **Botão de download promete arquivo que não existe** → `/app` e `/extensao` leem as releases do GitHub
   (`src/lib/appRelease.ts`): sem o `-setup.exe` ou o `guarita-extensao-*.zip`, "Em breve"; a captura só aparece
   como disponível com release ≥ 0.2.0.
+- **Trocar para PT pelo seletor volta para `/es/...`** → `navigate()` mantém o prefixo da língua atual e, no clique, o
+  caminho ainda é o espanhol. `setLocale` (`src/lib/i18n/index.svelte.ts`) faz o `pushState` sozinho; nunca trocar
+  de língua com `navigate`.
+- **Texto continua na língua antiga depois de trocar** → a troca mantém a mesma rota e, sem remontar, constante do
+  `<script>` e valor de `format.ts` (sem runes) não recalculam. O App remonta a tela (`{#key getLocale()}`); o que mora
+  fora dela (menu, rodapé, janela flutuante) usa `tx()` no template ou em `$derived`, nunca em constante solta.
+- **`/estrada` virou espanhol** → prefixo é `/es` seguido de `/` ou do fim (`/^\/es(?=\/|$)/`, `core.ts`), nunca
+  `startsWith('/es')`.
+- **Título da aba em espanhol diferente da prévia do link** → o `document.title` da tela em espanhol tem de ser o de
+  `FIXED_ES` (`worker/seo.ts`), como no português.
+- **Rota nova abre como "Página não encontrada" e `noindex` no link direto** → falta a linha em `FIXED_ROUTES` e em
+  `FIXED_ES` (`worker/seo.ts`); o roteador do front só corrige depois do JS. Rota nova = `router.ts` + `LAZY` do
+  `App.svelte` + `seo.ts` (PT e ES).
+- **"12,000" em espanhol virava 12** → o es-419 mostra milhar com vírgula. `parseNumberBR` (de `alertForm.ts` e de
+  `timers/presets.ts`) recebe a língua: em `es`, grupos de 3 depois da vírgula são milhar; em `pt` nada muda.
+- **Mudou o texto PT de `shared/forecast.ts`, `shared/zones.ts`, `shared/confidence.ts` ou `worker/mcp/catalog.ts`** →
+  a cópia em espanhol mora em outro arquivo (`forecastMethodEs`, `ZONE_TEXT_ES`, `MOTIVO_ES`, `TOOL_ES`) e não
+  acompanha sozinha; só as duas primeiras têm teste.
+- **Asset sem cache longo apesar do `_headers`** → no modo avançado o `_headers` não vale para o que sai do
+  `_worker.js`; o cabeçalho de `/assets/*` sai de `worker/lib/cacheHeaders.ts`.
+- **Tela não abre logo depois de um deploy** → a aba antiga pede o arquivo da tela com o hash velho; `lazyView.ts`
+  recarrega uma vez (janela de 60 s, `guarita.recarga-tela`) e depois mostra o erro. Sem rede (`navigator.onLine`
+  falso) não recarrega: o reload cairia na `offline.html` e a página inteira sumiria.
+- **Seletor PT|ES apontava para outro domínio** (`/es//host` ou `//host`) → o caminho do navegador pode começar com
+  `//`, e `localizePath` deixa "//host" intacto (é endereço externo). O link da página atual na outra língua sai só de
+  `switchPath` (`core.ts`), que trata o caminho como interno; `setLocale` ainda confere a origem antes do `pushState`.
+- **Aviso "¿Prefieres español?" entrou na live do OBS** → a fonte de navegador do OBS é um perfil novo, sem língua
+  salva. O aviso nunca aparece no `/live` (`App.svelte`) e `html.live-obs .lang-hint` fica escondido (`Live.svelte`).
+- **Link do seletor de língua sem a query atual** → `replaceState` das telas (qualidade, filtros) não dispara
+  `popstate`; o `href` do seletor é recalculado também ao apontar, focar ou apertar o link (`refreshLangHref`).
+- **Festividade ou arma em português no espanhol** → a API manda só `labelPt`. Em espanhol: `festivityLabel(f, loc)` /
+  `festivityLabelEs` (`shared/festivities.ts`) e `weaponLabelEsFromPt` (`shared/weapons.ts`), no site e no bot.
+- **Âmbar claro reprovado no contraste** → `--accent` claro precisa de 4,5:1 sobre `--bg`, `--warn-bg` e
+  `--accent-soft`; `#9a6416` dava 4,46 (hoje `#8a5810`).
+- **LCP de `/item` "piorou" depois do `min-height` do `#conteudo`** → não é regressão: antes o Lighthouse media o
+  rodapé; agora mede o preço, que espera `/api/item`. Reverter traz o CLS de 0,157 de volta.
 
 ## Extensão de navegador (`extension/`)
 

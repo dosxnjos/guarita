@@ -5,6 +5,7 @@
   import type { PlayerHit } from '../../shared/types';
   import { fmtCompact, playerHref, playerQuery } from '../lib/player/format';
   import ErrorBox from '../lib/player/ErrorBox.svelte';
+  import { href, tx } from '../lib/i18n/index.svelte';
 
   // params não usado: o termo da busca vive em ?q= no endereço
   let { params: _params = {} }: { params?: Record<string, string> } = $props();
@@ -61,7 +62,8 @@
   }
 
   $effect(() => {
-    document.title = 'Dossiê de jogador · Guarita';
+    // Igual a worker/seo.ts (FIXED_ROUTES e FIXED_ES).
+    document.title = tx('Dossiê de jogador · Guarita', 'Dosier de jugador · Guarita');
     if (playerQuery(initial).ok) run(playerQuery(initial).q);
     return () => clearTimeout(timer);
   });
@@ -71,45 +73,56 @@
 
 <section class="page stack">
   <header>
-    <h1>Dossiê de jogador</h1>
-    <p class="muted">Procure alguém do servidor Americas pelo nome do personagem e veja kills, mortes, armas e o nível de perigo.</p>
+    <h1>{tx('Dossiê de jogador', 'Dosier de jugador')}</h1>
+    <p class="muted">{tx(
+      'Procure alguém do servidor Americas pelo nome do personagem e veja kills, mortes, armas e o nível de perigo.',
+      'Busca a alguien del servidor Americas por el nombre del personaje y mira sus asesinatos, muertes, armas y el nivel de peligro.',
+    )}</p>
   </header>
 
   <form class="card stack" role="search" onsubmit={submit}>
-    <label for="busca-jogador"><strong>Nome do personagem</strong></label>
+    <label for="busca-jogador"><strong>{tx('Nome do personagem', 'Nombre del personaje')}</strong></label>
     <div class="row nowrap">
       <input id="busca-jogador" class="input" type="search" autocomplete="off" spellcheck="false" minlength="3"
-        placeholder="Mínimo de 3 letras" bind:value={text} oninput={schedule} aria-describedby="busca-ajuda" />
-      <button class="btn primary" type="submit" disabled={!playerQuery(text).ok || loading}>Buscar</button>
+        placeholder={tx('Mínimo de 3 letras', 'Mínimo 3 letras')} bind:value={text} oninput={schedule} aria-describedby="busca-ajuda" />
+      <button class="btn primary" type="submit" disabled={!playerQuery(text).ok || loading}>{tx('Buscar', 'Buscar')}</button>
     </div>
     <p id="busca-ajuda" class="muted small">
-      {#if tooShort}Digite pelo menos 3 letras.{:else}O killboard oficial às vezes leva até 1 minuto para responder.{/if}
+      {#if tooShort}{tx('Digite pelo menos 3 letras.', 'Escribe al menos 3 letras.')}{:else}{tx('O killboard oficial às vezes leva até 1 minuto para responder.', 'El killboard oficial a veces tarda hasta 1 minuto en responder.')}{/if}
     </p>
   </form>
 
   <div aria-live="polite">
     {#if loading}
       <div class="card stack" role="status" aria-busy="true">
-        <p class="muted small">{slow ? 'O killboard oficial está lento agora. Continuamos esperando a resposta…' : 'Buscando no killboard…'}</p>
+        <p class="muted small">{slow
+          ? tx('O killboard oficial está lento agora. Continuamos esperando a resposta…', 'El killboard oficial está lento ahora. Seguimos esperando la respuesta…')
+          : tx('Buscando no killboard…', 'Buscando en el killboard…')}</p>
         {#each [0, 1, 2] as i (i)}<div class="skeleton" style:height="44px"></div>{/each}
       </div>
     {:else if error}
       <ErrorBox message={error} onretry={() => run(playerQuery(text).q)} />
     {:else if results && results.length === 0}
-      <p class="empty card">Nenhum jogador encontrado com “{searched}” no servidor Americas. Confira a grafia: o nome precisa ser o do personagem.</p>
+      <p class="empty card">{tx(
+        `Nenhum jogador encontrado com “${searched}” no servidor Americas. Confira a grafia: o nome precisa ser o do personagem.`,
+        `No se encontró ningún jugador con “${searched}” en el servidor Americas. Revisa cómo se escribe: tiene que ser el nombre del personaje.`,
+      )}</p>
     {:else if results}
-      <p class="muted small">{results.length} {results.length === 1 ? 'resultado' : 'resultados'} para “{searched}”</p>
+      <p class="muted small">{tx(
+        `${results.length} ${results.length === 1 ? 'resultado' : 'resultados'} para “${searched}”`,
+        `${results.length} ${results.length === 1 ? 'resultado' : 'resultados'} para “${searched}”`,
+      )}</p>
       <ul class="hits">
         {#each results as p (p.id)}
           <li>
-            <a class="hit card" href={playerHref(p.id)} onclick={go}>
+            <a class="hit card" href={href(playerHref(p.id))} onclick={go}>
               <span class="name">{p.name}</span>
               <span class="muted small org">
-                {p.guild || 'Sem guilda'}{#if p.alliance} · [{p.alliance}]{/if}
+                {p.guild || tx('Sem guilda', 'Sin gremio')}{#if p.alliance} · [{p.alliance}]{/if}
               </span>
               <span class="fame small">
-                <span><span class="muted">Fama de abate</span> <span class="num">{fmtCompact(p.killFame)}</span></span>
-                <span><span class="muted">Fama de morte</span> <span class="num">{fmtCompact(p.deathFame)}</span></span>
+                <span><span class="muted">{tx('Fama de abate', 'Fama por asesinatos')}</span> <span class="num">{fmtCompact(p.killFame)}</span></span>
+                <span><span class="muted">{tx('Fama de morte', 'Fama por muertes')}</span> <span class="num">{fmtCompact(p.deathFame)}</span></span>
               </span>
             </a>
           </li>
@@ -119,8 +132,8 @@
   </div>
 
   <p class="callout small">
-    O dossiê usa só dados públicos do killboard; a Guarita nunca detecta jogadores no jogo.
-    <a href="/permitido" onclick={go}>Entenda o que fazemos e o que nunca faremos.</a>
+    {tx('O dossiê usa só dados públicos do killboard; a Guarita nunca detecta jogadores no jogo.', 'El dosier usa solo datos públicos del killboard; la Guarita nunca detecta jugadores en el juego.')}
+    <a href={href('/permitido')} onclick={go}>{tx('Entenda o que fazemos e o que nunca faremos.', 'Entiende lo que hacemos y lo que nunca haremos.')}</a>
   </p>
 </section>
 

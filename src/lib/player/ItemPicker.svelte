@@ -1,8 +1,10 @@
 <script lang="ts">
-  // Escolha de item com autocomplete do índice estático (PT-BR/EN). Se o índice falhar, aceita o código do item.
+  // Escolha de item com autocomplete do índice estático (PT-BR/EN; na versão em espanhol, o índice ES/EN do
+  // itemsClient). Se o índice falhar, aceita o código do item.
   import { untrack } from 'svelte';
   import { loadIndex } from '../itemsClient';
   import { itemName as nameOf, searchItems, tierLabel, type ItemHit, type ItemsIndex } from '../../../shared/items';
+  import { tx } from '../i18n/index.svelte';
   import ItemIcon from './ItemIcon.svelte';
 
   let { itemId = $bindable(''), itemName = $bindable(''), inputId = 'item-picker', invalid = false }:
@@ -82,7 +84,9 @@
     aria-autocomplete="list"
     aria-invalid={invalid}
     aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
-    placeholder={indexError ? 'Código do item, ex.: T4_BAG' : 'Nome do item, ex.: bolsa do adepto, t6 espada'}
+    placeholder={indexError
+      ? tx('Código do item, ex.: T4_BAG', 'Código del objeto, p. ej.: T4_BAG')
+      : tx('Nome do item, ex.: bolsa do adepto, t6 espada', 'Nombre del objeto, p. ej.: bolsa del iniciado, t6 espada')}
     bind:value={text}
     oninput={onInput}
     onkeydown={onKey}
@@ -100,9 +104,12 @@
     </ul>
   {/if}
   {#if indexError}
-    <p class="muted small">Não conseguimos carregar a lista de itens agora. Digite o código do item (aparece no endereço da página do item).</p>
+    <p class="muted small">{tx(
+      'Não conseguimos carregar a lista de itens agora. Digite o código do item (aparece no endereço da página do item).',
+      'No pudimos cargar la lista de objetos ahora. Escribe el código del objeto (aparece en la dirección de la página del objeto).',
+    )}</p>
   {:else if itemId}
-    <p class="muted small chosen"><ItemIcon id={itemId} alt="" size={24} /> Escolhido: <span class="mono">{itemId}</span></p>
+    <p class="muted small chosen"><ItemIcon id={itemId} alt="" size={24} /> {tx('Escolhido', 'Elegido')}: <span class="mono">{itemId}</span></p>
   {/if}
 </div>
 

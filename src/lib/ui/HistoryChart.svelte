@@ -1,10 +1,15 @@
 <script lang="ts">
   // Gráfico de 30 dias: uma linha por cidade, legenda que liga/desliga, eixo de preço e tabela acessível.
   import type { CityHistory } from '../../../shared/types';
-  import { citySlug, fmtDayMonth, fmtSilver } from '../format';
+  import { cityName, citySlug, fmtDayMonth, fmtSilver as fmtSilverL } from '../format';
+  import { getLocale, tx } from '../i18n/index.svelte';
   import { dateDomain, extent, linePath, niceTicks, scale } from './chart';
+  import { scrollFocus } from './scrollFocus';
 
-  let { history, title = 'Preço médio diário nos últimos 30 dias' }: { history: CityHistory[]; title?: string } = $props();
+  let { history, title }: { history: CityHistory[]; title?: string } = $props();
+  const chartTitle = $derived(title ?? tx('Preço médio diário nos últimos 30 dias', 'Precio medio diario en los últimos 30 días'));
+  const fmtSilver = (n: number | null | undefined, compact = false) => fmtSilverL(n, compact, getLocale());
+  const cn = (c: string) => cityName(c, getLocale());
 
   let width = $state(640);
   const height = 240;
@@ -35,23 +40,29 @@
   });
 
   const desc = $derived.by(() => {
-    if (!series.length) return 'Sem histórico.';
+    if (!series.length) return tx('Sem histórico.', 'Sin historial.');
     const last = series
       .map((s) => ({ city: s.city, avg: [...s.days].filter((d) => d.avg > 0).sort((a, b) => a.date.localeCompare(b.date)).at(-1)?.avg }))
       .filter((s) => s.avg)
       .sort((a, b) => a.avg! - b.avg!);
-    return `${series.length} cidades, de ${fmtDayMonth(dates[0] ?? '')} a ${fmtDayMonth(dates.at(-1) ?? '')}.` +
-      (last[0] ? ` Média mais baixa no último dia: ${last[0].city}, ${fmtSilver(last[0].avg)} de prata.` : '');
+    const from = fmtDayMonth(dates[0] ?? '');
+    const to = fmtDayMonth(dates.at(-1) ?? '');
+    return tx(
+      `${series.length} cidades, de ${from} a ${to}.` +
+        (last[0] ? ` Média mais baixa no último dia: ${last[0].city}, ${fmtSilver(last[0].avg)} de prata.` : ''),
+      `${series.length} ciudades, del ${from} al ${to}.` +
+        (last[0] ? ` Media más baja en el último día: ${cn(last[0].city)}, ${fmtSilver(last[0].avg)} de plata.` : ''),
+    );
   });
 </script>
 
 {#if !series.length}
-  <p class="empty">Sem histórico de preço para este item nos últimos 30 dias.</p>
+  <p class="empty">{tx('Sem histórico de preço para este item nos últimos 30 dias.', 'Sin historial de precios para este objeto en los últimos 30 días.')}</p>
 {:else}
   <figure class="hchart">
     <div class="hchart-box" bind:clientWidth={width}>
       <svg width={geo.w} {height} viewBox="0 0 {geo.w} {height}" role="img" aria-labelledby="{uid}-t {uid}-d">
-        <title id="{uid}-t">{title}</title>
+        <title id="{uid}-t">{chartTitle}</title>
         <desc id="{uid}-d">{desc}</desc>
         {#each geo.ticks as t}
           <line x1={M.left} x2={geo.w - M.right} y1={geo.y(t)} y2={geo.y(t)} class="hchart-grid" />
@@ -70,17 +81,17 @@
     <figcaption class="hchart-legend">
       {#each series as s (s.city)}
         <button type="button" class="hchart-key" aria-pressed={!hidden[s.city]} onclick={() => (hidden = { ...hidden, [s.city]: !hidden[s.city] })}>
-          <span class="hchart-swatch city-{citySlug(s.city)}" aria-hidden="true"></span>{s.city}
+          <span class="hchart-swatch city-{citySlug(s.city)}" aria-hidden="true"></span>{cn(s.city)}
         </button>
       {/each}
     </figcaption>
   </figure>
   <div class="hchart">
     <details class="small">
-      <summary>Ver os dados em tabela</summary>
-      <div class="table-wrap">
+      <summary>{tx('Ver os dados em tabela', 'Ver los datos en una tabla')}</summary>
+      <div class="table-wrap" use:scrollFocus={chartTitle}>
         <table class="data">
-          <thead><tr><th scope="col">Dia</th>{#each series as s}<th scope="col" class="num">{s.city}</th>{/each}</tr></thead>
+          <thead><tr><th scope="col">{tx('Dia', 'Día')}</th>{#each series as s}<th scope="col" class="num">{cn(s.city)}</th>{/each}</tr></thead>
           <tbody>
             {#each [...dates].reverse() as d}
               <tr>

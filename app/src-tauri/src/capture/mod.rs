@@ -89,6 +89,20 @@ pub struct TabelaInfo {
     pub atualizado_em: String,
     /// "embutida" ou "remota"
     pub origem: &'static str,
+    /// Por que a última tabela baixada do GitHub foi recusada (ex.: "tabela remota recusada (assinatura)");
+    /// `None` quando a última baixada foi aceita ou nenhuma chegou.
+    pub recusa: Option<String>,
+}
+
+impl TabelaInfo {
+    fn de(n: &Nucleo) -> TabelaInfo {
+        TabelaInfo {
+            versao: n.interp.tabela.versao,
+            atualizado_em: n.interp.tabela.atualizado_em.clone(),
+            origem: n.origem_tabela,
+            recusa: n.recusa_tabela.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -139,6 +153,8 @@ struct Nucleo {
     ultimo_pacote_eu: u64,
     /// Mensagens de outro fluxo ignoradas (só para o arquivo de diagnóstico).
     ignorados_outro_fluxo: u64,
+    /// Motivo da recusa da última tabela remota (vai para a tela e para o arquivo de diagnóstico).
+    recusa_tabela: Option<String>,
 }
 
 impl Nucleo {
@@ -157,6 +173,7 @@ impl Nucleo {
             fluxo_eu: None,
             ultimo_pacote_eu: 0,
             ignorados_outro_fluxo: 0,
+            recusa_tabela: None,
         }
     }
 
@@ -315,11 +332,7 @@ fn montar_estado(app: &AppHandle, st: &CapturaState) -> Estado {
         mensagem: c.mensagem.clone(),
         interfaces: c.interfaces,
         npcap_versao: c.npcap_versao.clone(),
-        tabela: TabelaInfo {
-            versao: n.interp.tabela.versao,
-            atualizado_em: n.interp.tabela.atualizado_em.clone(),
-            origem: n.origem_tabela,
-        },
+        tabela: TabelaInfo::de(&n),
         identificado: n.interp.identificado(),
         ultimo_pacote_em: n.ultimo_pacote_em,
         diagnostico: c.diagnostico,
@@ -348,7 +361,10 @@ fn gravar_diagnostico(app: &AppHandle, nucleo: &Arc<Mutex<Nucleo>>) {
         let n = nucleo.lock().unwrap_or_else(|e| e.into_inner());
         let mut extra = serde_json::to_value(n.numeros()).unwrap_or_default();
         extra["ignoradosDeOutroFluxo"] = n.ignorados_outro_fluxo.into();
-        n.interp.diagnostico_json(extra)
+        let mut v = n.interp.diagnostico_json(extra);
+        v["tabela"]["origem"] = n.origem_tabela.into();
+        v["tabela"]["recusaRemota"] = n.recusa_tabela.clone().into();
+        v
     };
     if let Some(d) = caminho.parent() {
         let _ = std::fs::create_dir_all(d);
@@ -693,14 +709,32 @@ pub async fn captura_nova_sessao(app: AppHandle) -> Retrato {
     r
 }
 
-/// Tabela de códigos baixada pelo painel; vale se for válida e de versão maior que a atual.
+/// Tabela de códigos baixada pelo painel com a assinatura (`capture-codes.json.sig`); vale se a assinatura
+/// conferir com a chave embutida, se for válida e de versão maior que a atual. Recusada: fica a atual e o motivo
+/// vai para `TabelaInfo.recusa` e para o arquivo de diagnóstico.
 #[tauri::command]
-pub async fn captura_definir_codigos(app: AppHandle, json: String) -> Result<TabelaInfo, String> {
-    let t = Tabela::de_json_remota(&json, Tabela::embutida().versao)?;
+pub async fn captura_definir_codigos(
+    app: AppHandle,
+    json: String,
+    assinatura: Option<String>,
+) -> Result<TabelaInfo, String> {
     let st = app.state::<CapturaState>();
+    let t = match Tabela::de_json_remota_assinada(&json, assinatura.as_deref(), Tabela::embutida().versao) {
+        Ok(t) => t,
+        Err(e) => {
+            log::warn!("captura: {e}");
+            st.nucleo.lock().unwrap_or_else(|p| p.into_inner()).recusa_tabela = Some(e.clone());
+            let diag = st.controle.lock().map(|c| c.diagnostico).unwrap_or(false);
+            if diag {
+                gravar_diagnostico(&app, &st.nucleo);
+            }
+            return Err(e);
+        }
+    };
     // Ordem das travas sempre controle → núcleo (igual a montar_estado), para não travar.
     let mut c = st.controle.lock().map_err(|e| e.to_string())?;
     let mut n = st.nucleo.lock().map_err(|e| e.to_string())?;
+    n.recusa_tabela = None;
     if t.versao > n.interp.tabela.versao {
         log::info!("captura: tabela de códigos v{} ({}) do GitHub", t.versao, t.atualizado_em);
         // A porta nova vale na próxima vez que a captura ligar (o filtro BPF já aberto não muda).
@@ -708,11 +742,7 @@ pub async fn captura_definir_codigos(app: AppHandle, json: String) -> Result<Tab
         n.interp.trocar_tabela(t);
         n.origem_tabela = "remota";
     }
-    let info = TabelaInfo {
-        versao: n.interp.tabela.versao,
-        atualizado_em: n.interp.tabela.atualizado_em.clone(),
-        origem: n.origem_tabela,
-    };
+    let info = TabelaInfo::de(&n);
     drop(n);
     drop(c);
     Ok(info)

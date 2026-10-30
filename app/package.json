@@ -1,6 +1,6 @@
 {
   "name": "guarita-app",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Guarita no PC: companheiro em PT-BR para quem joga Albion Online (Americas). Não afiliado à Sandbox Interactive.",
   "private": true,
   "type": "module",
@@ -12,6 +12,7 @@
     "vite:build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json && cargo check --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run",
+    "codes:sign": "doppler run --config-dir \"C:/Users/Gabriel dos Anjos/.doppler-pessoal\" -p pessoal -c prd -- node ../scripts/sign-codes.mjs",
     "tauri": "tauri"
   },
   "devDependencies": {

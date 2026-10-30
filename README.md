@@ -38,6 +38,8 @@ Site: <https://guarita.pages.dev> · Isso é permitido? <https://guarita.pages.d
 | **Painel de live** | Relógio, preços escolhidos e o histórico da guilda como fonte de navegador do OBS, com fundo transparente. Configure em [/live?config](https://guarita.pages.dev/live?config). |
 | **Janela flutuante** | Uma janelinha que fica por cima das outras (Chrome). Vem **desligada**: leia o aviso antes de ligar. |
 | **Instalável** | Dá para instalar como aplicativo no celular ou no computador. |
+| **Em espanhol** | O site inteiro também em espanhol neutro latino em [/es](https://guarita.pages.dev/es) (seletor PT/ES no topo), com os nomes dos itens e os termos do cliente oficial em espanhol. O bot responde em espanhol para quem usa o Discord em espanhol. O app de PC e a extensão seguem só em português. |
+| **Status e custos** | Quanto custa manter a Guarita no ar (R$ 0/mês), os limites do plano grátis, o que acontece se estourar, de onde vem cada dado e a saúde ao vivo: [/status](https://guarita.pages.dev/status). |
 
 Sem login e sem cadastro. Para alertas, a Guarita guarda só o identificador da notificação do teu aparelho ou o
 teu id do Discord.
@@ -59,8 +61,9 @@ A explicação completa, com as fontes, está em [Isso é permitido?](https://gu
 - **Preços, histórico, livro de ofertas, ouro e festividades:** [Albion Online Data Project](https://www.albion-online-data.com/)
   (servidor Americas). É um projeto comunitário: os preços são enviados por jogadores que rodam o cliente do
   projeto. Por isso todo preço mostra a idade, e preço velho perde confiança.
-- **Nomes dos itens em português e taxas do mercado:** [ao-bin-dumps](https://github.com/ao-data/ao-bin-dumps)
-  (`formatted/items.json` e `gamedata.xml`).
+- **Nomes dos itens em português e em espanhol e taxas do mercado:** [ao-bin-dumps](https://github.com/ao-data/ao-bin-dumps)
+  (`formatted/items.json` e `gamedata.xml`); os termos do jogo em espanhol vêm do `localization.json` (glossário em
+  [docs/glossario-es.md](docs/glossario-es.md)).
 - **Jogadores, kills e mortes:** API pública do killboard do jogo (`gameinfo.albiononline.com`).
 - **Situação do servidor:** `serverstatus.albiononline.com`.
 - **Ícones dos itens:** `render.albiononline.com`.
@@ -111,7 +114,7 @@ guarita/
 ├── public/               arquivos estáticos (ícones, manifest, service worker, data/)
 ├── src/                  front (Svelte)
 │   ├── App.svelte        casca: topo, rotas, rodapé
-│   ├── lib/              api.ts (cliente tipado), router.ts e utilitários do front
+│   ├── lib/              api.ts (cliente tipado), router.ts, i18n/ (tx, href, língua pelo caminho) e utilitários
 │   └── routes/           uma tela por arquivo (Inicio, Item, Relogio, Dossie, Autopsia, Alertas, Janela…)
 ├── worker/               _worker.js do Pages
 │   ├── index.ts          entrada: /api/*, /discord, /mcp, /sitemap.xml e estáticos com fallback para index.html
@@ -160,13 +163,15 @@ ficam em [shared/types.ts](shared/types.ts); a versão completa e legível está
 | `POST /api/risk` | `RiskQuote` (custo do set e perda por zona) |
 | `/api/gold?days=7\|30\|90` · `/api/data-health` | `GoldResponse` · `DataHealthResponse` |
 | `GET/POST /api/timers`, `DELETE /api/timers/:id` | timers do despertador do dono (`owner`) |
-| `/api/hoje?prata=&minutos=&premium=` | `HojeResponse` (flip, refino e transporte com a conta aberta) |
-| `/api/forecast/:id?city=&q=` | `ForecastResponse` (1 a 3 dias, faixa P10–P90, backtest contra o ingênuo) |
+| `/api/hoje?prata=&minutos=&premium=&lang=` | `HojeResponse` (flip, refino e transporte com a conta aberta; `lang=es` traz o texto em espanhol) |
+| `/api/forecast/:id?city=&q=&lang=` | `ForecastResponse` (1 a 3 dias, faixa P10–P90, backtest contra o ingênuo) |
 | `/sitemap.xml`, `/robots.txt` | mapa do site e regras para buscadores |
 | `POST /mcp` | servidor MCP (JSON-RPC 2.0, 6 ferramentas, só dado público) |
 | `POST /discord` | interações do Discord |
 
-A busca de itens acontece no navegador, sobre `/data/items-index.json`.
+A busca de itens acontece no navegador, sobre `/data/items-index.json` (em `/es`, `/data/items-index-es.json`).
+As páginas em espanhol moram em `/es/...` (o mesmo `index.html`, com `lang`, título e `hreflang` próprios); nenhuma
+URL em português muda.
 
 ### Como contribuir
 

@@ -5,6 +5,8 @@
   import { fmtDateTime, fmtDayMonth, fmtSilver } from '../format';
   import { extent, linePath, niceTicks, scale } from '../ui/chart';
   import { goldDaily, thin } from './view';
+  import { getLocale, tx } from '../i18n/index.svelte';
+  import { scrollFocus } from '../ui/scrollFocus';
 
   let { gold, days }: { gold: GoldResponse; days: number } = $props();
 
@@ -32,10 +34,15 @@
   });
 
   const desc = $derived(
-    gold.points.length
-      ? `Ouro nos últimos ${days} dias, de ${fmtDateTime(gold.points[0].at)} a ${fmtDateTime(gold.points[gold.points.length - 1].at)} (Brasília). ` +
-        `Atual: ${fmtSilver(gold.current)} de prata. Faixa de 80% das horas: ${fmtSilver(gold.p10)} a ${fmtSilver(gold.p90)}; mediana ${fmtSilver(gold.p50)}.`
-      : 'Sem dados do ouro.',
+    getLocale() === 'es'
+      ? gold.points.length
+        ? `Oro en los últimos ${days} días, del ${fmtDateTime(gold.points[0].at)} al ${fmtDateTime(gold.points[gold.points.length - 1].at)} (hora de Brasilia). ` +
+          `Actual: ${fmtSilver(gold.current)} de plata. Rango del 80% de las horas: ${fmtSilver(gold.p10)} a ${fmtSilver(gold.p90)}; mediana ${fmtSilver(gold.p50)}.`
+        : 'Sin datos del oro.'
+      : gold.points.length
+        ? `Ouro nos últimos ${days} dias, de ${fmtDateTime(gold.points[0].at)} a ${fmtDateTime(gold.points[gold.points.length - 1].at)} (Brasília). ` +
+          `Atual: ${fmtSilver(gold.current)} de prata. Faixa de 80% das horas: ${fmtSilver(gold.p10)} a ${fmtSilver(gold.p90)}; mediana ${fmtSilver(gold.p50)}.`
+        : 'Sem dados do ouro.',
   );
   const daily = $derived(goldDaily(gold.points));
 </script>
@@ -43,7 +50,7 @@
 <figure class="hchart">
   <div class="hchart-box" bind:clientWidth={width}>
     <svg width={geo.w} {height} viewBox="0 0 {geo.w} {height}" role="img" aria-labelledby="{uid}-t {uid}-d">
-      <title id="{uid}-t">Cotação do ouro em prata, últimos {days} dias</title>
+      <title id="{uid}-t">{tx(`Cotação do ouro em prata, últimos ${days} dias`, `Cotización del oro en plata, últimos ${days} días`)}</title>
       <desc id="{uid}-d">{desc}</desc>
       {#if gold.p10 !== null && gold.p90 !== null}
         <rect x={M.left} width={Math.max(0, geo.w - M.left - M.right)} y={geo.y(gold.p90)} height={Math.max(1, geo.y(gold.p10) - geo.y(gold.p90))} class="gold-band" />
@@ -66,18 +73,18 @@
     </svg>
   </div>
   <figcaption class="gold-legend small muted">
-    <span><span class="gold-key line" aria-hidden="true"></span>Cotação hora a hora</span>
-    <span><span class="gold-key band" aria-hidden="true"></span>Faixa de 80% das horas (p10 a p90)</span>
-    <span><span class="gold-key median" aria-hidden="true"></span>Mediana</span>
+    <span><span class="gold-key line" aria-hidden="true"></span>{tx('Cotação hora a hora', 'Cotización hora a hora')}</span>
+    <span><span class="gold-key band" aria-hidden="true"></span>{tx('Faixa de 80% das horas (p10 a p90)', 'Rango del 80% de las horas (p10 a p90)')}</span>
+    <span><span class="gold-key median" aria-hidden="true"></span>{tx('Mediana', 'Mediana')}</span>
   </figcaption>
 </figure>
 <div class="hchart">
   <details class="small">
-    <summary>Ver os dados por dia em tabela</summary>
-    <div class="table-wrap">
+    <summary>{tx('Ver os dados por dia em tabela', 'Ver los datos por día en una tabla')}</summary>
+    <div class="table-wrap" use:scrollFocus>
       <table class="data">
-        <caption class="sr-only">Ouro por dia, horário de Brasília</caption>
-        <thead><tr><th scope="col">Dia</th><th scope="col" class="num">Mínimo</th><th scope="col" class="num">Média</th><th scope="col" class="num">Máximo</th><th scope="col" class="num">Último</th></tr></thead>
+        <caption class="sr-only">{tx('Ouro por dia, horário de Brasília', 'Oro por día, horario de Brasilia')}</caption>
+        <thead><tr><th scope="col">{tx('Dia', 'Día')}</th><th scope="col" class="num">{tx('Mínimo', 'Mínimo')}</th><th scope="col" class="num">{tx('Média', 'Promedio')}</th><th scope="col" class="num">{tx('Máximo', 'Máximo')}</th><th scope="col" class="num">{tx('Último', 'Último')}</th></tr></thead>
         <tbody>
           {#each daily as d (d.date)}
             <tr><th scope="row">{fmtDayMonth(d.date)}</th><td class="num">{fmtSilver(d.min)}</td><td class="num">{fmtSilver(d.avg)}</td><td class="num">{fmtSilver(d.max)}</td><td class="num">{fmtSilver(d.last)}</td></tr>

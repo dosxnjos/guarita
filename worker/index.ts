@@ -1,11 +1,13 @@
 // Entrada do _worker.js do Pages: atende /api/* e /discord; o resto vai para os arquivos estáticos,
 // com fallback para index.html (o front roteia por caminho). Páginas saem com título, descrição e Open Graph da rota
-// (worker/seo.ts); /sitemap.xml é gerado aqui.
+// (worker/seo.ts); /sitemap.xml é gerado aqui. Espanhol em /es/...: sem arquivo próprio, cai no mesmo fallback para
+// index.html e o seo.ts põe lang, título, descrição e hreflang da língua.
 import type { Env } from './env';
 import { handleApi } from './api/router';
 import { handleDiscord } from './discord/interactions';
 import { handleMcp } from './mcp/server';
 import { sitemapResponse, withPageMeta } from './seo';
+import { withCacheHeaders } from './lib/cacheHeaders';
 
 /** Pedido para o servidor MCP? Tudo que não é GET/HEAD, ou GET que pede SSE (spec: o servidor responde 405). Pura. */
 export function isMcpClientRequest(request: Request): boolean {
@@ -34,6 +36,8 @@ export default {
       return sitemapResponse(request.method);
     }
     const asset = await env.ASSETS.fetch(request);
+    // /assets/* (nome com hash do Vite): cache de um ano no navegador; o _headers não vale através do worker.
+    if (url.pathname.startsWith('/assets/')) return withCacheHeaders(url.pathname, asset);
     if (asset.status !== 404 || request.method !== 'GET' || url.pathname.includes('.')) return withPageMeta(request, asset, env);
     return withPageMeta(request, await env.ASSETS.fetch(new Request(new URL('/index.html', url), request)), env);
   },

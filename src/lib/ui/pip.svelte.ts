@@ -3,6 +3,7 @@
 // O estado mora no módulo para a janela sobreviver à troca de rota dentro do site.
 import { mount, unmount } from 'svelte';
 import MiniPainel from './MiniPainel.svelte';
+import { htmlLang, tx } from '../i18n/index.svelte';
 
 interface DocumentPiP {
   requestWindow(opts?: { width?: number; height?: number; disallowReturnToOpener?: boolean }): Promise<Window>;
@@ -60,7 +61,10 @@ export async function openPip(): Promise<void> {
   pip.error = '';
   const api = dpip();
   if (!api) {
-    pip.error = 'Este navegador não tem janela flutuante. Use Chrome ou Edge atualizados no computador.';
+    pip.error = tx(
+      'Este navegador não tem janela flutuante. Use Chrome ou Edge atualizados no computador.',
+      'Este navegador no tiene ventana flotante. Usa Chrome o Edge actualizados en la computadora.',
+    );
     return;
   }
   if (win && !win.closed) {
@@ -71,7 +75,7 @@ export async function openPip(): Promise<void> {
     const w = await api.requestWindow({ width: 360, height: 520 });
     win = w;
     const doc = w.document;
-    doc.documentElement.lang = 'pt-BR';
+    doc.documentElement.lang = htmlLang();
     const theme = document.documentElement.getAttribute('data-theme');
     if (theme) doc.documentElement.setAttribute('data-theme', theme);
     doc.title = 'Guarita';
@@ -84,8 +88,8 @@ export async function openPip(): Promise<void> {
     cleanup();
     pip.error =
       e instanceof Error && e.name === 'NotAllowedError'
-        ? 'O navegador bloqueou a janela. Clique de novo no botão para abrir.'
-        : 'Não deu para abrir a janela flutuante neste navegador.';
+        ? tx('O navegador bloqueou a janela. Clique de novo no botão para abrir.', 'El navegador bloqueó la ventana. Haz clic de nuevo en el botón para abrirla.')
+        : tx('Não deu para abrir a janela flutuante neste navegador.', 'No se pudo abrir la ventana flotante en este navegador.');
   }
 }
 

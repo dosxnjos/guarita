@@ -1,7 +1,12 @@
 // Roteador por caminho (History API). O _worker.js devolve index.html para qualquer caminho sem extensão.
+// Línguas: o espanhol mora em /es/... (src/lib/i18n). match() tira o prefixo e devolve a língua; navigate()/go()
+// mantêm o prefixo da língua atual (só setLocale troca de língua).
+import { currentLocale, localeFromPath, localizePath, stripLocale, type Locale } from './i18n/core';
+
 export interface Match {
   name: string;
   params: Record<string, string>;
+  locale: Locale;
 }
 
 const TABLE: [name: string, pattern: RegExp, keys: string[]][] = [
@@ -34,19 +39,26 @@ const TABLE: [name: string, pattern: RegExp, keys: string[]][] = [
   ['previsao', /^\/previsao\/([^/]+)$/, ['id']],
   ['live', /^\/live$/, []],
   ['extensao', /^\/extensao$/, []],
+  // Rodada 2
+  ['status', /^\/status$/, []],
 ];
 
 export function match(pathname: string): Match {
+  const locale = localeFromPath(pathname);
+  const path = stripLocale(pathname);
   for (const [name, re, keys] of TABLE) {
-    const m = re.exec(pathname);
-    if (m) return { name, params: Object.fromEntries(keys.map((k, i) => [k, decodeURIComponent(m[i + 1])])) };
+    const m = re.exec(path);
+    if (m) return { name, params: Object.fromEntries(keys.map((k, i) => [k, decodeURIComponent(m[i + 1])])), locale };
   }
-  return { name: 'nao-encontrado', params: {} };
+  return { name: 'nao-encontrado', params: {}, locale };
 }
 
-/** Navega sem recarregar. Links internos: <a href="/x" onclick={go}>. */
+/**
+ * Navega sem recarregar, na língua atual ('/x' vira '/es/x' em espanhol; já prefixado não muda).
+ * Links internos: <a href={href('/x')} onclick={go}>.
+ */
 export function navigate(to: string): void {
-  history.pushState({}, '', to);
+  history.pushState({}, '', localizePath(to, currentLocale()));
   window.dispatchEvent(new PopStateEvent('popstate'));
   window.scrollTo(0, 0);
 }

@@ -8,5 +8,5 @@ regras do repo: [../CLAUDE.md](../CLAUDE.md).
 - **Fronteira SBI:** nada lê o processo do jogo, manda tecla/clique ou pacote ao jogo ou alerta jogador avistado; "sempre por cima" só depois do aviso (o Rust confere `avisoSbiAceitoEm`).
 - **Captura de rede:** só a passiva do próprio jogador (`src-tauri/src/capture/`), opt-in (o Rust confere `avisoAceitoEm` em `captura.json`); evento de outro jogador se descarta no parser, nunca chega à tela nem ao diagnóstico.
 - **Widget novo:** rótulo em `WIDGETS` (`src-tauri/src/lib.rs`), `capabilities/widgets.json` e `src/lib/windows.ts`. Comando novo: `build.rs` + capability.
-- **Rede:** só `src/lib/api.ts` (plugin-http, escopo `guarita.pages.dev`) e `src/lib/capture/dados.ts` (3 URLs fixas do GitHub); CSP e capabilities mínimas, sem shell nem fs.
+- **Rede:** só `src/lib/api.ts` (plugin-http, escopo `guarita.pages.dev`) e `src/lib/capture/dados.ts` (4 URLs fixas do GitHub; tabela de códigos só com `.sig` válido: mudou → `npm run codes:sign`, commit junto); CSP e capabilities mínimas, sem shell nem fs.
 - **Pronto** = `npm run check`, `npm test` e `npm run vite:build` verdes dentro de `app/`.

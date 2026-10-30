@@ -128,7 +128,57 @@ O navegador também carrega os ícones direto de `render.albiononline.com` (com 
   ícones de item nos sites de Albion, popup com busca e relógio. Só o `background.js` faz requisição, e só para
   `guarita.pages.dev`. Pacote: `node extension/build.mjs`. Detalhe: [extension/README.md](../extension/README.md).
 - **App de PC v0.2**: captura passiva do próprio jogador (acima, em "App no PC").
-- Fora desta rodada: espanhol (`/es/...`) e a página de status/transparência de custos (entregas 5 e 6 do roadmap).
+- Rodada 2: espanhol (`/es/...`, seção "Línguas" abaixo), `/status` e app 0.2.1 (abaixo).
+
+### Rodada 2 (30/10/2026)
+
+- **`/status`** (`src/routes/Status.svelte`, dados fixos em `src/lib/institucional/status.ts`): custo R$ 0/mês,
+  limites do plano grátis da Cloudflare, o que acontece ao estourar, de onde vem cada dado e a saúde ao vivo (lê
+  `/api/health` com tempo limite). Entra no menu "Mais" e no `worker/seo.ts` (PT e ES).
+- **Telas sob demanda**: `App.svelte` carrega com `import()` (mapa `LAZY`) tudo menos Início, Item e NaoEncontrado,
+  que ficam no pacote principal; `src/lib/lazyView.ts` recarrega a página uma vez se o arquivo da tela sumir depois
+  de um deploy. O `{#key getLocale()}` remonta na hora a tela já carregada. Tela nova entra no `LAZY`.
+- **Cache longo** de `/assets/*` (`immutable`) sai de `worker/lib/cacheHeaders.ts`, não do `public/_headers` (no modo
+  avançado o `_headers` não vale para o que passa pelo `_worker.js`).
+- **Acessibilidade**: tabela com rolagem usa `use:scrollFocus` (`src/lib/ui/scrollFocus.ts`); âmbar claro
+  `--accent: #8a5810` (4,5:1).
+- **App de PC 0.2.1**: tabela de códigos remota só com assinatura Ed25519 válida (`capture-codes.json.sig`; ver
+  [app/README.md](../app/README.md)).
+
+## Línguas
+
+Português é o padrão e não tem prefixo (nenhuma URL em português muda); espanhol (es-419, "tú") mora em `/es` e
+`/es/...`. A língua vem **só do caminho**: link compartilhado abre na língua do link, nada redireciona sozinho.
+
+- **`src/lib/i18n/`**: `core.ts` puro (caminho ↔ língua, `localizePath`, locale do Intl; usado pelo roteador, por
+  `format.ts`, pelo app de PC e pelo `_worker.js`) e `index.svelte.ts` reativo, com o contrato das telas:
+  `tx('pt', 'es')` (texto inline, sem dicionário central: cada tela é dona do seu texto), `href('/x')` (link interno
+  na língua atual, sempre com `onclick={go}`), `getLocale()`, `setLocale(l)`, `intlLocale()`.
+- **Roteador** (`src/lib/router.ts`): `match()` tira o `/es` e devolve `locale`; `navigate()`/`go()` mantêm o prefixo
+  da língua atual. Só `setLocale` troca de língua (navega por conta própria e grava `guarita.lingua`).
+- **App.svelte**: seletor "PT | ES" (links reais com `hreflang`), `<html lang>`, aviso discreto "¿Prefieres español?"
+  só para navegador em espanhol sem preferência salva (dispensar grava `pt`), e `{#key getLocale()}` em volta da tela:
+  trocar de língua remonta a tela, então texto calculado fora do template e `format.ts` se atualizam.
+- **`format.ts`**: funções com texto ou número aceitam `loc` no fim (padrão: a língua atual, por um espelho não reativo
+  em `core.ts`; fora do navegador é sempre `pt`). Datas sempre no horário de Brasília nas duas línguas.
+- **Nome de item**: `itemsClient.ts` carrega `items-index-es.json` em `/es` (mesmo formato), então `hit.pt`/`itemName`
+  já saem em espanhol.
+- **SEO** (`worker/seo.ts`): `/es/...` cai no mesmo fallback do `index.html`; título e descrição de `FIXED_ES` (iguais
+  ao `document.title` de cada tela em espanhol), `<html lang="es">`, `og:locale es_LA`, canonical na própria língua,
+  `<link rel="alternate" hreflang="pt-BR|es|x-default">` nas duas versões (só em página indexável) e sitemap com as
+  URLs `/es`. Item em `/es/item/:id`: nome pela fatia `names-es/t<tier>.json` lida como texto.
+- **Código puro com texto** (`format.ts`, `player/format.ts`, `insights/format.ts`, `alertForm.ts`, `timers/presets.ts`,
+  `hoje/view.ts`…): não importa `tx` (tem runes; o app de PC, o vitest e o `_worker.js` importam esses arquivos), e
+  sim `currentLocale()` de `core.ts`, com `loc?: Locale` opcional no fim.
+- **API**: `/api/hoje` e `/api/forecast` aceitam `lang=es` (texto em espanhol, mesmos números); as demais devolvem
+  texto em PT (motivos do perigo, lições da autópsia, festividades, nomes de arma e de item nas perdas) e a tela em
+  espanhol traduz o que tem código ou troca o nome pelo índice ES.
+- **Bot** (`worker/discord/i18n.ts`): a língua vem do `interaction.locale` (começa com `es` → espanhol) e é passada
+  explícita até o fim (um isolate atende várias interações; língua global misturaria respostas). Comandos com
+  `name_localizations`/`description_localizations` (es-ES, es-419); o nome localizado só aparece depois de
+  `npm run discord:register -- --global`.
+- **App de PC e extensão**: só português.
+- **Termos do jogo em espanhol**: [glossario-es.md](glossario-es.md).
 
 ## Limites que moldam o desenho
 

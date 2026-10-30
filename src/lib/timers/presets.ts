@@ -16,9 +16,16 @@
 // - characters.xml, <DefaultValues>: craftingfocusmax="30000", premiumcraftingfocusmax="30000",
 //   craftingfocusregenerationperday="0", premiumcraftingfocusregenerationperday="10000". Sem Premium o foco não
 //   regenera; com Premium, 10.000 por dia (≈ 416,7 por hora), até 30.000.
+//
+// Línguas: o texto mora aqui em PT (byte a byte o de sempre) e em ES; quem mostra texto aceita `loc` no fim (padrão: a
+// língua atual, pelo espelho não reativo de i18n/core.ts, como format.ts). Nada de runes: o app de PC importa este
+// arquivo (app/src/lib/ui-timers.ts), e lá a língua é sempre pt.
 import type { TimerKind } from '../../../shared/types';
+import { currentLocale, intlLocaleFor, type Locale } from '../i18n/core';
 
 const H = 60; // minutos
+const pick = (loc: Locale, pt: string, es: string): string => (loc === 'es' ? es : pt);
+const int = (n: number, loc: Locale): string => new Intl.NumberFormat(intlLocaleFor(loc), { maximumFractionDigits: 0 }).format(n);
 
 export const PLANT_MIN = 22 * H;
 export const PRODUCT_MIN = 22 * H;
@@ -50,27 +57,60 @@ export interface Preset {
   label: string;
   /** Duração fixa em minutos (null = depende de outro campo: tier, foco atual ou tempo livre). */
   minutes: number | null;
+  /** Os três textos acima em espanhol (ler com presetText). */
+  es: { title: string; hint: string; label: string };
 }
 
 export const PRESETS: Preset[] = [
-  { id: 'plantacao', kind: 'plantacao', title: 'Plantação ou ervas (22 h)', hint: 'Todas as sementes, do T1 ao T8.', label: 'Plantação', minutes: PLANT_MIN },
-  { id: 'produto', kind: 'animal', title: 'Ovos e leite (22 h)', hint: 'Galinha, cabra, ganso, ovelha e vaca adultas (o porco não produz).', label: 'Ovos e leite', minutes: PRODUCT_MIN },
-  { id: 'filhote-granja', kind: 'animal', title: 'Filhote de granja (44 h)', hint: 'Galinha, cabra, ganso, ovelha, porco e vaca até virar adulto.', label: 'Filhotes da granja', minutes: FARM_BABY_MIN },
-  { id: 'filhote-montaria', kind: 'animal', title: 'Filhote de montaria (44 a 284 h)', hint: 'Boi, cavalo e montarias do canil: o tempo depende do tier.', label: 'Filhote de montaria', minutes: null },
-  { id: 'foco', kind: 'foco', title: 'Foco cheio', hint: 'Calcula a hora a partir do foco que você tem agora (precisa de Premium).', label: 'Foco cheio', minutes: null },
-  { id: 'livre', kind: 'outro', title: 'Tempo livre', hint: 'Você escolhe as horas e os minutos.', label: '', minutes: null },
+  {
+    id: 'plantacao', kind: 'plantacao', title: 'Plantação ou ervas (22 h)', hint: 'Todas as sementes, do T1 ao T8.', label: 'Plantação', minutes: PLANT_MIN,
+    es: { title: 'Cultivos o hierbas (22 h)', hint: 'Todas las semillas, del T1 al T8.', label: 'Cultivos' },
+  },
+  {
+    id: 'produto', kind: 'animal', title: 'Ovos e leite (22 h)', hint: 'Galinha, cabra, ganso, ovelha e vaca adultas (o porco não produz).', label: 'Ovos e leite', minutes: PRODUCT_MIN,
+    es: { title: 'Huevos y leche (22 h)', hint: 'Gallina, cabra, ganso, oveja y vaca adultas (el cerdo no produce).', label: 'Huevos y leche' },
+  },
+  {
+    id: 'filhote-granja', kind: 'animal', title: 'Filhote de granja (44 h)', hint: 'Galinha, cabra, ganso, ovelha, porco e vaca até virar adulto.', label: 'Filhotes da granja', minutes: FARM_BABY_MIN,
+    es: { title: 'Cría de granja (44 h)', hint: 'Gallina, cabra, ganso, oveja, cerdo y vaca hasta volverse adultos.', label: 'Crías de la granja' },
+  },
+  {
+    id: 'filhote-montaria', kind: 'animal', title: 'Filhote de montaria (44 a 284 h)', hint: 'Boi, cavalo e montarias do canil: o tempo depende do tier.', label: 'Filhote de montaria', minutes: null,
+    es: { title: 'Cría de montura (44 a 284 h)', hint: 'Buey, caballo y monturas de la perrera: el tiempo depende del tier.', label: 'Cría de montura' },
+  },
+  {
+    id: 'foco', kind: 'foco', title: 'Foco cheio', hint: 'Calcula a hora a partir do foco que você tem agora (precisa de Premium).', label: 'Foco cheio', minutes: null,
+    es: { title: 'Foco lleno', hint: 'Calcula la hora a partir del foco que tienes ahora (requiere Premium).', label: 'Foco lleno' },
+  },
+  {
+    id: 'livre', kind: 'outro', title: 'Tempo livre', hint: 'Você escolhe as horas e os minutos.', label: '', minutes: null,
+    es: { title: 'Tiempo libre', hint: 'Tú eliges las horas y los minutos.', label: '' },
+  },
 ];
 
 export function presetById(id: PresetId): Preset {
   return PRESETS.find((p) => p.id === id) ?? PRESETS[PRESETS.length - 1];
 }
 
-/** Lê um número digitado em pt-BR ("12.500", "12500", "1,5"). Vazio ou inválido = null. Pura. */
-export function parseNumberBR(raw: string | number | null | undefined): number | null {
+/** Título, explicação e rótulo sugerido do preset na língua pedida. Pura. */
+export function presetText(p: Preset, loc: Locale = currentLocale()): { title: string; hint: string; label: string } {
+  return loc === 'es' ? p.es : { title: p.title, hint: p.hint, label: p.label };
+}
+
+/**
+ * Lê um número digitado ("12.500", "12500", "1,5"). Vazio ou inválido = null. Pura.
+ * Em espanhol o site mostra o milhar com vírgula ("30,000", es-419), então lá "12,500" também vale 12500; em português
+ * nada muda ("12,5" continua 12,5).
+ */
+export function parseNumberBR(raw: string | number | null | undefined, loc: Locale = currentLocale()): number | null {
   if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
   if (raw === null || raw === undefined) return null;
   const s = String(raw).trim().replace(/\s/g, '');
   if (!s) return null;
+  if (loc === 'es' && /^\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) {
+    const n = Number(s.replace(/,/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
   // "12.500" ou "1.234.567": ponto como milhar; vírgula como decimal.
   const norm = /^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s.replace(',', '.');
   if (!/^-?\d+(\.\d+)?$/.test(norm)) return null;
@@ -111,43 +151,45 @@ export function defaultTimerForm(): TimerFormState {
 
 export type DurationResult = { ok: true; minutes: number } | { ok: false; error: string };
 
-const RANGE_ERROR = 'Escolha um tempo entre 1 minuto e 30 dias.';
-
-/** Duração em minutos do formulário, ou o erro pronto para a tela. Pura. */
-export function formDuration(f: TimerFormState): DurationResult {
+/** Duração em minutos do formulário, ou o erro pronto para a tela (na língua pedida). Pura. */
+export function formDuration(f: TimerFormState, loc: Locale = currentLocale()): DurationResult {
   const p = presetById(f.preset);
   if (p.minutes !== null) return { ok: true, minutes: p.minutes };
   if (p.id === 'filhote-montaria') {
     const m = MOUNT_BABY_MIN[f.tier];
-    return m ? { ok: true, minutes: m } : { ok: false, error: 'Escolha o tier do filhote.' };
+    return m ? { ok: true, minutes: m } : { ok: false, error: pick(loc, 'Escolha o tier do filhote.', 'Elige el tier de la cría.') };
   }
   if (p.id === 'foco') {
-    const r = focusFullMinutes(parseNumberBR(f.focus), f.premium);
+    const r = focusFullMinutes(parseNumberBR(f.focus, loc), f.premium);
     if (r.ok) return r;
-    if (r.reason === 'sem-premium') return { ok: false, error: 'Sem Premium o foco não se recupera sozinho, então não há hora para avisar.' };
-    if (r.reason === 'cheio') return { ok: false, error: 'Com 30.000 de foco ele já está cheio.' };
-    return { ok: false, error: 'Informe o foco que você tem agora, de 0 a 30.000.' };
+    if (r.reason === 'sem-premium') {
+      return { ok: false, error: pick(loc, 'Sem Premium o foco não se recupera sozinho, então não há hora para avisar.', 'Sin Premium el foco no se recupera solo, así que no hay una hora para avisarte.') };
+    }
+    if (r.reason === 'cheio') return { ok: false, error: pick(loc, 'Com 30.000 de foco ele já está cheio.', `Con ${int(FOCUS_MAX, loc)} de foco ya está lleno.`) };
+    return { ok: false, error: pick(loc, 'Informe o foco que você tem agora, de 0 a 30.000.', `Indica el foco que tienes ahora, de 0 a ${int(FOCUS_MAX, loc)}.`) };
   }
   const hRaw = f.hours.trim();
   const mRaw = f.minutes.trim();
-  if (!hRaw && !mRaw) return { ok: false, error: 'Informe as horas e os minutos.' };
-  const h = hRaw ? parseNumberBR(hRaw) : 0;
-  const m = mRaw ? parseNumberBR(mRaw) : 0;
+  if (!hRaw && !mRaw) return { ok: false, error: pick(loc, 'Informe as horas e os minutos.', 'Indica las horas y los minutos.') };
+  const h = hRaw ? parseNumberBR(hRaw, loc) : 0;
+  const m = mRaw ? parseNumberBR(mRaw, loc) : 0;
   if (h === null || m === null || !Number.isInteger(h) || !Number.isInteger(m) || h < 0 || m < 0) {
-    return { ok: false, error: 'Use números inteiros para horas e minutos.' };
+    return { ok: false, error: pick(loc, 'Use números inteiros para horas e minutos.', 'Usa números enteros para las horas y los minutos.') };
   }
   const total = h * H + m;
-  if (total < MIN_MINUTES || total > MAX_MINUTES) return { ok: false, error: RANGE_ERROR };
+  if (total < MIN_MINUTES || total > MAX_MINUTES) {
+    return { ok: false, error: pick(loc, 'Escolha um tempo entre 1 minuto e 30 dias.', 'Elige un tiempo entre 1 minuto y 30 días.') };
+  }
   return { ok: true, minutes: total };
 }
 
-/** Rótulo final: o digitado (limpo e cortado) ou o sugerido pelo preset. Pura. */
-export function formLabel(f: TimerFormState): string {
+/** Rótulo final: o digitado (limpo e cortado) ou o sugerido pelo preset, na língua pedida. Pura. */
+export function formLabel(f: TimerFormState, loc: Locale = currentLocale()): string {
   const typed = f.label.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, LABEL_MAX);
   if (typed) return typed;
   const p = presetById(f.preset);
-  if (p.id === 'filhote-montaria') return `Filhote de montaria T${f.tier}`;
-  return p.label || 'Despertador';
+  if (p.id === 'filhote-montaria') return pick(loc, `Filhote de montaria T${f.tier}`, `Cría de montura T${f.tier}`);
+  return presetText(p, loc).label || 'Despertador';
 }
 
 /** Instante do aviso: agora + duração. Pura. */
@@ -172,6 +214,18 @@ export const KIND_LABEL: Record<TimerKind, string> = {
   foco: 'Foco',
   outro: 'Outro',
 };
+
+export const KIND_LABEL_ES: Record<TimerKind, string> = {
+  plantacao: 'Cultivos',
+  animal: 'Animales',
+  foco: 'Foco',
+  outro: 'Otro',
+};
+
+/** Tipo do timer para mostrar, na língua pedida. Pura. */
+export function kindLabel(kind: TimerKind, loc: Locale = currentLocale()): string {
+  return (loc === 'es' ? KIND_LABEL_ES : KIND_LABEL)[kind] ?? kind;
+}
 
 /** Pendentes (por vencimento) e já avisados (mais recente primeiro). Pura. */
 export function splitTimers<T extends { endsAt: string; firedAt?: string }>(list: T[]): { pending: T[]; fired: T[] } {

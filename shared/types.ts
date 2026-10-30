@@ -374,7 +374,7 @@ export type HojeTrilha = 'flip' | 'refino' | 'transporte';
 export interface HojeOpcao {
   trilha: HojeTrilha;
   titulo: string;
-  /** Passo a passo curto em PT-BR. */
+  /** Passo a passo curto em PT-BR (em espanhol com `lang=es`). */
   passos: string[];
   /** Lucro estimado em prata para o capital e o tempo informados (pode ser negativo: a tela mostra). */
   lucro: number;

@@ -5,7 +5,9 @@
 // a tela de configuração (?config) é quem monta a URL certa.
 import type { City, CityQuote, Festivity, GuildSummary, ItemResponse } from '../../../shared/types';
 import { ALL_CITIES } from '../../../shared/market';
+import { festivityLabel } from '../../../shared/festivities';
 import { cheapestReliable } from '../format';
+import { currentLocale, localizePath, type Locale } from '../i18n/core';
 
 export type LiveBlock = 'relogio' | 'precos' | 'guilda';
 export type LiveTheme = 'escuro' | 'claro';
@@ -30,6 +32,15 @@ export const LIVE_BLOCK_LABEL: Record<LiveBlock, string> = {
   precos: 'Preços dos itens',
   guilda: 'Histórico da guilda',
 };
+export const LIVE_BLOCK_LABEL_ES: Record<LiveBlock, string> = {
+  relogio: 'Reloj del servidor',
+  precos: 'Precios de los objetos',
+  guilda: 'Historial del gremio',
+};
+/** Rótulo do bloco na língua pedida (padrão: a atual do site). */
+export function liveBlockLabel(b: LiveBlock, loc: Locale = currentLocale()): string {
+  return (loc === 'es' ? LIVE_BLOCK_LABEL_ES : LIVE_BLOCK_LABEL)[b];
+}
 /** Cada item é uma consulta de preço (até 9 chamadas no Worker): poucos itens por painel. */
 export const LIVE_MAX_ITEMS = 6;
 export const LIVE_SCALE_MIN = 0.6;
@@ -129,8 +140,9 @@ export function buildLiveQuery(cfg: LiveConfig): string {
   return p.toString().replace(/%2C/gi, ',').replace(/%40/g, '@');
 }
 
-export function buildLiveUrl(cfg: LiveConfig, origin: string): string {
-  return `${origin.replace(/\/+$/, '')}/live?${buildLiveQuery(cfg)}`;
+/** Endereço do painel na língua pedida (padrão: a atual do site): em espanhol, /es/live, e o painel no OBS sai em espanhol. */
+export function buildLiveUrl(cfg: LiveConfig, origin: string, loc: Locale = currentLocale()): string {
+  return `${origin.replace(/\/+$/, '')}${localizePath('/live', loc)}?${buildLiveQuery(cfg)}`;
 }
 
 // ---------- blocos ----------
@@ -147,18 +159,20 @@ export interface LiveBonuses {
 }
 
 /** Festividades ativas agrupadas para caber em poucas linhas no painel (as encerradas e futuras ficam fora). */
-export function liveBonuses(list: Festivity[], now = Date.now()): LiveBonuses {
+export function liveBonuses(list: Festivity[], now = Date.now(), loc: Locale = currentLocale()): LiveBonuses {
   const out: LiveBonuses = { production: [], productionMsLeft: null, activities: [], seasonal: [] };
   for (const f of list) {
     const s = Date.parse(f.start);
     const e = Date.parse(f.end);
     if (!Number.isFinite(s) || !Number.isFinite(e) || s > now || e <= now) continue;
     const add = (arr: string[], v: string) => { if (v && !arr.includes(v)) arr.push(v); };
+    // Em espanhol o rótulo sai de festivityLabelEs (a API manda só o PT em labelPt).
+    const label = festivityLabel(f, loc);
     if (f.kind === 2) {
-      add(out.production, f.labelPt.replace(/^b[oô]nus de produ[cç][aã]o:\s*/i, ''));
+      add(out.production, label.replace(/^b[oô]nus de produ[cç][aã]o:\s*/i, '').replace(/^bonificaci[oó]n de producci[oó]n:\s*/i, ''));
       out.productionMsLeft = out.productionMsLeft === null ? e - now : Math.min(out.productionMsLeft, e - now);
-    } else if (f.kind === 0) add(out.seasonal, f.labelPt);
-    else add(out.activities, f.labelPt);
+    } else if (f.kind === 0) add(out.seasonal, label);
+    else add(out.activities, label);
   }
   return out;
 }

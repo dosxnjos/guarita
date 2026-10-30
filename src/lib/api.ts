@@ -1,5 +1,6 @@
 // Cliente tipado da API (contrato em shared/types.ts). Telas importam daqui, nunca fetch direto.
 import type { AlertRule, AutopsyResponse, ClockResponse, ItemResponse, PlayerDossier, PlayerSearchResponse, Quality, BookFillResponse, City, LossesResponse, GuildSummary, GuildSearchResponse, RiskQuote, GoldResponse, DataHealthResponse, Timer, TimerKind, HojeResponse, ForecastResponse } from '../../shared/types';
+import { currentLocale } from './i18n/core';
 
 /** Erro da API com o status HTTP (a tela decide pelo status, ex.: 404 de inscrição que sumiu). */
 export class ApiError extends Error {
@@ -9,16 +10,21 @@ export class ApiError extends Error {
   }
 }
 
+// Mensagens próprias do cliente na língua do site (espelho de i18n/core: sem runes, o app de PC importa este arquivo).
+// O `error` que vem do servidor passa como veio.
+const invalid = () => (currentLocale() === 'es' ? 'respuesta no válida' : 'resposta inválida');
+const failed = (status: number) => (currentLocale() === 'es' ? `error ${status}` : `erro ${status}`);
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path, { headers: { accept: 'application/json' } });
-  const body = await r.json().catch(() => ({ error: 'resposta inválida' }));
-  if (!r.ok) throw new ApiError((body as { error?: string }).error ?? `erro ${r.status}`, r.status);
+  const body = await r.json().catch(() => ({ error: invalid() }));
+  if (!r.ok) throw new ApiError((body as { error?: string }).error ?? failed(r.status), r.status);
   return body as T;
 }
 async function send<T>(method: 'POST' | 'DELETE', path: string, data?: unknown): Promise<T> {
   const r = await fetch(path, { method, headers: { 'content-type': 'application/json' }, body: data ? JSON.stringify(data) : undefined });
-  const body = await r.json().catch(() => ({ error: 'resposta inválida' }));
-  if (!r.ok) throw new ApiError((body as { error?: string }).error ?? `erro ${r.status}`, r.status);
+  const body = await r.json().catch(() => ({ error: invalid() }));
+  if (!r.ok) throw new ApiError((body as { error?: string }).error ?? failed(r.status), r.status);
   return body as T;
 }
 
@@ -44,9 +50,17 @@ export const api = {
   createTimer: (t: { owner: string; kind: TimerKind; label: string; endsAt: string }) => send<Timer>('POST', '/api/timers', t),
   deleteTimer: (owner: string, id: string) => send<{ ok: boolean }>('DELETE', `/api/timers/${encodeURIComponent(id)}?owner=${encodeURIComponent(owner)}`),
   // Fase 3
-  hoje: (prata: number, minutos: number, premium: boolean) =>
-    get<HojeResponse>(`/api/hoje?prata=${prata}&minutos=${minutos}&premium=${premium ? 1 : 0}`),
+  /** `lang` 'es' pede os textos (passos, riscos, notas, nomes) em espanhol; sem ele, a URL é a mesma de antes (pt). */
+  hoje: (prata: number, minutos: number, premium: boolean, lang: ApiLang = 'pt') =>
+    get<HojeResponse>(`/api/hoje?prata=${prata}&minutos=${minutos}&premium=${premium ? 1 : 0}${langParam(lang)}`),
   /** `city` null = a API escolhe a cidade com mais unidades vendidas nos últimos 14 dias (sem Black Market). */
-  forecast: (id: string, city: City | null, q: Quality = 1) =>
-    get<ForecastResponse>(`/api/forecast/${encodeURIComponent(id)}?city=${encodeURIComponent(city ?? '')}&q=${q}`),
+  forecast: (id: string, city: City | null, q: Quality = 1, lang: ApiLang = 'pt') =>
+    get<ForecastResponse>(`/api/forecast/${encodeURIComponent(id)}?city=${encodeURIComponent(city ?? '')}&q=${q}${langParam(lang)}`),
 };
+
+/** Língua dos textos que a API devolve (só /api/hoje e /api/forecast por enquanto). */
+export type ApiLang = 'pt' | 'es';
+/** "&lang=es" só para espanhol: a URL em pt não muda (mesmo cache do navegador de antes). */
+export function langParam(lang: ApiLang | undefined): string {
+  return lang === 'es' ? '&lang=es' : '';
+}

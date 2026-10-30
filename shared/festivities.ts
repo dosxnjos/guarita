@@ -100,3 +100,117 @@ export function festivityLabelPt(kind: number, category: string, name: string): 
   if (kind === 2) return productionLabel(name);
   return `Bônus: ${readableName(name).toLowerCase()}`;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Espanhol (es-419, termos do cliente oficial: docs/glossario-es.md e nomes de item ES-ES do dump). Mesma lógica do PT;
+// nome desconhecido vira rótulo genérico legível ("Bonificación: ..."), nunca o português.
+
+const SEASONAL_ES: Record<string, string> = {
+  HALLOWEEN: 'Halloween',
+  CHRISTMAS: 'Navidad',
+  WINTER: 'Festival de invierno',
+  WINTERFESTIVAL: 'Festival de invierno',
+  LUNARNEWYEAR: 'Año Nuevo Lunar',
+  LUNAR: 'Año Nuevo Lunar',
+  EASTER: 'Pascua',
+  SPRING: 'Festival de primavera',
+  SUMMER: 'Festival de verano',
+  ANNIVERSARY: 'Aniversario de Albion',
+  BIRTHDAY: 'Aniversario de Albion',
+  CARNIVAL: 'Carnaval',
+};
+
+const ACTIVITIES_ES: Record<string, string> = {
+  FACTIONPOINTS: 'Puntos de facción dobles',
+  FAME: 'Bonificación de fama',
+  SILVER: 'Bonificación de plata',
+  LOOT: 'Bonificación de botín',
+  GATHERING: 'Bonificación de recolección',
+  FISHING: 'Bonificación de pesca',
+  CRAFTING: 'Bonificación de producción',
+  REFINING: 'Bonificación de refinado',
+  FARMING: 'Bonificación de cultivo',
+  MIGHT: 'Bonificación de poderío (Might)',
+  FAVOR: 'Bonificación de favor',
+};
+
+/** Família no plural e o gênero (o adjetivo de raridade concorda: "ballestas raras", "arcos raros"). */
+type FamilyEs = [plural: string, gender: 'm' | 'f'];
+const FAMILIES_ES: Record<string, FamilyEs> = {
+  // armas (famílias como em WEAPON_LABEL_ES: "Vara", "Bastón ígneo", "Guantes", "Cambiaformas")
+  SWORD: ['espadas', 'f'], AXE: ['hachas', 'f'], MACE: ['mazas', 'f'], HAMMER: ['martillos', 'm'],
+  CROSSBOW: ['ballestas', 'f'], BOW: ['arcos', 'm'], SPEAR: ['lanzas', 'f'], DAGGER: ['dagas', 'f'],
+  QUARTERSTAFF: ['varas', 'f'], KNUCKLES: ['guantes', 'm'], WAR_GLOVES: ['guantes', 'm'],
+  NATURESTAFF: ['bastones naturales', 'm'], NATURE_STAFF: ['bastones naturales', 'm'],
+  FIRESTAFF: ['bastones ígneos', 'm'], FIRE_STAFF: ['bastones ígneos', 'm'],
+  FROSTSTAFF: ['bastones de hielo', 'm'], FROST_STAFF: ['bastones de hielo', 'm'],
+  ARCANESTAFF: ['bastones arcanos', 'm'], ARCANE_STAFF: ['bastones arcanos', 'm'],
+  HOLYSTAFF: ['bastones sagrados', 'm'], HOLY_STAFF: ['bastones sagrados', 'm'],
+  CURSEDSTAFF: ['bastones malditos', 'm'], CURSED_STAFF: ['bastones malditos', 'm'],
+  // Família inteira como em WEAPON_LABEL_ES (shared/weapons.ts): "merodeador"/"peleador" são só a primeira arma da árvore.
+  SHAPESHIFTER: ['bastones cambiaformas', 'm'], SHAPESHIFTER_STAFF: ['bastones cambiaformas', 'm'],
+  // armaduras
+  CLOTH_ARMOR: ['túnicas de tela', 'f'], CLOTH_HELMET: ['capuchas de tela', 'f'], CLOTH_SHOES: ['sandalias de tela', 'f'],
+  LEATHER_ARMOR: ['chaquetas de cuero', 'f'], LEATHER_HELMET: ['capuchas de cuero', 'f'],
+  LEATHER_SHOES: ['zapatos de cuero', 'm'],
+  PLATE_ARMOR: ['armaduras de placas', 'f'], PLATE_HELMET: ['cascos de placas', 'm'], PLATE_SHOES: ['botas de placas', 'f'],
+  // mano secundaria y accesorios
+  SHIELD: ['escudos', 'm'], TORCH: ['antorchas', 'f'], BOOK: ['libros de hechizos', 'm'], ORB: ['orbes', 'm'],
+  TOTEM: ['tótems', 'm'], HORN: ['cuernos', 'm'], OFFHAND: ['objetos de mano secundaria', 'm'], CAPE: ['capas', 'f'],
+  BAG: ['bolsas', 'f'], TOOL: ['herramientas', 'f'], TOOLS: ['herramientas', 'f'],
+  GATHERER: ['equipos de recolección', 'm'], MOUNT: ['monturas', 'f'], POTION: ['pociones', 'f'],
+  FOOD: ['comidas', 'f'], MEAL: ['comidas', 'f'], FURNITURE: ['muebles', 'm'],
+  // recursos refinados y en bruto ("Lingote", "Tablas", "Tela", "Cuero trabajado", "Troncos" no cliente)
+  METALBAR: ['lingotes', 'm'], PLANKS: ['tablas', 'f'], CLOTH: ['telas', 'f'], LEATHER: ['cueros', 'm'],
+  STONEBLOCK: ['bloques de piedra', 'm'], ORE: ['mineral', 'm'], WOOD: ['troncos', 'm'], FIBER: ['fibra', 'f'],
+  HIDE: ['pieles', 'f'], ROCK: ['piedra', 'f'],
+};
+
+const RARITY_ES: Record<string, { m: string; f: string }> = {
+  COMMON: { m: 'comunes', f: 'comunes' },
+  ARTIFACT: { m: 'de artefacto', f: 'de artefacto' },
+  RARE: { m: 'raros', f: 'raras' },
+  AVALONIAN: { m: 'avalonianos', f: 'avalonianas' },
+  CRYSTAL: { m: 'de cristal', f: 'de cristal' },
+};
+
+function seasonalLabelEs(name: string): string {
+  const m = /^([A-Z_]+?)_?(\d{4})?$/.exec(name);
+  const base = (m?.[1] ?? name).replace(/_+$/, '');
+  const year = m?.[2];
+  const es = SEASONAL_ES[base] ?? readableName(base);
+  return year ? `${es} ${year}` : es;
+}
+
+function productionLabelEs(name: string): string {
+  const [first, ...rest] = name.split('_');
+  const rarity = RARITY_ES[first];
+  const family = rarity ? rest.join('_') : name;
+  const fam = FAMILIES_ES[family];
+  if (!fam) return `Bonificación: ${readableName(name).toLowerCase()}`;
+  const [plural, gender] = fam;
+  return rarity ? `Bonificación de producción: ${plural} ${rarity[gender]}` : `Bonificación de producción: ${plural}`;
+}
+
+/** Rótulo em espanhol de uma festividade pelo Kind, categoria e UniqueName. */
+export function festivityLabelEs(kind: number, category: string, name: string): string {
+  if (kind === 0) return seasonalLabelEs(name);
+  if (kind === 1) {
+    if (category && category !== 'ACTIVITIES') return `Bonificación: ${readableName(name).toLowerCase()}`;
+    return ACTIVITIES_ES[name] ?? `Bonificación de actividad: ${readableName(name).toLowerCase()}`;
+  }
+  if (kind === 2) return productionLabelEs(name);
+  return `Bonificación: ${readableName(name).toLowerCase()}`;
+}
+
+/**
+ * Rótulo da festividade na língua pedida. Em português devolve o `labelPt` da API como sempre (sem recalcular);
+ * em espanhol monta pelo Kind/categoria/nome.
+ */
+export function festivityLabel(
+  f: { kind: number; category: string; name: string; labelPt?: string | null },
+  locale: 'pt' | 'es',
+): string {
+  if (locale === 'es') return festivityLabelEs(f.kind, f.category ?? '', f.name ?? '');
+  return f.labelPt || f.name;
+}

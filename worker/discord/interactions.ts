@@ -1,6 +1,8 @@
 // Endpoint de interações do Discord (HTTP, sem gateway). Fluxo: verifica Ed25519 → roteia por tipo:
 // PING (1) → PONG; comando (2) → resposta rápida ou adiada (5) com followup via ctx.waitUntil;
-// autocomplete (4) → opções (8). Erros viram mensagem efêmera em PT-BR; nada de stack para o usuário.
+// autocomplete (4) → opções (8). Erros viram mensagem efêmera; nada de stack para o usuário.
+// Língua: interaction.locale começando com "es" → respostas, erros, nomes de item e autocomplete em espanhol
+// (localeOf). O resto segue em português, idêntico ao de antes. A língua passa explícita (`loc`) até o render.
 import type { Env } from '../env';
 import type { AlertCondition, AlertRule, City, Quality } from '../../shared/types';
 import {
@@ -42,7 +44,8 @@ import {
 } from './guild';
 import { MEDIAN_PCT_MAX, MEDIAN_PCT_MIN } from '../../shared/alertLimits';
 import { verifyDiscordRequest } from './verify';
-import { ALERT_CITIES, CONDITIONS, HOJE_MINUTOS, HOJE_PRATA_MAX, HOJE_PRATA_MIN, type ConditionKey } from './commands';
+import { ALERT_CITIES, CONDITIONS, HOJE_MINUTOS, HOJE_PRATA_MAX, HOJE_PRATA_MIN, commandName, type ConditionKey } from './commands';
+import { discordLocale, intlLocale, tx, type Locale } from './i18n';
 import { getHoje, type HojeParams } from '../api/hoje';
 import {
   alertChoiceLabel,
@@ -114,6 +117,10 @@ export interface Interaction {
   user?: { id: string; username?: string; global_name?: string | null };
   /** Mensagem do botão clicado (type 3). */
   message?: { id: string; channel_id?: string; components?: unknown[] };
+  /** Língua do cliente de quem usou (ex.: "pt-BR", "es-ES", "es-419"); ausente no PING. */
+  locale?: string;
+  /** Língua do servidor (só em servidor). O bot responde pela de quem usou. */
+  guild_locale?: string;
 }
 export interface InteractionResponse {
   type: number;
@@ -142,7 +149,13 @@ export async function handleDiscord(request: Request, env: Env, ctx: ExecutionCo
   return Response.json(await dispatch(interaction, env, ctx));
 }
 
+/** Língua da resposta: a do cliente de quem usou o comando ("es-ES", "es-419"… → espanhol; o resto → português). */
+export function localeOf(i: Pick<Interaction, 'locale'>): Locale {
+  return discordLocale(i.locale);
+}
+
 export async function dispatch(i: Interaction, env: Env, ctx: ExecutionContext): Promise<InteractionResponse> {
+  const loc = localeOf(i);
   switch (i.type) {
     case IT.PING:
       return { type: R.PONG };
@@ -152,16 +165,16 @@ export async function dispatch(i: Interaction, env: Env, ctx: ExecutionContext):
       try {
         return await command(i, env, ctx);
       } catch (err) {
-        return { type: R.MESSAGE, data: notice(friendly(err)) };
+        return { type: R.MESSAGE, data: notice(friendly(err, loc)) };
       }
     case IT.COMPONENT:
       try {
         return component(i, env, ctx);
       } catch (err) {
-        return { type: R.MESSAGE, data: notice(friendly(err)) };
+        return { type: R.MESSAGE, data: notice(friendly(err, loc)) };
       }
     default:
-      return { type: R.MESSAGE, data: notice('Interação não suportada por este bot.') };
+      return { type: R.MESSAGE, data: notice(tx(loc, 'Interação não suportada por este bot.', 'Este bot no admite esta interacción.')) };
   }
 }
 
@@ -216,10 +229,19 @@ export function itemLabel(t: ItemTuple | { pt: string; en: string; id: string; t
   return clamp(`${pt || en || id}${tl ? ` (${tl})` : ''}`, 100);
 }
 
+// Busca e rótulo de item na língua da interação (fatias ac-es/ e names-es/ em espanhol). Em português a chamada fica
+// exatamente como antes (sem o argumento de língua).
+function acSearchIn(env: Env, q: string, limit: number, loc: Locale) {
+  return loc === 'es' ? acSearch(env, q, limit, 'es') : acSearch(env, q, limit);
+}
+function acLabelIn(env: Env, id: string, loc: Locale) {
+  return loc === 'es' ? acLabel(env, id, 'es') : acLabel(env, id);
+}
+
 /** Resolve de antemão os rótulos dos ids pelas fatias names/ (barato) e devolve a função síncrona que o render usa. */
-async function labelsFor(env: Env, ids: string[]): Promise<NameOf> {
+async function labelsFor(env: Env, ids: string[], loc: Locale = 'pt'): Promise<NameOf> {
   const uniq = [...new Set(ids.filter(Boolean).map((id) => id.toUpperCase()))].slice(0, 60);
-  const pairs = await Promise.all(uniq.map(async (id) => [id, await acLabel(env, id).catch(() => null)] as const));
+  const pairs = await Promise.all(uniq.map(async (id) => [id, await acLabelIn(env, id, loc).catch(() => null)] as const));
   const map = new Map(pairs);
   return (id) => map.get(id.toUpperCase()) ?? id;
 }
@@ -242,15 +264,36 @@ export function workerSearch(index: ItemsIndex, q: string, limit: number, ctx?: 
 }
 
 /** Valor da opção item: o id escolhido no autocomplete ou texto livre (busca o melhor resultado). */
-export async function resolveItem(env: Env, raw: string, ctx?: Pick<ExecutionContext, 'waitUntil'>): Promise<{ id: string; label: string }> {
+export async function resolveItem(
+  env: Env,
+  raw: string,
+  ctx?: Pick<ExecutionContext, 'waitUntil'>,
+  loc: Locale = 'pt',
+): Promise<{ id: string; label: string }> {
   const q = raw.trim();
-  if (!q) throw new UserError('Informe o item. Escolha uma opção da lista que aparece enquanto você digita.');
+  if (!q) {
+    throw new UserError(
+      tx(
+        loc,
+        'Informe o item. Escolha uma opção da lista que aparece enquanto você digita.',
+        'Indica el objeto. Elige una opción de la lista que aparece mientras escribes.',
+      ),
+    );
+  }
   // Só fatias pequenas (worker/lib/acIndex.ts): o índice inteiro estoura a CPU do plano grátis com isolate frio.
   void ctx;
-  const label = await acLabel(env, q);
+  const label = await acLabelIn(env, q, loc);
   if (label) return { id: q.toUpperCase(), label };
-  const hit = (await acSearch(env, q, 1))[0];
-  if (!hit) throw new UserError(`Não achei o item “${clamp(q, 60)}”. Escolha uma opção da lista que aparece enquanto você digita.`);
+  const hit = (await acSearchIn(env, q, 1, loc))[0];
+  if (!hit) {
+    throw new UserError(
+      tx(
+        loc,
+        `Não achei o item “${clamp(q, 60)}”. Escolha uma opção da lista que aparece enquanto você digita.`,
+        `No encontré el objeto “${clamp(q, 60)}”. Elige una opción de la lista que aparece mientras escribes.`,
+      ),
+    );
+  }
   return { id: hit.id, label: hit.label };
 }
 
@@ -259,20 +302,21 @@ export async function resolveItem(env: Env, raw: string, ctx?: Pick<ExecutionCon
 async function autocomplete(i: Interaction, env: Env, ctx?: Pick<ExecutionContext, 'waitUntil'>): Promise<{ name: string; value: string }[]> {
   const f = focusedOption(i);
   if (!f) return [];
+  const loc = localeOf(i);
   const value = String(f.value ?? '');
   const cmd = i.data?.name;
   if (f.name === 'item' && (cmd === 'preco' || cmd === 'alerta')) {
     if (!value.trim()) return [];
-    return (await acSearch(env, value, 25)).map((h) => ({ name: clamp(h.label, 100), value: h.id.slice(0, 100) }));
+    return (await acSearchIn(env, value, 25, loc)).map((h) => ({ name: clamp(h.label, 100), value: h.id.slice(0, 100) }));
   }
   if (cmd === 'alerta' && f.name === 'id') {
     const owner = ownerOf(i);
     if (!owner) return [];
     const rules = await listAlerts(env, owner);
-    const nameOf = await labelsFor(env, rules.map((r) => r.itemId));
+    const nameOf = await labelsFor(env, rules.map((r) => r.itemId), loc);
     const needle = value.trim().toLowerCase();
     return rules
-      .map((r) => ({ name: alertChoiceLabel(r, nameOf), value: r.id.slice(0, 100) }))
+      .map((r) => ({ name: alertChoiceLabel(r, nameOf, loc), value: r.id.slice(0, 100) }))
       .filter((c) => !needle || c.name.toLowerCase().includes(needle) || c.value.toLowerCase().includes(needle))
       .slice(0, 25);
   }
@@ -283,32 +327,33 @@ async function autocomplete(i: Interaction, env: Env, ctx?: Pick<ExecutionContex
 
 async function command(i: Interaction, env: Env, ctx: ExecutionContext): Promise<InteractionResponse> {
   const { sub, opts } = readOptions(i);
+  const loc = localeOf(i);
   switch (i.data?.name) {
     case 'preco': {
       const raw = String(opt<string>(opts, 'item') ?? '');
       const quality = parseQuality(opt<number>(opts, 'qualidade'));
       return fastOrDeferred(i, ctx, async () => {
-        const it = await resolveItem(env, raw, ctx);
-        return renderPreco(await getItem(env, ctx, it.id, quality), it.label);
+        const it = await resolveItem(env, raw, ctx, loc);
+        return renderPreco(await getItem(env, ctx, it.id, quality), it.label, undefined, loc);
       });
     }
     case 'relogio':
-      return fastOrDeferred(i, ctx, async () => renderClock(await getClock(env, ctx)));
+      return fastOrDeferred(i, ctx, async () => renderClock(await getClock(env, ctx), undefined, loc));
     case 'dossie': {
-      const name = playerQuery(opt<string>(opts, 'nome'));
+      const name = playerQuery(opt<string>(opts, 'nome'), loc);
       return deferred(i, ctx, async () => {
-        const found = await resolvePlayer(env, ctx, name);
+        const found = await resolvePlayer(env, ctx, name, loc);
         if ('list' in found) return found.list;
-        return renderDossier(await getDossier(env, ctx, found.id));
+        return renderDossier(await getDossier(env, ctx, found.id), undefined, loc);
       });
     }
     case 'morte': {
-      const name = playerQuery(opt<string>(opts, 'nome'));
+      const name = playerQuery(opt<string>(opts, 'nome'), loc);
       return deferred(i, ctx, async () => {
-        const found = await resolvePlayer(env, ctx, name);
+        const found = await resolvePlayer(env, ctx, name, loc);
         if ('list' in found) return found.list;
         const autopsy = await getAutopsy(env, ctx, found.id);
-        return renderAutopsy(found, autopsy, await labelsFor(env, autopsy.rebuy.map((r) => r.id)));
+        return renderAutopsy(found, autopsy, await labelsFor(env, autopsy.rebuy.map((r) => r.id), loc), undefined, loc);
       });
     }
     case 'alerta':
@@ -317,29 +362,38 @@ async function command(i: Interaction, env: Env, ctx: ExecutionContext): Promise
       const days = Number(opt<number>(opts, 'dias') ?? 1) === 7 ? 7 : 1;
       return fastOrDeferred(i, ctx, async () => {
         const r = await getLosses(env, ctx, days, 10);
-        const needNames = r.items.slice(0, 10).filter((it) => !it.name || it.name === it.id).map((it) => it.id);
-        return renderLosses(r, await labelsFor(env, needNames));
+        // O `name` da API é o português: em espanhol todos os 10 passam pelas fatias names-es/.
+        const top = r.items.slice(0, 10);
+        const needNames = (loc === 'es' ? top : top.filter((it) => !it.name || it.name === it.id)).map((it) => it.id);
+        return renderLosses(r, await labelsFor(env, needNames, loc), loc);
       });
     }
     case 'guilda':
       return guildCommand(i, sub, opts, env, ctx);
     case 'hoje': {
-      const p = hojeParams(opts);
+      // Em espanhol o getHoje devolve título, passos, riscos e notas em espanhol (HojeParams.lang); em português a
+      // chamada fica como antes (sem lang). O texto fixo do embed sai do renderHoje na língua da interação.
+      const p: HojeParams = loc === 'es' ? { ...hojeParams(opts, loc), lang: 'es' } : hojeParams(opts, loc);
       // Retrato em cache responde na hora; frio (várias chamadas ao AODP) vira resposta adiada.
-      return fastOrDeferred(i, ctx, async () => renderHoje(await getHoje(env, ctx, p)));
+      return fastOrDeferred(i, ctx, async () => renderHoje(await getHoje(env, ctx, p), undefined, loc));
     }
     case 'ajuda':
-      return { type: R.MESSAGE, data: renderHelp() };
+      return { type: R.MESSAGE, data: renderHelp(loc) };
     default:
-      return { type: R.MESSAGE, data: notice('Comando desconhecido. Use /ajuda para ver a lista.') };
+      return {
+        type: R.MESSAGE,
+        data: notice(tx(loc, 'Comando desconhecido. Use /ajuda para ver a lista.', `Comando desconocido. Usa ${commandName('ajuda', loc)} para ver la lista.`)),
+      };
   }
 }
 
 /** Opções do /hoje → parâmetros do getHoje. Prata fora da faixa vira erro amigável; minutos fora da lista, 60. */
-export function hojeParams(opts: InteractionOption[]): HojeParams {
+export function hojeParams(opts: InteractionOption[], loc: Locale = 'pt'): HojeParams {
   const prata = Math.round(Number(opts.find((o) => o.name === 'prata')?.value));
   if (!Number.isFinite(prata) || prata < HOJE_PRATA_MIN || prata > HOJE_PRATA_MAX) {
-    throw new UserError(`Informe a prata entre ${HOJE_PRATA_MIN.toLocaleString('pt-BR')} e ${HOJE_PRATA_MAX.toLocaleString('pt-BR')}.`);
+    const min = HOJE_PRATA_MIN.toLocaleString(intlLocale(loc));
+    const max = HOJE_PRATA_MAX.toLocaleString(intlLocale(loc));
+    throw new UserError(tx(loc, `Informe a prata entre ${min} e ${max}.`, `Indica la plata entre ${min} y ${max}.`));
   }
   const m = Number(opts.find((o) => o.name === 'minutos')?.value);
   const minutos = (HOJE_MINUTOS as readonly number[]).includes(m) ? m : 60;
@@ -352,10 +406,12 @@ export function parseQuality(v: unknown): Quality {
   return (Number.isInteger(n) && n >= 1 && n <= 5 ? n : 1) as Quality;
 }
 
-function playerQuery(v: unknown): string {
+function playerQuery(v: unknown, loc: Locale = 'pt'): string {
   const q = String(v ?? '').trim();
   // Nomes do Albion têm de 3 a 16 caracteres; a busca do killboard não aceita menos.
-  if (q.length < 3) throw new UserError('Digite pelo menos 3 letras do nome do personagem.');
+  if (q.length < 3) {
+    throw new UserError(tx(loc, 'Digite pelo menos 3 letras do nome do personagem.', 'Escribe al menos 3 letras del nombre del personaje.'));
+  }
   return q;
 }
 
@@ -364,13 +420,22 @@ export async function resolvePlayer(
   env: Env,
   ctx: ExecutionContext,
   name: string,
+  loc: Locale = 'pt',
 ): Promise<{ id: string; name: string } | { list: MessageData }> {
   const { players } = await searchPlayers(env, ctx, name);
-  if (!players.length) throw new UserError(`Nenhum jogador chamado “${clamp(name, 40)}” no killboard do Americas.`);
+  if (!players.length) {
+    throw new UserError(
+      tx(
+        loc,
+        `Nenhum jogador chamado “${clamp(name, 40)}” no killboard do Americas.`,
+        `Ningún jugador llamado “${clamp(name, 40)}” en el killboard de Americas.`,
+      ),
+    );
+  }
   const exact = players.find((p) => p.name.toLowerCase() === name.toLowerCase());
   const pick = exact ?? (players.length === 1 ? players[0] : null);
   if (pick) return { id: pick.id, name: pick.name };
-  return { list: renderPlayerList(players, name) };
+  return { list: renderPlayerList(players, name, loc) };
 }
 
 async function alertCommand(
@@ -380,26 +445,30 @@ async function alertCommand(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<InteractionResponse> {
+  const loc = localeOf(i);
   const owner = ownerOf(i);
-  if (!owner) throw new UserError('Não consegui identificar o seu usuário do Discord.');
+  if (!owner) throw new UserError(tx(loc, 'Não consegui identificar o seu usuário do Discord.', 'No pude identificar tu usuario de Discord.'));
+  const listar = commandName('alerta listar', loc);
   switch (sub) {
     case 'criar': {
       const raw = String(opt<string>(opts, 'item') ?? '');
       const city = opt<string>(opts, 'cidade');
-      const cond = parseCondition(opt<string>(opts, 'condicao'), opt<number>(opts, 'valor'));
-      if (!city || !(ALERT_CITIES as readonly string[]).includes(city)) throw new UserError('Escolha uma cidade da lista.');
+      const cond = parseCondition(opt<string>(opts, 'condicao'), opt<number>(opts, 'valor'), loc);
+      if (!city || !(ALERT_CITIES as readonly string[]).includes(city)) {
+        throw new UserError(tx(loc, 'Escolha uma cidade da lista.', 'Elige una ciudad de la lista.'));
+      }
       const quality = parseQuality(opt<number>(opts, 'qualidade'));
       return fastOrDeferred(
         i,
         ctx,
         async () => {
-          const it = await resolveItem(env, raw, ctx);
+          const it = await resolveItem(env, raw, ctx, loc);
           const rule: AlertRule = await createAlert(env, { ...buildAlert(owner, it.id, city as City, quality, cond), itemName: it.label }).catch(
             (err: unknown) => {
-              throw alertError(err);
+              throw alertError(err, loc);
             },
           );
-          return renderAlertCreated(rule, it.label);
+          return renderAlertCreated(rule, it.label, loc);
         },
         true,
       );
@@ -410,56 +479,80 @@ async function alertCommand(
         ctx,
         async () => {
           const rules = await listAlerts(env, owner);
-          return renderAlertList(rules, await labelsFor(env, rules.map((r) => r.itemId)));
+          return renderAlertList(rules, await labelsFor(env, rules.map((r) => r.itemId), loc), undefined, loc);
         },
         true,
       );
     case 'apagar': {
       const id = String(opt<string>(opts, 'id') ?? '').trim();
-      if (!id) throw new UserError('Informe o identificador do alerta (veja em /alerta listar).');
+      if (!id) {
+        throw new UserError(
+          tx(loc, 'Informe o identificador do alerta (veja em /alerta listar).', `Indica el identificador de la alerta (míralo en ${listar}).`),
+        );
+      }
       return fastOrDeferred(
         i,
         ctx,
         async () =>
           (await deleteAlert(env, owner, id))
-            ? notice(`Alerta \`${clamp(id, 64)}\` apagado.`)
-            : notice(`Não achei um alerta seu com o identificador \`${clamp(id, 64)}\`. Veja em /alerta listar.`),
+            ? notice(tx(loc, `Alerta \`${clamp(id, 64)}\` apagado.`, `Alerta \`${clamp(id, 64)}\` borrada.`))
+            : notice(
+                tx(
+                  loc,
+                  `Não achei um alerta seu com o identificador \`${clamp(id, 64)}\`. Veja em /alerta listar.`,
+                  `No encontré ninguna alerta tuya con el identificador \`${clamp(id, 64)}\`. Míralo en ${listar}.`,
+                ),
+              ),
         true,
       );
     }
     default:
-      throw new UserError('Use /alerta criar, /alerta listar ou /alerta apagar.');
+      throw new UserError(
+        tx(
+          loc,
+          'Use /alerta criar, /alerta listar ou /alerta apagar.',
+          `Usa ${commandName('alerta criar', loc)}, ${listar} o ${commandName('alerta apagar', loc)}.`,
+        ),
+      );
   }
 }
 
 // ---------- /guilda e o botão de regear (Fase 2, módulo b) ----------
 
 /** Nome de guilda digitado: espaços repetidos viram um (o nome real pode ter espaços, ex.: "B A G R E"). */
-export function guildNameOpt(v: unknown, required: boolean): string | null {
+export function guildNameOpt(v: unknown, required: boolean, loc: Locale = 'pt'): string | null {
   const s = String(v ?? '').trim().replace(/\s+/g, ' ');
   if (!s) {
-    if (required) throw new UserError('Informe o nome exato da guilda.');
+    if (required) throw new UserError(tx(loc, 'Informe o nome exato da guilda.', 'Indica el nombre exacto del gremio.'));
     return null;
   }
-  if (s.length < 2 || s.length > 64) throw new UserError('O nome da guilda precisa ter de 2 a 64 caracteres.');
+  if (s.length < 2 || s.length > 64) {
+    throw new UserError(tx(loc, 'O nome da guilda precisa ter de 2 a 64 caracteres.', 'El nombre del gremio tiene que tener de 2 a 64 caracteres.'));
+  }
   return s;
 }
 
-function requireManage(i: Interaction): void {
+function requireManage(i: Interaction, loc: Locale): void {
   if (!canManageGuild(i.member?.permissions)) {
-    throw new UserError('Só quem tem a permissão Gerenciar Servidor pode configurar o killfeed da guilda.');
+    throw new UserError(
+      tx(
+        loc,
+        'Só quem tem a permissão Gerenciar Servidor pode configurar o killfeed da guilda.',
+        'Solo quien tiene el permiso Gestionar servidor puede configurar el killfeed del gremio.',
+      ),
+    );
   }
 }
 
 /** Nome de quem clicou, para o rótulo do botão desligado. */
-function displayName(i: Interaction): string {
+function displayName(i: Interaction, loc: Locale): string {
   const u = i.member?.user ?? i.user;
-  return i.member?.nick || u?.global_name || u?.username || 'um membro';
+  return i.member?.nick || u?.global_name || u?.username || tx(loc, 'um membro', 'un miembro');
 }
 
 /** Discord aceitou a mensagem de teste? 403/404 viram texto de orientação; o resto, erro genérico. */
-function assertPosted(status: number, channelId: string): void {
-  const problem = channelProblem(status, channelId);
+function assertPosted(status: number, channelId: string, loc: Locale): void {
+  const problem = channelProblem(status, channelId, loc);
   if (problem) throw new UserError(problem);
   if (status < 200 || status >= 300) throw new Error(`discord: não consegui postar no canal (${status})`);
 }
@@ -471,20 +564,36 @@ async function guildCommand(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<InteractionResponse> {
+  const loc = localeOf(i);
   const guildId = i.guild_id;
   const owner = ownerOf(i);
-  if (!guildId || !i.member || !owner) throw new UserError('Use /guilda dentro de um servidor do Discord.');
+  if (!guildId || !i.member || !owner) {
+    throw new UserError(
+      tx(loc, 'Use /guilda dentro de um servidor do Discord.', `Usa ${commandName('guilda', loc)} dentro de un servidor de Discord.`),
+    );
+  }
+  const configurar = commandName('guilda configurar', loc);
   switch (sub) {
     case 'configurar': {
-      requireManage(i);
-      const name = guildNameOpt(opt<string>(opts, 'nome'), true) as string;
+      requireManage(i, loc);
+      const name = guildNameOpt(opt<string>(opts, 'nome'), true, loc) as string;
       const channelId = String(opt<string>(opts, 'canal') ?? '');
-      if (!/^\d{15,22}$/.test(channelId)) throw new UserError('Escolha um canal de texto do servidor.');
+      if (!/^\d{15,22}$/.test(channelId)) throw new UserError(tx(loc, 'Escolha um canal de texto do servidor.', 'Elige un canal de texto del servidor.'));
       // A opção CHANNEL do Discord sempre traz o canal em resolved: sem ele, o pedido não veio do seletor do servidor.
       const ch = i.data?.resolved?.channels?.[channelId];
-      if (!ch) throw new UserError('Escolha um canal de texto deste servidor na lista do comando.');
+      if (!ch) {
+        throw new UserError(
+          tx(loc, 'Escolha um canal de texto deste servidor na lista do comando.', 'Elige un canal de texto de este servidor en la lista del comando.'),
+        );
+      }
       if (!(FEED_CHANNEL_TYPES as readonly number[]).includes(ch.type)) {
-        throw new UserError('Escolha um canal de texto ou de anúncios (não de voz, fórum ou categoria).');
+        throw new UserError(
+          tx(
+            loc,
+            'Escolha um canal de texto ou de anúncios (não de voz, fórum ou categoria).',
+            'Elige un canal de texto o de anuncios (no de voz, foro ni categoría).',
+          ),
+        );
       }
       return deferred(
         i,
@@ -496,11 +605,15 @@ async function guildCommand(
             findAlbionGuild(ctx, name, CONFIGURE_SEARCH_TIMEOUT_MS),
             channelInGuild(env, channelId, guildId),
           ]);
-          if (sameGuild === false) throw new UserError('Esse canal não é deste servidor. Escolha um canal de texto daqui.');
-          if (Array.isArray(found)) return renderGuildChoices(found, name);
+          if (sameGuild === false) {
+            throw new UserError(
+              tx(loc, 'Esse canal não é deste servidor. Escolha um canal de texto daqui.', 'Ese canal no es de este servidor. Elige un canal de texto de aquí.'),
+            );
+          }
+          if (Array.isArray(found)) return renderGuildChoices(found, name, loc);
           // A mensagem de boas-vindas prova que o bot está no servidor e pode escrever no canal.
-          const posted = await botPostMessage(env, channelId, renderFeedWelcome(found.name, owner));
-          assertPosted(posted.status, channelId);
+          const posted = await botPostMessage(env, channelId, renderFeedWelcome(found.name, owner, loc));
+          assertPosted(posted.status, channelId, loc);
           try {
             await saveGuildFeed(env, { guildIdDiscord: guildId, channelId, guildName: found.name, albionGuildId: found.id, createdBy: owner });
           } catch (err) {
@@ -508,57 +621,80 @@ async function guildCommand(
             if (posted.id) await botDelete(env, channelId, posted.id);
             throw err;
           }
-          return renderFeedConfigured(found, channelId);
+          return renderFeedConfigured(found, channelId, loc);
         },
         true,
       );
     }
     case 'feed ligar':
     case 'feed desligar': {
-      requireManage(i);
+      requireManage(i, loc);
       const enable = sub === 'feed ligar';
       return fastOrDeferred(
         i,
         ctx,
         async () => {
           const feed: GuildFeed | null = await getGuildFeed(env, guildId);
-          if (!feed) throw new UserError('Este servidor ainda não tem guilda configurada. Use /guilda configurar.');
-          if (enable) assertPosted(await botPost(env, feed.channelId, renderFeedWelcome(feed.guildName, owner)), feed.channelId);
+          if (!feed) {
+            throw new UserError(
+              tx(
+                loc,
+                'Este servidor ainda não tem guilda configurada. Use /guilda configurar.',
+                `Este servidor todavía no tiene un gremio configurado. Usa ${configurar}.`,
+              ),
+            );
+          }
+          if (enable) assertPosted(await botPost(env, feed.channelId, renderFeedWelcome(feed.guildName, owner, loc)), feed.channelId, loc);
           const updated = await setGuildFeedEnabled(env, feed, enable);
-          return renderFeedToggled(updated.guildName, updated.channelId, enable);
+          return renderFeedToggled(updated.guildName, updated.channelId, enable, loc);
         },
         true,
       );
     }
     case 'resumo': {
-      const typed = guildNameOpt(opt<string>(opts, 'nome'), false);
+      const typed = guildNameOpt(opt<string>(opts, 'nome'), false, loc);
       return deferred(i, ctx, async () => {
         const feed = await getGuildFeed(env, guildId).catch((err: unknown) => {
           console.warn('discord: feed da guilda indisponível', String(err));
           return null;
         });
         const name = typed ?? feed?.guildName;
-        if (!name) throw new UserError('Informe o nome da guilda ou configure uma com /guilda configurar.');
-        return renderGuildSummary(await getGuild(env, ctx, name), feedWarning(feed));
+        if (!name) {
+          throw new UserError(
+            tx(loc, 'Informe o nome da guilda ou configure uma com /guilda configurar.', `Indica el nombre del gremio o configura uno con ${configurar}.`),
+          );
+        }
+        return renderGuildSummary(await getGuild(env, ctx, name), feedWarning(feed, loc), loc);
       });
     }
     default:
-      throw new UserError('Use /guilda configurar, /guilda feed ligar, /guilda feed desligar ou /guilda resumo.');
+      throw new UserError(
+        tx(
+          loc,
+          'Use /guilda configurar, /guilda feed ligar, /guilda feed desligar ou /guilda resumo.',
+          `Usa ${configurar}, ${commandName('guilda feed ligar', loc)}, ${commandName('guilda feed desligar', loc)} o ${commandName('guilda resumo', loc)}.`,
+        ),
+      );
   }
 }
 
 /** Botão "Pedir regear" (custom_id regear:<evento>:<vítima>) das mortes postadas pelo killfeed. */
 function component(i: Interaction, env: Env, ctx: ExecutionContext): InteractionResponse {
+  const loc = localeOf(i);
   const parsed = parseRegearId(i.data?.custom_id);
-  if (!parsed) return { type: R.MESSAGE, data: notice('Este botão não é mais válido.') };
+  if (!parsed) return { type: R.MESSAGE, data: notice(tx(loc, 'Este botão não é mais válido.', 'Este botón ya no es válido.')) };
   const clicker = ownerOf(i);
-  if (!clicker || !i.guild_id) return { type: R.MESSAGE, data: notice('Use o botão dentro do servidor da guilda.') };
+  if (!clicker || !i.guild_id) {
+    return { type: R.MESSAGE, data: notice(tx(loc, 'Use o botão dentro do servidor da guilda.', 'Usa el botón dentro del servidor del gremio.')) };
+  }
   const work = async (): Promise<MessageData> => {
     const r = await loadRegear(ctx, parsed.eventId, parsed.victimId).catch((err: unknown) => {
-      if (err instanceof GameinfoError && err.kind === 'not_found') throw new UserError('Essa morte não está mais no killboard oficial.');
+      if (err instanceof GameinfoError && err.kind === 'not_found') {
+        throw new UserError(tx(loc, 'Essa morte não está mais no killboard oficial.', 'Esa muerte ya no está en el killboard oficial.'));
+      }
       throw err;
     });
-    const nameOf = await labelsFor(env, r.rebuy.map((x) => x.id));
+    const nameOf = await labelsFor(env, r.rebuy.map((x) => x.id), loc);
     return renderRegear(
       {
         time: r.event.time,
@@ -569,6 +705,7 @@ function component(i: Interaction, env: Env, ctx: ExecutionContext): Interaction
       },
       clicker,
       nameOf,
+      loc,
     );
   };
   const original = i.message?.components;
@@ -576,7 +713,11 @@ function component(i: Interaction, env: Env, ctx: ExecutionContext): Interaction
     // Desliga o botão NA RESPOSTA ao clique (type 7, antes de qualquer espera): um segundo clique, do mesmo membro ou
     // de outro, não gera outro pedido nem outra ida à gameinfo. A lista sai depois, num followup público.
     ctx.waitUntil(deliverRegear(i, work, original));
-    return { type: R.UPDATE_MESSAGE, data: { components: disabledRegearComponents(original, `Regear pedido por ${displayName(i)}`) } };
+    const who = displayName(i, loc);
+    return {
+      type: R.UPDATE_MESSAGE,
+      data: { components: disabledRegearComponents(original, tx(loc, `Regear pedido por ${who}`, `Regear solicitado por ${who}`)) },
+    };
   }
   // Mensagem sem componentes (não deveria acontecer num clique de botão): adiado, sem desligar nada.
   return deferred(i, ctx, work);
@@ -605,17 +746,19 @@ async function deliverRegear(i: Interaction, work: () => Promise<MessageData>, o
       await webhook(i, 'POST', '', r.data);
       return;
     }
-    await webhook(i, 'POST', '', notice(friendly(r.err), true));
+    await webhook(i, 'POST', '', notice(friendly(r.err, localeOf(i)), true));
     await webhook(i, 'PATCH', '/messages/@original', { components: original });
   } catch (err) {
     console.error('discord: entrega do regear falhou', err);
   }
 }
 
-export function parseCondition(key: unknown, valor: unknown): AlertCondition {
+export function parseCondition(key: unknown, valor: unknown, loc: Locale = 'pt'): AlertCondition {
   const v = Number(valor);
-  if (typeof key !== 'string' || !Object.hasOwn(CONDITIONS, key)) throw new UserError('Escolha uma condição da lista.');
-  if (!Number.isFinite(v) || v <= 0) throw new UserError('O valor precisa ser um número maior que zero.');
+  if (typeof key !== 'string' || !Object.hasOwn(CONDITIONS, key)) {
+    throw new UserError(tx(loc, 'Escolha uma condição da lista.', 'Elige una condición de la lista.'));
+  }
+  if (!Number.isFinite(v) || v <= 0) throw new UserError(tx(loc, 'O valor precisa ser um número maior que zero.', 'El valor tiene que ser un número mayor que cero.'));
   switch (key as ConditionKey) {
     case 'abaixo':
       return { kind: 'below', price: Math.round(v) };
@@ -625,17 +768,35 @@ export function parseCondition(key: unknown, valor: unknown): AlertCondition {
       // Mesmos limites da API e do core (shared/alertLimits.ts); arredonda como eles.
       const pct = Math.round(v);
       if (pct < MEDIAN_PCT_MIN || pct > MEDIAN_PCT_MAX) {
-        throw new UserError(`Na condição da mediana, o valor é uma porcentagem de ${MEDIAN_PCT_MIN} a ${MEDIAN_PCT_MAX}.`);
+        throw new UserError(
+          tx(
+            loc,
+            `Na condição da mediana, o valor é uma porcentagem de ${MEDIAN_PCT_MIN} a ${MEDIAN_PCT_MAX}.`,
+            `En la condición de la mediana, el valor es un porcentaje de ${MEDIAN_PCT_MIN} a ${MEDIAN_PCT_MAX}.`,
+          ),
+        );
       }
       return { kind: 'belowMedianPct', pct };
     }
   }
 }
 
-/** createAlert lança mensagens PT-BR prontas (validação, limite por dono); falha de infraestrutura fica genérica. */
-export function alertError(err: unknown): unknown {
+/**
+ * createAlert lança mensagens PT-BR prontas (validação, limite por dono); falha de infraestrutura fica genérica.
+ * Em espanhol: o limite por dono (o único caso que o bot não valida antes) vira texto em espanhol; outra validação, que
+ * só viria em português do módulo de alertas, vira uma frase genérica em espanhol.
+ */
+export function alertError(err: unknown, loc: Locale = 'pt'): unknown {
   const msg = err instanceof Error ? err.message : '';
   if (msg && msg.length <= 200 && !/hub|falha ao|não implementado|fetch|timeout|internal/i.test(msg)) {
+    if (loc === 'es') {
+      const limit = /limite de (\d+)/i.exec(msg);
+      return new UserError(
+        limit
+          ? `No se pudo crear la alerta: llegaste al límite de ${limit[1]} alertas. Borra alguna con ${commandName('alerta apagar', loc)}.`
+          : 'No se pudo crear la alerta: revisa el objeto, la ciudad, la condición y el valor.',
+      );
+    }
     return new UserError(`Não deu para criar o alerta: ${msg.charAt(0).toLowerCase()}${msg.slice(1)}`);
   }
   return err;
@@ -657,28 +818,62 @@ export function buildAlert(owner: string, itemId: string, city: City, quality: Q
 
 // ---------- respostas ----------
 
-/** Texto amigável para qualquer erro (nunca detalhe interno). */
-export function friendly(err: unknown): string {
-  if (err instanceof UserError || err instanceof FeedError || err instanceof GuildNotFound) return err.message;
+/**
+ * Texto amigável para qualquer erro (nunca detalhe interno), na língua pedida. UserError já nasce na língua da
+ * interação; FeedError traz o espanhol junto; GuildNotFound (insightsA, só em português) é refeito aqui.
+ */
+export function friendly(err: unknown, loc: Locale = 'pt'): string {
+  if (err instanceof UserError) return err.message;
+  if (err instanceof FeedError) return err.textFor(loc);
+  if (err instanceof GuildNotFound) {
+    if (loc !== 'es') return err.message;
+    const name = /“(.*)”/.exec(err.message)?.[1];
+    return name
+      ? `No encontré el gremio “${name}” en el servidor Americas. El nombre tiene que ser exacto.`
+      : 'No encontré ese gremio en el servidor Americas. El nombre tiene que ser exacto.';
+  }
+  const again = tx(loc, 'Não consegui completar o pedido agora. Tente de novo em instantes.', 'No pude completar la solicitud ahora. Inténtalo de nuevo en unos instantes.');
   // Antes da regex abaixo: "erro 502" do KillLog não é a gameinfo demorando.
   if (err instanceof CoreError) {
     console.error('discord: KillLog', err.message);
-    return 'O histórico de kills da Guarita está indisponível agora. Tente de novo em alguns minutos.';
+    return tx(
+      loc,
+      'O histórico de kills da Guarita está indisponível agora. Tente de novo em alguns minutos.',
+      'El historial de asesinatos de Guarita no está disponible ahora. Inténtalo de nuevo en unos minutos.',
+    );
   }
   if (err instanceof GameinfoError) {
     console.error('discord: gameinfo', err.kind, err.message);
-    if (err.kind === 'not_found') return 'Não encontrei isso no killboard oficial do Albion.';
-    if (err.kind === 'timeout') return 'O killboard oficial do Albion demorou demais para responder. Tente de novo em alguns minutos.';
-    if (err.kind === 'upstream') return 'O killboard oficial do Albion está instável agora. Tente de novo em alguns minutos.';
-    return 'Não consegui completar o pedido agora. Tente de novo em instantes.';
+    if (err.kind === 'not_found') return tx(loc, 'Não encontrei isso no killboard oficial do Albion.', 'No encontré eso en el killboard oficial de Albion.');
+    if (err.kind === 'timeout') {
+      return tx(
+        loc,
+        'O killboard oficial do Albion demorou demais para responder. Tente de novo em alguns minutos.',
+        'El killboard oficial de Albion tardó demasiado en responder. Inténtalo de nuevo en unos minutos.',
+      );
+    }
+    if (err.kind === 'upstream') {
+      return tx(
+        loc,
+        'O killboard oficial do Albion está instável agora. Tente de novo em alguns minutos.',
+        'El killboard oficial de Albion está inestable ahora. Inténtalo de nuevo en unos minutos.',
+      );
+    }
+    return again;
   }
   console.error('discord: erro no comando', err);
   const msg = err instanceof Error ? err.message : String(err);
-  if (/não implementado/i.test(msg)) return 'Esta função ainda está sendo preparada. Tente de novo mais tarde.';
-  if (/timeout|timed out|abort|502|503|504/i.test(msg)) {
-    return 'A fonte de dados do Albion demorou para responder. Tente de novo em alguns minutos.';
+  if (/não implementado/i.test(msg)) {
+    return tx(loc, 'Esta função ainda está sendo preparada. Tente de novo mais tarde.', 'Esta función todavía se está preparando. Inténtalo de nuevo más tarde.');
   }
-  return 'Não consegui completar o pedido agora. Tente de novo em instantes.';
+  if (/timeout|timed out|abort|502|503|504/i.test(msg)) {
+    return tx(
+      loc,
+      'A fonte de dados do Albion demorou para responder. Tente de novo em alguns minutos.',
+      'La fuente de datos de Albion tardó en responder. Inténtalo de nuevo en unos minutos.',
+    );
+  }
+  return again;
 }
 
 /** Responde direto se o trabalho couber no prazo; senão adia e entrega por followup. */
@@ -702,7 +897,7 @@ export async function fastOrDeferred(
     ctx.waitUntil(deliver(i, job, ephemeral, deadlineMs));
     return deferredAck(ephemeral);
   }
-  if (!first.ok) return { type: R.MESSAGE, data: notice(friendly(first.err)) };
+  if (!first.ok) return { type: R.MESSAGE, data: notice(friendly(first.err, localeOf(i))) };
   return { type: R.MESSAGE, data: ephemeral ? { ...first.data, flags: EPHEMERAL } : first.data };
 }
 
@@ -740,7 +935,7 @@ async function deliver(i: Interaction, job: Promise<JobResult>, ephemeral: boole
       await webhook(i, 'PATCH', '/messages/@original', data);
       return;
     }
-    const text = friendly(r.err);
+    const text = friendly(r.err, localeOf(i));
     if (!ephemeral) {
       try {
         await webhook(i, 'DELETE', '/messages/@original');

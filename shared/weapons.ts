@@ -112,3 +112,20 @@ export function weaponFamily(id: string | null | undefined): WeaponFamily {
 export function weaponLabelPt(id: string | null | undefined): string {
   return WEAPON_LABEL_PT[weaponFamily(id)];
 }
+
+// Família de arma em espanhol, com o termo dos nomes de item do cliente (items-index-es.json: "Vara del iniciado",
+// "Bastón ígneo…", "Guantes de peleador…"). Usado pelo site (src/lib/player/format.ts) e pelo bot.
+export const WEAPON_LABEL_ES: Record<WeaponFamily, string> = {
+  sword: 'Espada', bow: 'Arco', crossbow: 'Ballesta', dagger: 'Daga', spear: 'Lanza', axe: 'Hacha', mace: 'Maza',
+  hammer: 'Martillo', quarterstaff: 'Vara', knuckles: 'Guantes', firestaff: 'Bastón ígneo', froststaff: 'Bastón de hielo',
+  arcanestaff: 'Bastón arcano', holystaff: 'Bastón sagrado', naturestaff: 'Bastón natural', cursedstaff: 'Bastón maldito',
+  shapeshifter: 'Cambiaformas', tool: 'Herramienta de recolección', other: 'Otra',
+};
+
+const FAMILY_BY_PT = new Map(Object.entries(WEAPON_LABEL_PT).map(([fam, pt]) => [pt, fam as WeaponFamily]));
+
+/** Rótulo em espanhol a partir do rótulo PT da API (labelPt); desconhecido devolve o PT. */
+export function weaponLabelEsFromPt(labelPt: string): string {
+  const fam = FAMILY_BY_PT.get(labelPt);
+  return fam ? WEAPON_LABEL_ES[fam] : labelPt;
+}

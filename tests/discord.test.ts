@@ -16,7 +16,9 @@ const m = vi.hoisted(() => ({
   deleteAlert: vi.fn(),
   acSearch: vi.fn(),
   acLabel: vi.fn(),
+  getHoje: vi.fn(),
 }));
+vi.mock('../worker/api/hoje', () => ({ getHoje: m.getHoje }));
 vi.mock('../worker/lib/items', () => ({ loadItemsIndex: m.loadItemsIndex }));
 // O bot busca item só pelas fatias pequenas (worker/lib/acIndex.ts, teste próprio em acIndex.test.ts).
 vi.mock('../worker/lib/acIndex', () => ({ acSearch: m.acSearch, acLabel: m.acLabel }));
@@ -52,6 +54,7 @@ import {
 import { COMMANDS, QUALITY_NAMES } from '../worker/discord/commands';
 import { CoreError, GuildNotFound } from '../worker/api/insightsA';
 import { GameinfoError } from '../worker/lib/gameinfo';
+import { readPublic } from './helpers/public';
 import { QUALITY_LABEL } from '../shared/quality';
 import {
   AMBER,
@@ -65,8 +68,15 @@ import {
   renderClock,
   renderPreco,
   renderDossier,
+  FOOTER_ES,
+  renderHelp,
+  renderAlertList,
   type MessageData,
 } from '../worker/discord/render';
+import { QUALITY_NAMES_ES, ES_LOCALES, commandName } from '../worker/discord/commands';
+import { discordLocale, siteUrl } from '../worker/discord/i18n';
+import { channelProblem, feedWarning, FeedError } from '../worker/discord/guild';
+import { QUALITY_LABEL_ES } from '../src/lib/format';
 
 // ---------- utilidades ----------
 
@@ -538,5 +548,239 @@ describe('render', () => {
     expect(f['Fama']).toContain('1.234.567');
     expect(f['Estilo']).toContain('40%');
     expect(e.description).toContain('Guilda \\[BR\\]');
+  });
+  it('em espanhol: festividade, família de arma e IP sem português', () => {
+    const now = Date.parse('2026-10-29T15:00:00Z');
+    const c: ClockResponse = {
+      now: new Date(now).toISOString(),
+      server: { status: 'online', message: 'Servidor no ar', checkedAt: new Date(now - 60000).toISOString() },
+      festivities: [
+        { kind: 2, category: 'GENERAL', name: 'COMMON_CROSSBOW', labelPt: 'Bônus de produção: bestas comuns', start: '2026-10-29T10:00:00Z', end: '2026-10-30T10:00:00Z' },
+        { kind: 1, category: 'ACTIVITIES', name: 'FACTIONPOINTS', labelPt: 'Pontos de facção em dobro', start: '2026-10-31T10:00:00Z', end: '2026-11-01T10:00:00Z' },
+      ],
+      gold: { price: 4120, at: new Date(now).toISOString(), p30: 4000, trend: 'subindo' },
+      premiumSilver: 15450000,
+      season: { name: 'Temporada 34', end: '2026-11-09T11:00:00Z', approx: true },
+    };
+    const clock = JSON.stringify(renderClock(c, now, 'es'));
+    expect(clock).toContain('Bonificación de producción: ballestas comunes');
+    expect(clock).toContain('Puntos de facción dobles');
+    expect(clock).not.toMatch(/Bônus|bestas|Pontos de facção/);
+    const d = { ...dossier(), avgIp: 1250, weapons: [{ type: 'cursedstaff', labelPt: 'Cajado amaldiçoado', count: 5 }] };
+    const dos = JSON.stringify(renderDossier(d, undefined, 'es'));
+    expect(dos).toContain('Bastón maldito (5×)');
+    expect(dos).toContain('IP medio');
+    expect(dos).toContain('Dosier');
+    expect(dos).not.toMatch(/Cajado|Dossier|Poder de objeto/);
+    // Português intacto.
+    expect(JSON.stringify(renderDossier(d))).toContain('Cajado amaldiçoado (5×)');
+  });
+});
+
+// ---------- espanhol (interaction.locale "es…") ----------
+
+describe('espanhol', () => {
+  const es = (i: Interaction, locale = 'es-ES'): Interaction => ({ ...i, locale });
+  const ES_LABELS: Record<string, string> = { 'T4_BAG@1': 'Bolsa del iniciado (T4.1)' };
+  const acEs = () =>
+    m.acLabel.mockImplementation(async (_env: unknown, id: string, locale?: string) =>
+      (locale === 'es' ? ES_LABELS : LABELS)[id.toUpperCase()] ?? null,
+    );
+
+  it('locale do Discord: só "es…" vira espanhol', () => {
+    expect(discordLocale('es-ES')).toBe('es');
+    expect(discordLocale('es-419')).toBe('es');
+    expect(discordLocale('pt-BR')).toBe('pt');
+    expect(discordLocale('en-US')).toBe('pt');
+    expect(discordLocale(undefined)).toBe('pt');
+    expect(siteUrl('es', '/item/X?q=2')).toBe('https://guarita.pages.dev/es/item/X?q=2');
+    expect(siteUrl('es', '/')).toBe('https://guarita.pages.dev/es');
+    expect(siteUrl('pt', '/')).toBe('https://guarita.pages.dev');
+  });
+
+  it('/preco em es-ES: embed, botão, números e link em espanhol, nome do item pelas fatias ES', async () => {
+    acEs();
+    m.getItem.mockResolvedValue(ITEM);
+    const r = await dispatch(es(cmd('preco', [{ name: 'item', type: 3, value: 'T4_BAG@1' }])), env(), makeCtx().ctx);
+    const data = r.data as MessageData;
+    const e = data.embeds![0];
+    expect(m.acLabel).toHaveBeenCalledWith(expect.anything(), 'T4_BAG@1', 'es');
+    expect(e.title).toBe('Bolsa del iniciado (T4.1) · Normal');
+    expect(e.url).toBe('https://guarita.pages.dev/es/item/T4_BAG%401');
+    expect(e.footer?.text).toBe(FOOTER_ES);
+    expect(e.description).toContain('Más barato: **Martlock** por **4,572** de plata');
+    expect(e.fields!.map((f) => f.name)).toContain('Mercado Negro (compra)');
+    const flip = e.fields!.find((f) => f.name === 'Mejor reventa al Mercado Negro')!;
+    expect(flip.value).toContain('vende en el Mercado Negro');
+    expect(data.components?.[0].components[0]).toMatchObject({ label: 'Ver en Guarita', url: e.url });
+    expect(JSON.stringify(data)).not.toMatch(/prata|Ver na Guarita|Melhor flip/);
+  });
+
+  it('pt-BR explícito sai idêntico ao de antes (sem locale)', async () => {
+    m.getItem.mockResolvedValue(ITEM);
+    const a = await dispatch({ ...cmd('preco', [{ name: 'item', type: 3, value: 'T4_BAG@1' }]), locale: 'pt-BR' }, env(), makeCtx().ctx);
+    const b = await dispatch(cmd('preco', [{ name: 'item', type: 3, value: 'T4_BAG@1' }]), env(), makeCtx().ctx);
+    expect(a).toEqual(b);
+    expect(m.acLabel).toHaveBeenCalledWith(expect.anything(), 'T4_BAG@1');
+    expect((a.data as MessageData).embeds![0].title).toBe('Bolsa do Adepto (T4.1) · Normal');
+  });
+
+  it('autocomplete em es-419 busca nas fatias ES', async () => {
+    m.acSearch.mockResolvedValueOnce([{ id: 'T4_BAG@1', label: 'Bolsa del iniciado (T4.1)' }]);
+    const i: Interaction = { ...es(cmd('preco', [{ name: 'item', type: 3, value: 'bolsa', focused: true }]), 'es-419'), type: 4 };
+    const r = await dispatch(i, env(), makeCtx().ctx);
+    expect(m.acSearch).toHaveBeenCalledWith(expect.anything(), 'bolsa', 25, 'es');
+    expect(r).toEqual({ type: 8, data: { choices: [{ name: 'Bolsa del iniciado (T4.1)', value: 'T4_BAG@1' }] } });
+  });
+
+  it('erros em espanhol: item não achado, nome curto, jogador inexistente no adiado', async () => {
+    const r = await dispatch(es(cmd('preco', [{ name: 'item', type: 3, value: 'xyzzy' }])), env(), makeCtx().ctx);
+    expect((r.data as MessageData).content).toMatch(/^No encontré el objeto “xyzzy”/);
+    expect(m.acSearch).toHaveBeenCalledWith(expect.anything(), 'xyzzy', 1, 'es');
+    const curto = await dispatch(es(cmd('dossie', [{ name: 'nome', type: 3, value: 'ab' }])), env(), makeCtx().ctx);
+    expect((curto.data as MessageData).content).toBe('Escribe al menos 3 letras del nombre del personaje.');
+    const calls = mockFetch();
+    const { ctx, flush } = makeCtx();
+    m.searchPlayers.mockResolvedValue({ players: [] });
+    await dispatch(es(cmd('morte', [{ name: 'nome', type: 3, value: 'Ninguem' }])), env(), ctx);
+    await flush();
+    expect((calls[1].body as MessageData).content).toMatch(/^Ningún jugador llamado “Ninguem”/);
+  });
+
+  it('erro genérico e de fonte em espanhol, sem vazar detalhe', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(friendly(new Error('TypeError at /secret'), 'es')).toBe('No pude completar la solicitud ahora. Inténtalo de nuevo en unos instantes.');
+    expect(friendly(new GameinfoError('timeout', 'x'), 'es')).toMatch(/tardó demasiado/);
+    expect(friendly(new GameinfoError('upstream', 'x'), 'es')).toMatch(/inestable/);
+    expect(friendly(new CoreError('erro 502'), 'es')).toMatch(/historial de asesinatos de Guarita/);
+    expect(friendly(new GuildNotFound('BAGRE'), 'es')).toBe('No encontré el gremio “BAGRE” en el servidor Americas. El nombre tiene que ser exacto.');
+    expect(friendly(new FeedError('cheio', 'lleno'), 'es')).toBe('lleno');
+    expect(friendly(new FeedError('cheio', 'lleno'))).toBe('cheio');
+    expect(friendly(new FeedError('só pt'), 'es')).toBe('só pt');
+  });
+
+  it('limite de alertas do módulo de alertas vira texto em espanhol', async () => {
+    m.createAlert.mockRejectedValue(new Error('Limite de 20 alertas por dono atingido'));
+    const criar = es(cmd('alerta', [{ name: 'criar', type: 1, options: [
+      { name: 'item', type: 3, value: 'T4_BAG@1' }, { name: 'cidade', type: 3, value: 'Martlock' },
+      { name: 'condicao', type: 3, value: 'abaixo' }, { name: 'valor', type: 10, value: 10 },
+    ] }]));
+    const r = await dispatch(criar, env(), makeCtx().ctx);
+    expect((r.data as MessageData).content).toBe('No se pudo crear la alerta: llegaste al límite de 20 alertas. Borra alguna con /alerta borrar.');
+    expect(() => parseCondition('abaixo_mediana', 95, 'es')).toThrow(/porcentaje de 1 a 90/);
+  });
+
+  it('ajuda em espanhol cita os comandos com o nome em espanhol e linka /es', async () => {
+    const r = await dispatch(es(cmd('ajuda')), env(), makeCtx().ctx);
+    const data = r.data as MessageData;
+    const e = data.embeds![0];
+    expect(data.flags).toBe(64);
+    expect(e.title).toBe('Guarita en Discord');
+    const names = e.fields!.map((f) => f.name).join(' ');
+    for (const c of ['/precio', '/reloj', '/dosier', '/muerte', '/perdidas', '/hoy', '/gremio']) expect(names).toContain(c);
+    expect(JSON.stringify(e)).toContain('https://guarita.pages.dev/es/permitido');
+    expect(data.components?.[0].components[0]).toMatchObject({ label: 'Abrir Guarita', url: 'https://guarita.pages.dev/es' });
+    // português continua com a ajuda de antes
+    expect(renderHelp().embeds![0].title).toBe('Guarita no Discord');
+  });
+
+  it('lista de alertas, datas e idade em espanhol (horário de Brasília em 24 h)', () => {
+    const e = renderAlertList([rule()], () => 'Bolsa del iniciado (T4.1)', Date.now(), 'es').embeds![0];
+    expect(e.title).toBe('Tus alertas (1)');
+    expect(e.description).toContain('Martlock · por debajo de 4,000 de plata · todavía sin avisos');
+    expect(e.description).toContain('/alerta borrar id:<identificador>');
+    expect(fmtDateBr('2026-11-09T21:00:00Z', 'es')).toBe('09/11/2026 18:00');
+    expect(fmtDateBr('2026-11-09T21:00:00Z')).toBe('09/11/2026 18:00');
+    expect(ageLabel(12, 'es')).toBe('hace 12 min');
+    expect(ageLabel(4 * 1440, 'es')).toBe('hace 4 días');
+    expect(ageLabel(null, 'es')).toBe('sin fecha');
+  });
+
+  it('textos do killfeed em espanhol (permissões com o nome do Discord em espanhol)', () => {
+    expect(channelProblem(403, '1', 'es')).toMatch(/Ver canal, Enviar mensajes e Insertar enlaces/);
+    expect(channelProblem(404, '1', 'es')).toMatch(/^No encontré el canal/);
+    const feed = { channelId: '1', enabled: false, lastError: 'canal_sumiu' } as Parameters<typeof feedWarning>[0];
+    expect(feedWarning(feed, 'es')).toMatch(/\/gremio configurar/);
+    expect(feedWarning(feed)).toMatch(/\/guilda configurar/);
+  });
+
+  it('nome do comando como quem lê vê', () => {
+    expect(commandName('guilda feed desligar', 'es')).toBe('/gremio feed desactivar');
+    expect(commandName('alerta listar', 'es')).toBe('/alerta listar');
+    expect(commandName('preco', 'es')).toBe('/precio');
+    expect(commandName('guilda feed desligar')).toBe('/guilda feed desligar');
+  });
+
+  it('o site em espanhol cita os comandos com os nomes que o cliente em espanhol mostra', async () => {
+    // Fonte das telas lida do disco pelo mesmo helper dos arquivos de public/ (o tsconfig não carrega @types/node).
+    const src = (p: string) => readPublic(`/../src/routes/${p}`) ?? '';
+    // Tabela espelho escrita nas telas (o site não importa commands.ts): precisa bater com os name_localizations.
+    expect(commandName('preco', 'es')).toBe('/precio');
+    expect(commandName('relogio', 'es')).toBe('/reloj');
+    expect(commandName('alerta criar', 'es')).toBe('/alerta crear');
+    const preco = COMMANDS.find((c) => c.name === 'preco');
+    expect(preco?.options?.find((o) => o.name === 'item')?.name_localizations?.['es-419']).toBe('objeto');
+    expect(src('Item.svelte')).toContain('`/precio objeto:${n}`');
+    expect(src('Alertas.svelte')).toContain('<code>/alerta crear</code>');
+    expect(src('Inicio.svelte')).toContain('<code>/precio</code> muestra');
+    expect(src('Inicio.svelte')).toContain('<code>/reloj</code> muestra');
+  });
+
+  it('comandos: traduções válidas para o Discord (minúsculas, sem espaço, até 100 caracteres, sem nome repetido)', () => {
+    type Node = {
+      name: string;
+      description?: string;
+      name_localizations?: Record<string, string>;
+      description_localizations?: Record<string, string>;
+      options?: Node[];
+      choices?: Node[];
+    };
+    const keys = [...ES_LOCALES].sort();
+    const walk = (o: Node, isChoice = false) => {
+      if (o.name_localizations) {
+        expect(Object.keys(o.name_localizations).sort()).toEqual(keys);
+        for (const v of Object.values(o.name_localizations)) {
+          if (isChoice) expect(v.length).toBeLessThanOrEqual(100);
+          else expect(v).toMatch(/^[-_a-z0-9]{1,32}$/);
+        }
+      }
+      if (!isChoice) {
+        // toda descrição tem a versão em espanhol
+        expect(Object.keys(o.description_localizations ?? {}).sort()).toEqual(keys);
+        for (const v of Object.values(o.description_localizations!)) {
+          expect(v.length).toBeGreaterThan(0);
+          expect(v.length).toBeLessThanOrEqual(100);
+        }
+      }
+      const kids = o.options ?? [];
+      const esNames = kids.map((k) => k.name_localizations?.['es-419'] ?? k.name);
+      expect(new Set(esNames).size).toBe(esNames.length);
+      kids.forEach((k) => walk(k));
+      (o.choices ?? []).forEach((c) => walk(c, true));
+    };
+    COMMANDS.forEach((c) => walk(c as Node));
+    const top = COMMANDS.map((c) => c.name_localizations?.['es-419'] ?? c.name);
+    expect(new Set(top).size).toBe(top.length);
+  });
+
+  it('/hoje em espanhol pede o retrato com lang "es"; em português, sem lang (como antes)', async () => {
+    const resp = { prata: 50_000, minutos: 60, premium: false, fetchedAt: new Date().toISOString(), opcoes: [], notas: [] };
+    m.getHoje.mockResolvedValue(resp);
+    const opts = [{ name: 'prata', type: 4, value: 50_000 }];
+    const r = await dispatch(es(cmd('hoje', opts), 'es-419'), env(), makeCtx().ctx);
+    expect(m.getHoje).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), { prata: 50_000, minutos: 60, premium: false, lang: 'es' });
+    const e = (r.data as MessageData).embeds![0];
+    expect(e.title).toBe('Qué hacer hoy');
+    expect(e.url).toBe('https://guarita.pages.dev/es/hoje?prata=50000&minutos=60&premium=0');
+    expect(e.description).toContain('Con **50,000 de plata**, 60 min y sin Premium.');
+    const pt = await dispatch(cmd('hoje', opts), env(), makeCtx().ctx);
+    expect(m.getHoje).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), { prata: 50_000, minutos: 60, premium: false });
+    expect((pt.data as MessageData).embeds![0].title).toBe('O que fazer hoje');
+    const fora = await dispatch(es(cmd('hoje', [{ name: 'prata', type: 4, value: 10 }])), env(), makeCtx().ctx);
+    expect((fora.data as MessageData).content).toBe('Indica la plata entre 1,000 y 100,000,000,000.');
+  });
+
+  it('qualidades em espanhol iguais às do site (QUALITY_LABEL_ES)', () => {
+    expect(QUALITY_NAMES_ES).toEqual(QUALITY_LABEL_ES);
   });
 });

@@ -2,8 +2,9 @@
   // Barras horizontais simples (armas mais usadas, fama por área). Valor ao lado, sem depender de cor.
   import ItemIcon from './ItemIcon.svelte';
   import { fmtCompact } from './format';
+  import { tx } from '../i18n/index.svelte';
   type Row = { key: string; label: string; value: number; icon?: string };
-  let { rows, unit = '', empty = 'Sem dado.' }: { rows: Row[]; unit?: string; empty?: string } = $props();
+  let { rows, unit = '', empty }: { rows: Row[]; unit?: string; empty?: string } = $props();
   const max = $derived(Math.max(1, ...rows.map((r) => r.value)));
 </script>
 
@@ -20,7 +21,7 @@
     {/each}
   </ul>
 {:else}
-  <p class="muted small">{empty}</p>
+  <p class="muted small">{empty ?? tx('Sem dado.', 'Sin datos.')}</p>
 {/if}
 
 <style>

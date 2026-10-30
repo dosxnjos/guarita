@@ -6,6 +6,7 @@
   import LivePanel from '../lib/live/LivePanel.svelte';
   import LiveConfigForm from '../lib/live/LiveConfigForm.svelte';
   import { isConfigMode, parseLiveConfig } from '../lib/live/config';
+  import { tx } from '../lib/i18n/index.svelte';
 
   let { params: _params = {} }: { params?: Record<string, string> } = $props();
 
@@ -28,7 +29,7 @@
   });
 </script>
 
-<svelte:head><title>{configMode ? 'Painel de live para o OBS · Guarita' : 'Painel de live · Guarita'}</title></svelte:head>
+<svelte:head><title>{configMode ? tx('Painel de live para o OBS · Guarita', 'Panel para directos en OBS · Guarita') : tx('Painel de live · Guarita', 'Panel para directos · Guarita')}</title></svelte:head>
 
 {#if configMode}
   {#key search}<LiveConfigForm initial={search} />{/key}
@@ -46,7 +47,8 @@
   :global(html.live-obs body) { overflow: hidden; }
   :global(html.live-obs .topbar),
   :global(html.live-obs .footer),
-  :global(html.live-obs .skip-link) {
+  :global(html.live-obs .skip-link),
+  :global(html.live-obs .lang-hint) {
     display: none !important;
   }
   :global(html.live-obs main.wrap) { max-width: none; margin: 0; padding: 0; }

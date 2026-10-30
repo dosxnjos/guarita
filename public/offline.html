@@ -9,7 +9,7 @@
     <style>
       :root {
         --bg: #f5f2ec; --surface: #fffdf9; --ink: #221e18; --muted: #645d52; --line: #e2dacb;
-        --accent: #9a6416; --accent-ink: #fffdf9;
+        --accent: #8a5810; --accent-ink: #fffdf9;
         --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
       }
       @media (prefers-color-scheme: dark) {
@@ -42,6 +42,16 @@
       <p class="small">Os alertas que você já ativou continuam ativos; nada muda neles enquanto o aparelho está sem conexão.</p>
     </main>
     <script>
+      // O service worker devolve esta página também para /es/...: a língua vem do caminho, como no site.
+      if (/^\/es(\/|$)/.test(location.pathname)) {
+        document.documentElement.lang = 'es';
+        document.title = 'Sin conexión · Guarita';
+        document.querySelector('h1').textContent = 'Sin conexión a internet';
+        var ps = document.querySelectorAll('main p');
+        ps[0].textContent = 'La Guarita muestra precios y horarios en vivo, así que necesita internet para abrir esta página. Revisa la conexión e inténtalo de nuevo.';
+        ps[1].textContent = 'Las alertas que ya activaste siguen activas; nada cambia en ellas mientras el dispositivo está sin conexión.';
+        document.getElementById('retry').textContent = 'Intentar de nuevo';
+      }
       document.getElementById('retry').addEventListener('click', function () { location.reload(); });
       // Volta sozinho quando a conexão retorna.
       window.addEventListener('online', function () { location.reload(); });

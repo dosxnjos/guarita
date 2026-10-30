@@ -44,6 +44,7 @@
       "allow": [
         { "url": "https://guarita.pages.dev/*" },
         { "url": "https://raw.githubusercontent.com/dosxnjos/guarita/main/app/capture-codes.json" },
+        { "url": "https://raw.githubusercontent.com/dosxnjos/guarita/main/app/capture-codes.json.sig" },
         { "url": "https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/formatted/items.txt" },
         { "url": "https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/formatted/world.txt" }
       ]

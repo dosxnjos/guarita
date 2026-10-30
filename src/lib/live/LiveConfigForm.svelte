@@ -6,12 +6,13 @@
   import { ALL_CITIES } from '../../../shared/market';
   import { loadIndex } from '../itemsClient';
   import { go } from '../router';
-  import { tierFromId } from '../format';
+  import { cityName, tierFromId } from '../format';
+  import { getLocale, href, tx } from '../i18n/index.svelte';
   import SearchBox from '../ui/SearchBox.svelte';
   import ItemIcon from '../ui/ItemIcon.svelte';
   import LivePanel from './LivePanel.svelte';
   import {
-    LIVE_BLOCKS, LIVE_BLOCK_LABEL, LIVE_MAX_ITEMS, LIVE_SCALE_MAX, LIVE_SCALE_MIN, buildLiveUrl, parseGuild, parseLiveConfig,
+    LIVE_BLOCKS, liveBlockLabel, LIVE_MAX_ITEMS, LIVE_SCALE_MAX, LIVE_SCALE_MIN, buildLiveUrl, parseGuild, parseLiveConfig,
     type LiveBlock, type LiveConfig, type LiveTheme,
   } from './config';
 
@@ -44,7 +45,7 @@
     const t = setTimeout(() => (guild = parseGuild(g)), 700);
     return () => clearTimeout(t);
   });
-  const guildHint = $derived(guildDraft.trim() !== '' && parseGuild(guildDraft) === '' ? 'O nome precisa ter de 3 a 64 caracteres.' : '');
+  const guildHint = $derived(guildDraft.trim() !== '' && parseGuild(guildDraft) === '' ? tx('O nome precisa ter de 3 a 64 caracteres.', 'El nombre debe tener de 3 a 64 caracteres.') : '');
 
   let index = $state<ItemsIndex | null>(null);
   $effect(() => {
@@ -56,8 +57,8 @@
   let itemMsg = $state('');
   function addItem(hit: ItemHit) {
     itemMsg = '';
-    if (items.includes(hit.id)) { itemMsg = 'Esse item já está na lista.'; return; }
-    if (items.length >= LIVE_MAX_ITEMS) { itemMsg = `Até ${LIVE_MAX_ITEMS} itens por painel.`; return; }
+    if (items.includes(hit.id)) { itemMsg = tx('Esse item já está na lista.', 'Ese objeto ya está en la lista.'); return; }
+    if (items.length >= LIVE_MAX_ITEMS) { itemMsg = tx(`Até ${LIVE_MAX_ITEMS} itens por painel.`, `Hasta ${LIVE_MAX_ITEMS} objetos por panel.`); return; }
     items = [...items, hit.id];
     blocks.precos = true;
   }
@@ -86,11 +87,12 @@
       }),
     ),
   );
-  const url = $derived(buildLiveUrl(cfg, location.origin));
+  // Em espanhol o endereço sai em /es/live: o painel no OBS abre na mesma língua desta tela.
+  const url = $derived(buildLiveUrl(cfg, location.origin, getLocale()));
   const missing = $derived(
-    [blocks.precos && !items.length ? 'Escolha ao menos um item para o bloco de preços aparecer.' : '',
-     blocks.guilda && !guild ? 'Digite o nome exato da guilda para o bloco dela aparecer.' : '',
-     !LIVE_BLOCKS.some((b) => blocks[b]) ? 'Nenhum bloco marcado: o painel mostra só o relógio.' : ''].filter(Boolean),
+    [blocks.precos && !items.length ? tx('Escolha ao menos um item para o bloco de preços aparecer.', 'Elige al menos un objeto para que aparezca el bloque de precios.') : '',
+     blocks.guilda && !guild ? tx('Digite o nome exato da guilda para o bloco dela aparecer.', 'Escribe el nombre exacto del gremio para que aparezca su bloque.') : '',
+     !LIVE_BLOCKS.some((b) => blocks[b]) ? tx('Nenhum bloco marcado: o painel mostra só o relógio.', 'Ningún bloque marcado: el panel muestra solo el reloj.') : ''].filter(Boolean),
   );
 
   let copyMsg = $state('');
@@ -98,10 +100,10 @@
   async function copy() {
     try {
       await navigator.clipboard.writeText(url);
-      copyMsg = 'Endereço copiado. Cole no campo URL da fonte de navegador do OBS.';
+      copyMsg = tx('Endereço copiado. Cole no campo URL da fonte de navegador do OBS.', 'Dirección copiada. Pégala en el campo URL de la fuente de navegador de OBS.');
     } catch {
       urlInput?.select();
-      copyMsg = 'Não foi possível copiar sozinho: o endereço está selecionado, use Ctrl+C.';
+      copyMsg = tx('Não foi possível copiar sozinho: o endereço está selecionado, use Ctrl+C.', 'No se pudo copiar automáticamente: la dirección está seleccionada, usa Ctrl+C.');
     }
   }
   $effect(() => {
@@ -113,25 +115,27 @@
 </script>
 
 <section class="page">
-  <h1>Painel de live para o OBS</h1>
+  <h1>{tx('Painel de live para o OBS', 'Panel para directos en OBS')}</h1>
   <p class="muted" style="margin-top:0">
-    Relógio do servidor, preço dos itens que você escolher e o histórico da sua guilda por cima da transmissão. Fundo
-    transparente, letra grande, atualiza sozinho. Monte aqui, copie o endereço e cole no OBS.
+    {tx(
+      'Relógio do servidor, preço dos itens que você escolher e o histórico da sua guilda por cima da transmissão. Fundo transparente, letra grande, atualiza sozinho. Monte aqui, copie o endereço e cole no OBS.',
+      'Reloj del servidor, precio de los objetos que elijas y el historial de tu gremio encima de la transmisión. Fondo transparente, letra grande, se actualiza solo. Ármalo aquí, copia la dirección y pégala en OBS.',
+    )}
   </p>
 
   <div class="live-cfg">
-    <form class="card stack" onsubmit={(e) => e.preventDefault()} aria-label="Configurar o painel">
+    <form class="card stack" onsubmit={(e) => e.preventDefault()} aria-label={tx('Configurar o painel', 'Configurar el panel')}>
       <fieldset class="stack">
-        <legend class="kpi-label">Blocos</legend>
+        <legend class="kpi-label">{tx('Blocos', 'Bloques')}</legend>
         {#each LIVE_BLOCKS as b (b)}
-          <label class="row check"><input type="checkbox" bind:checked={blocks[b]} /> {LIVE_BLOCK_LABEL[b]}</label>
+          <label class="row check"><input type="checkbox" bind:checked={blocks[b]} /> {liveBlockLabel(b, getLocale())}</label>
         {/each}
       </fieldset>
 
       {#if blocks.precos}
         <fieldset class="stack">
-          <legend class="kpi-label">Itens ({items.length} de {LIVE_MAX_ITEMS})</legend>
-          <SearchBox size="sm" label="Acrescentar item" placeholder="Ex.: bolsa T4, tábuas T5" onselect={addItem} />
+          <legend class="kpi-label">{tx(`Itens (${items.length} de ${LIVE_MAX_ITEMS})`, `Objetos (${items.length} de ${LIVE_MAX_ITEMS})`)}</legend>
+          <SearchBox size="sm" label={tx('Acrescentar item', 'Agregar objeto')} placeholder={tx('Ex.: bolsa T4, tábuas T5', 'Ej.: bolsa T4, tablas T5')} onselect={addItem} />
           {#if itemMsg}<p class="small muted" role="status" style="margin:0">{itemMsg}</p>{/if}
           {#if items.length}
             <ul class="li-list">
@@ -139,18 +143,18 @@
                 <li class="li-row">
                   <ItemIcon {id} size={32} />
                   <span class="li-name">{name(id)}<span class="muted small li-tier">{tier(id)}</span></span>
-                  <button type="button" class="icon-btn" onclick={() => moveItem(i, -1)} disabled={i === 0} aria-label="Subir {name(id)}">↑</button>
-                  <button type="button" class="icon-btn" onclick={() => moveItem(i, 1)} disabled={i === items.length - 1} aria-label="Descer {name(id)}">↓</button>
-                  <button type="button" class="icon-btn" onclick={() => removeItem(id)} aria-label="Remover {name(id)}">✕</button>
+                  <button type="button" class="icon-btn" onclick={() => moveItem(i, -1)} disabled={i === 0} aria-label="{tx('Subir', 'Subir')} {name(id)}">↑</button>
+                  <button type="button" class="icon-btn" onclick={() => moveItem(i, 1)} disabled={i === items.length - 1} aria-label="{tx('Descer', 'Bajar')} {name(id)}">↓</button>
+                  <button type="button" class="icon-btn" onclick={() => removeItem(id)} aria-label="{tx('Remover', 'Quitar')} {name(id)}">✕</button>
                 </li>
               {/each}
             </ul>
           {/if}
           <label class="stack field">
-            <span class="small">Cidade do preço</span>
+            <span class="small">{tx('Cidade do preço', 'Ciudad del precio')}</span>
             <select class="input" bind:value={city}>
-              <option value="">Melhor cidade (a mais barata com preço confiável)</option>
-              {#each CITIES as c (c)}<option value={c}>{c}</option>{/each}
+              <option value="">{tx('Melhor cidade (a mais barata com preço confiável)', 'Mejor ciudad (la más barata con precio confiable)')}</option>
+              {#each CITIES as c (c)}<option value={c}>{cityName(c)}</option>{/each}
             </select>
           </label>
         </fieldset>
@@ -158,21 +162,21 @@
 
       {#if blocks.guilda}
         <label class="stack field">
-          <span class="small">Nome exato da guilda</span>
+          <span class="small">{tx('Nome exato da guilda', 'Nombre exacto del gremio')}</span>
           <input class="input" type="text" bind:value={guildDraft} maxlength="64" autocomplete="off" spellcheck="false"
             aria-describedby="live-guild-hint" />
-          <span id="live-guild-hint" class="small muted">{guildHint || 'Kills e mortes do dia e da semana, com atraso (histórico do killboard).'}</span>
+          <span id="live-guild-hint" class="small muted">{guildHint || tx('Kills e mortes do dia e da semana, com atraso (histórico do killboard).', 'Asesinatos y muertes del día y de la semana, con retraso (historial del killboard).')}</span>
         </label>
       {/if}
 
       <fieldset class="stack">
-        <legend class="kpi-label">Aparência</legend>
-        <div class="seg" role="radiogroup" aria-label="Tema do painel">
-          <label><input type="radio" name="live-tema" value="escuro" bind:group={theme} /> Escuro</label>
-          <label><input type="radio" name="live-tema" value="claro" bind:group={theme} /> Claro</label>
+        <legend class="kpi-label">{tx('Aparência', 'Apariencia')}</legend>
+        <div class="seg" role="radiogroup" aria-label={tx('Tema do painel', 'Tema del panel')}>
+          <label><input type="radio" name="live-tema" value="escuro" bind:group={theme} /> {tx('Escuro', 'Oscuro')}</label>
+          <label><input type="radio" name="live-tema" value="claro" bind:group={theme} /> {tx('Claro', 'Claro')}</label>
         </div>
         <label class="stack field">
-          <span class="small">Tamanho da letra: <strong class="num">{Math.round(scale * 100)}%</strong></span>
+          <span class="small">{tx('Tamanho da letra:', 'Tamaño de la letra:')} <strong class="num">{Math.round(scale * 100)}%</strong></span>
           <input type="range" min={LIVE_SCALE_MIN} max={LIVE_SCALE_MAX} step="0.1" bind:value={scale} />
         </label>
       </fieldset>
@@ -181,12 +185,12 @@
     <div class="stack">
       <div class="card stack">
         <label class="stack field">
-          <span class="kpi-label">Endereço para o OBS</span>
+          <span class="kpi-label">{tx('Endereço para o OBS', 'Dirección para OBS')}</span>
           <input class="input mono small" type="text" readonly value={url} bind:this={urlInput} onfocus={(e) => e.currentTarget.select()} />
         </label>
         <div class="row">
-          <button type="button" class="btn primary" onclick={copy}>Copiar endereço</button>
-          <a class="btn" href={url} target="_blank" rel="noopener">Abrir o painel</a>
+          <button type="button" class="btn primary" onclick={copy}>{tx('Copiar endereço', 'Copiar dirección')}</button>
+          <a class="btn" href={url} target="_blank" rel="noopener">{tx('Abrir o painel', 'Abrir el panel')}</a>
         </div>
         <p class="small" role="status" aria-live="polite" style="margin:0">{copyMsg}</p>
         {#each missing as m (m)}<p class="small muted" style="margin:0">{m}</p>{/each}
@@ -194,30 +198,43 @@
 
       <div class="card stack">
         <div class="section-head" style="margin:0">
-          <span class="kpi-label">Prévia</span>
-          <div class="seg" role="radiogroup" aria-label="Fundo da prévia">
-            <label><input type="radio" name="live-bg" value="jogo" bind:group={previewBg} /> Fundo escuro</label>
-            <label><input type="radio" name="live-bg" value="claro" bind:group={previewBg} /> Fundo claro</label>
+          <span class="kpi-label">{tx('Prévia', 'Vista previa')}</span>
+          <div class="seg" role="radiogroup" aria-label={tx('Fundo da prévia', 'Fondo de la vista previa')}>
+            <label><input type="radio" name="live-bg" value="jogo" bind:group={previewBg} /> {tx('Fundo escuro', 'Fondo oscuro')}</label>
+            <label><input type="radio" name="live-bg" value="claro" bind:group={previewBg} /> {tx('Fundo claro', 'Fondo claro')}</label>
           </div>
         </div>
         <div class="preview-box" class:bg-claro={previewBg === 'claro'}>
           <LivePanel {cfg} preview />
         </div>
-        <p class="small muted" style="margin:0">A prévia usa dado real. No OBS o fundo some e só os blocos aparecem.</p>
+        <p class="small muted" style="margin:0">{tx('A prévia usa dado real. No OBS o fundo some e só os blocos aparecem.', 'La vista previa usa datos reales. En OBS el fondo desaparece y solo se ven los bloques.')}</p>
       </div>
 
       <div class="card stack">
-        <span class="kpi-label">Como pôr no OBS</span>
-        <ol class="small steps">
-          <li>Em <strong>Fontes</strong>, clique em <strong>+</strong> e escolha <strong>Navegador</strong>.</li>
-          <li>Cole o endereço no campo <strong>URL</strong>. Largura 520 e altura 720 servem para começar; ajuste ao tamanho da letra.</li>
-          <li>O fundo já é transparente: arraste a fonte para o canto da cena.</li>
-          <li>O painel se atualiza sozinho (preços a cada 90 segundos, relógio e guilda a cada 2 minutos). Para mudar algo, volte aqui e troque o endereço.</li>
-        </ol>
-        <p class="small muted" style="margin:0">
-          Só dado público e com atraso: preço comunitário e histórico do killboard. Nada lê o jogo nem avisa de jogador
-          por perto (veja <a href="/permitido" onclick={go}>Isso é permitido?</a>).
-        </p>
+        <span class="kpi-label">{tx('Como pôr no OBS', 'Cómo ponerlo en OBS')}</span>
+        {#if getLocale() === 'es'}
+          <ol class="small steps">
+            <li>En <strong>Fuentes</strong>, haz clic en <strong>+</strong> y elige <strong>Navegador</strong>.</li>
+            <li>Pega la dirección en el campo <strong>URL</strong>. Un ancho de 520 y un alto de 720 sirven para empezar; ajústalos al tamaño de la letra.</li>
+            <li>El fondo ya es transparente: arrastra la fuente a la esquina de la escena.</li>
+            <li>El panel se actualiza solo (precios cada 90 segundos, reloj y gremio cada 2 minutos). Para cambiar algo, vuelve aquí y cambia la dirección.</li>
+          </ol>
+          <p class="small muted" style="margin:0">
+            Solo datos públicos y con retraso: precio comunitario e historial del killboard. Nada lee el juego ni avisa de jugadores
+            cercanos (consulta <a href={href('/permitido')} onclick={go}>¿Esto está permitido?</a>).
+          </p>
+        {:else}
+          <ol class="small steps">
+            <li>Em <strong>Fontes</strong>, clique em <strong>+</strong> e escolha <strong>Navegador</strong>.</li>
+            <li>Cole o endereço no campo <strong>URL</strong>. Largura 520 e altura 720 servem para começar; ajuste ao tamanho da letra.</li>
+            <li>O fundo já é transparente: arraste a fonte para o canto da cena.</li>
+            <li>O painel se atualiza sozinho (preços a cada 90 segundos, relógio e guilda a cada 2 minutos). Para mudar algo, volte aqui e troque o endereço.</li>
+          </ol>
+          <p class="small muted" style="margin:0">
+            Só dado público e com atraso: preço comunitário e histórico do killboard. Nada lê o jogo nem avisa de jogador
+            por perto (veja <a href={href('/permitido')} onclick={go}>Isso é permitido?</a>).
+          </p>
+        {/if}
       </div>
     </div>
   </div>

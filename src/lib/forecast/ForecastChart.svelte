@@ -2,7 +2,9 @@
   // Gráfico da previsão: média diária real (linha cheia), previsão central (tracejada) e faixa P10–P90 sombreada.
   // Tabela com os mesmos números em <details> para leitor de tela e para quem prefere ler.
   import type { ForecastResponse } from '../../../shared/types';
-  import { fmtDayMonth, fmtInt, fmtSilver } from '../format';
+  import { cityName, fmtDayMonth, fmtInt, fmtSilver } from '../format';
+  import { getLocale, tx } from '../i18n/index.svelte';
+  import { scrollFocus } from '../ui/scrollFocus';
   import { dayLabel, forecastGeometry, forecastKind } from './view';
 
   let { r, height = 240 }: { r: ForecastResponse; height?: number } = $props();
@@ -14,6 +16,15 @@
 
   const desc = $derived.by(() => {
     const h = r.history;
+    if (getLocale() === 'es') {
+      if (!h.length) return 'Sin historial.';
+      let e = `Precio medio diario de venta en ${cityName(r.city)}, del ${fmtDayMonth(h[0].date)} al ${fmtDayMonth(h[h.length - 1].date)}; último día ${fmtSilver(h[h.length - 1].avg)} de plata.`;
+      if (r.forecast.length) {
+        e += ` Previsión${kind === 'naive' ? ' ingenua' : ''}: ` +
+          r.forecast.map((f) => `${fmtDayMonth(f.date)} ${fmtSilver(f.p50)} (entre ${fmtSilver(f.p10)} y ${fmtSilver(f.p90)})`).join('; ') + '.';
+      }
+      return e;
+    }
     if (!h.length) return 'Sem histórico.';
     let s = `Média diária de venda em ${r.city}, de ${fmtDayMonth(h[0].date)} a ${fmtDayMonth(h[h.length - 1].date)}; último dia ${fmtSilver(h[h.length - 1].avg)} prata.`;
     if (r.forecast.length) {
@@ -27,7 +38,10 @@
 <figure class="hchart fchart">
   <div class="hchart-box" bind:clientWidth={width}>
     <svg width={geo.w} {height} viewBox="0 0 {geo.w} {height}" role="img" aria-labelledby="{uid}-t {uid}-d">
-      <title id="{uid}-t">Preço médio diário em {r.city} e previsão dos próximos dias</title>
+      <title id="{uid}-t">{tx(
+        `Preço médio diário em ${r.city} e previsão dos próximos dias`,
+        `Precio medio diario en ${cityName(r.city)} y previsión de los próximos días`,
+      )}</title>
       <desc id="{uid}-d">{desc}</desc>
       {#each geo.ticks as t}
         <line x1={52} x2={geo.w - 14} y1={t.y} y2={t.y} class="hchart-grid" />
@@ -49,22 +63,22 @@
     </svg>
   </div>
   <figcaption class="hchart-legend small muted">
-    <span><span class="fkey line" aria-hidden="true"></span>média real do dia</span>
+    <span><span class="fkey line" aria-hidden="true"></span>{tx('média real do dia', 'promedio real del día')}</span>
     {#if r.forecast.length}
-      <span><span class="fkey fc" aria-hidden="true"></span>previsão{kind === 'naive' ? ' ingênua' : ''}</span>
-      <span><span class="fkey band" aria-hidden="true"></span>faixa provável (P10–P90)</span>
+      <span><span class="fkey fc" aria-hidden="true"></span>{tx(`previsão${kind === 'naive' ? ' ingênua' : ''}`, `previsión${kind === 'naive' ? ' ingenua' : ''}`)}</span>
+      <span><span class="fkey band" aria-hidden="true"></span>{tx('faixa provável (P10–P90)', 'rango probable (P10–P90)')}</span>
     {/if}
   </figcaption>
 </figure>
 <div class="hchart">
   <details class="small">
-    <summary>Ver os dados em tabela</summary>
-    <div class="table-wrap">
+    <summary>{tx('Ver os dados em tabela', 'Ver los datos en una tabla')}</summary>
+    <div class="table-wrap" use:scrollFocus={tx('Tabela da previsão por dia', 'Tabla del pronóstico por día')}>
       <table class="data">
-        <thead><tr><th scope="col">Dia</th><th scope="col" class="num">Preço</th><th scope="col" class="num">Faixa provável</th><th scope="col" class="num">Unidades vendidas</th></tr></thead>
+        <thead><tr><th scope="col">{tx('Dia', 'Día')}</th><th scope="col" class="num">{tx('Preço', 'Precio')}</th><th scope="col" class="num">{tx('Faixa provável', 'Rango probable')}</th><th scope="col" class="num">{tx('Unidades vendidas', 'Unidades vendidas')}</th></tr></thead>
         <tbody>
           {#each [...r.forecast].reverse() as f (f.date)}
-            <tr><th scope="row">{dayLabel(f.date)} <span class="tag info">previsão</span></th><td class="num">{fmtSilver(f.p50)}</td><td class="num">{fmtSilver(f.p10)} a {fmtSilver(f.p90)}</td><td class="num">—</td></tr>
+            <tr><th scope="row">{dayLabel(f.date)} <span class="tag info">{tx('previsão', 'previsión')}</span></th><td class="num">{fmtSilver(f.p50)}</td><td class="num">{fmtSilver(f.p10)} a {fmtSilver(f.p90)}</td><td class="num">—</td></tr>
           {/each}
           {#each [...r.history].reverse() as h (h.date)}
             <tr><th scope="row">{dayLabel(h.date)}</th><td class="num">{fmtSilver(h.avg)}</td><td class="num">—</td><td class="num">{fmtInt(h.count)}</td></tr>

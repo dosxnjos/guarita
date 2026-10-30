@@ -1,6 +1,8 @@
 // Regras puras das telas Ouro e Saúde do dado (sem DOM; testadas em tests/gold.test.ts e tests/datahealth.test.ts).
+// Textos nas duas línguas: `loc` no fim (padrão: a língua atual do site, como em format.ts).
 import type { City, DataHealthCity, GoldResponse } from '../../../shared/types';
 import { TZ_BR } from '../format';
+import { currentLocale, type Locale } from '../i18n/core';
 
 // ---------- ouro ----------
 
@@ -65,7 +67,13 @@ export function thin<T>(points: T[], max = 400): T[] {
   return out;
 }
 
-export function goldVerdictText(v: GoldResponse['verdict'], days: number): string {
+export function goldVerdictText(v: GoldResponse['verdict'], days: number, loc: Locale = currentLocale()): string {
+  if (loc === 'es') {
+    if (v === 'barato') return `Barato: por debajo del 1.er cuartil de los últimos ${days} días.`;
+    if (v === 'caro') return `Caro: por encima del 3.er cuartil de los últimos ${days} días.`;
+    if (v === 'normal') return `Normal: entre el 1.er y el 3.er cuartil de los últimos ${days} días.`;
+    return 'No hay datos suficientes para comparar.';
+  }
   if (v === 'barato') return `Barato: abaixo do 1º quartil dos últimos ${days} dias.`;
   if (v === 'caro') return `Caro: acima do 3º quartil dos últimos ${days} dias.`;
   if (v === 'normal') return `Normal: entre o 1º e o 3º quartil dos últimos ${days} dias.`;
@@ -87,7 +95,8 @@ export function cityTone(c: DataHealthCity, basket: number): HealthTone {
   return 'warn';
 }
 
-export function cityToneLabel(t: HealthTone): string {
+export function cityToneLabel(t: HealthTone, loc: Locale = currentLocale()): string {
+  if (loc === 'es') return { good: 'Precios recientes', warn: 'Precios de hace unas horas', bad: 'Faltan escaneos' }[t];
   return { good: 'Preços frescos', warn: 'Preços de algumas horas', bad: 'Faltam scans' }[t];
 }
 
@@ -114,8 +123,8 @@ export function barPct(n: number, total: number): number {
   return Math.min(100, Math.round((n / total) * 100));
 }
 
-/** Lista "A, B e C". */
-export function joinPt(items: string[]): string {
+/** Lista "A, B e C" (es: "A, B y C"). */
+export function joinPt(items: string[], loc: Locale = currentLocale()): string {
   if (items.length <= 1) return items.join('');
-  return `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}`;
+  return `${items.slice(0, -1).join(', ')} ${loc === 'es' ? 'y' : 'e'} ${items[items.length - 1]}`;
 }

@@ -9,6 +9,10 @@
 // inteira (1–2 URLs), as festividades (mesma chave do /api/clock) e o histórico de no máximo 9 itens (os 3 melhores
 // de cada trilha pela margem bruta), tudo guardado num "retrato" único por 5 min. A conta por prata/minutos/Premium
 // roda na CPU sobre o retrato, sem rede. Pior caso frio: ~6 + 3 + 27 + 2 = 38.
+//
+// Línguas: `?lang=es` (ou `lang: 'es'` em HojeParams, para o bot e o MCP) devolve títulos, passos, riscos, notas,
+// motivos e nomes de item em espanhol; o padrão é pt e o texto em pt não muda. O retrato é o mesmo para as duas
+// línguas (só preço), então espanhol não custa subrequest a mais; a resposta HTTP varia pela URL inteira.
 import type { Env } from '../env';
 import type { City, HojeTrilha, PriceRow, Quality } from '../../shared/types';
 import { ALL_CITIES, SALES_TAX, SALES_TAX_PREMIUM, SETUP_FEE, minutesSince } from '../../shared/market';
@@ -17,8 +21,8 @@ import { aodpFestivities, aodpHistoryMeta, aodpPricesMeta, type FestivityRaw, ty
 import { cachedJsonMeta } from '../lib/cache';
 import { badRequest, json, upstreamError } from '../lib/respond';
 import {
-  CITY_REFINING_BONUS, DAILY_BONUS, FLIP_ITEMS, FOCUS_BONUS, NOMES, RECEITAS, RECURSOS, REFINE_TIME_MIN, ROUTE_FACTOR, ROYAL, SPECIALTY_BONUS,
-  basketIds, routeRisk, travelMin, type Recurso, type RotaRisco,
+  CITY_REFINING_BONUS, DAILY_BONUS, FLIP_ITEMS, FOCUS_BONUS, RECEITAS, RECURSOS, REFINE_TIME_MIN, ROUTE_FACTOR, ROYAL, SPECIALTY_BONUS,
+  basketIds, nomeDe, routeRisk, travelMin, type HojeLang, type Recurso, type RotaRisco,
 } from '../../shared/hoje';
 import type { HojeItem, HojeOpcao as HojeOpcaoX, HojeResponse as HojeResponseX } from '../../shared/types';
 
@@ -67,6 +71,8 @@ export interface HojeParams {
   prata: number;
   minutos: number;
   premium: boolean;
+  /** Língua dos textos da resposta (padrão 'pt'; qualquer valor diferente de 'es' vale 'pt'). */
+  lang?: HojeLang;
 }
 
 // ---------- utilidades puras ----------
@@ -81,6 +87,77 @@ const pct = (f: number) => pctFmt.format(f);
 function fmtBr(iso: string): string {
   return timeFmt.format(new Date(iso)).replace(',', '');
 }
+
+// ---------- textos por língua ----------
+
+/** Língua normalizada: só 'es' vira espanhol. */
+export function hojeLang(v: unknown): HojeLang {
+  return typeof v === 'string' && v.trim().toLowerCase() === 'es' ? 'es' : 'pt';
+}
+
+const esIntFmt = new Intl.NumberFormat('es-419', { maximumFractionDigits: 0 });
+const esPctFmt = new Intl.NumberFormat('es-419', { style: 'percent', maximumFractionDigits: 1 });
+const esDecFmt = new Intl.NumberFormat('es-419', { maximumFractionDigits: 2 });
+
+/** "visto hace 12 min" (espelho em espanhol de ageLabel, de shared/confidence.ts). */
+export function ageLabelEs(ageMin: number | null): string {
+  if (ageMin === null || !Number.isFinite(ageMin)) return 'sin fecha';
+  if (ageMin < 1) return 'visto ahora';
+  if (ageMin < 60) return `visto hace ${Math.round(ageMin)} min`;
+  if (ageMin < 48 * 60) return `visto hace ${Math.round(ageMin / 60)} h`;
+  return `visto hace ${Math.round(ageMin / 1440)} días`;
+}
+
+/** Formatação e textos curtos de uma língua. O lado pt usa exatamente os formatadores de antes. */
+interface Txt {
+  es: boolean;
+  /** tx(pt, es) do Worker. */
+  t: (pt: string, es: string) => string;
+  n: (v: number) => string;
+  pct: (f: number) => string;
+  dec: (v: number) => string;
+  age: (ageMin: number | null) => string;
+  /** Cidade como o cliente mostra (Black Market = Mercado Negro em espanhol). */
+  city: (c: City) => string;
+  nome: (id: string) => string;
+}
+
+const TXT_PT: Txt = {
+  es: false,
+  t: (pt) => pt,
+  n: fmt,
+  pct,
+  dec: fmtDec,
+  age: ageText,
+  city: (c) => c,
+  nome: (id) => nomeDe(id, 'pt'),
+};
+const TXT_ES: Txt = {
+  es: true,
+  t: (_pt, es) => es,
+  n: (v) => esIntFmt.format(Math.round(v)),
+  pct: (f) => esPctFmt.format(f),
+  dec: (v) => esDecFmt.format(v),
+  age: ageLabelEs,
+  city: (c) => (c === 'Black Market' ? 'Mercado Negro' : c),
+  nome: (id) => nomeDe(id, 'es'),
+};
+function txt(lang: HojeLang | undefined): Txt {
+  return lang === 'es' ? TXT_ES : TXT_PT;
+}
+
+/** Motivos do selo (shared/confidence.ts devolve em pt) → espanhol. Só os que a conta do "hoje" pode gerar. */
+const MOTIVO_ES: Record<string, string> = {
+  'sem preço registrado': 'sin precio registrado',
+  'sem livro de ofertas': 'sin libro de órdenes',
+  'livro raso': 'libro poco profundo',
+  'pouco volume': 'poco volumen',
+  'muito abaixo da mediana': 'muy por debajo de la mediana',
+  'muito acima da mediana': 'muy por encima de la mediana',
+  'bem abaixo da mediana': 'bastante por debajo de la mediana',
+  'bem acima da mediana': 'bastante por encima de la mediana',
+  'compra acima da venda (suspeito)': 'compra por encima de la venta (sospechoso)',
+};
 
 /** Taxa de retorno de material: 1 − 1/(1 + soma dos bônus de produção). */
 export function rrr(bonus: number): number {
@@ -141,7 +218,7 @@ interface Side {
 }
 
 /** Selo da opção: o lado mais fraco manda, vezes o risco da rota (e um desconto se o dado veio da reserva). */
-export function combinedConfidence(sides: Side[], risco: RotaRisco, stale: boolean): { score: number; motivos: string[] } {
+export function combinedConfidence(sides: Side[], risco: RotaRisco, stale: boolean, lang: HojeLang = 'pt'): { score: number; motivos: string[] } {
   let min = 100;
   const motivos: string[] = [];
   for (const s of sides) {
@@ -152,23 +229,36 @@ export function combinedConfidence(sides: Side[], risco: RotaRisco, stale: boole
   const ages = sides.map((s) => s.ageMin).filter((a): a is number => a != null);
   // o pior motivo de idade primeiro; os outros "visto há" saem para não poluir
   const keep = motivos.filter((m) => !m.startsWith('visto ') && m !== 'sem data');
-  const oldest = ages.length === sides.length ? ageLabel(Math.max(...ages)) : 'sem data';
+  const score = Math.max(1, Math.min(100, Math.round(min * ROUTE_FACTOR[risco] * (stale ? 0.85 : 1))));
+  const all = ages.length === sides.length;
+  if (lang === 'es') {
+    const out = keep.map((m) => MOTIVO_ES[m] ?? m);
+    if (risco === 'vermelha') out.push('ruta por zona roja');
+    if (risco === 'brumas') out.push('ruta por las Nieblas');
+    if (stale) out.push('parte de los datos es una copia guardada');
+    return { score, motivos: [all ? `precio más antiguo ${ageLabelEs(Math.max(...ages))}` : 'uno de los precios no tiene fecha', ...out] };
+  }
+  const oldest = all ? ageLabel(Math.max(...ages)) : 'sem data';
   if (risco === 'vermelha') keep.push('rota por zona vermelha');
   if (risco === 'brumas') keep.push('rota pelas Brumas');
   if (stale) keep.push('parte do dado é cópia guardada');
-  const score = Math.max(1, Math.min(100, Math.round(min * ROUTE_FACTOR[risco] * (stale ? 0.85 : 1))));
-  return { score, motivos: [ages.length === sides.length ? `preço mais antigo ${oldest}` : 'um dos preços sem data', ...keep] };
+  return { score, motivos: [all ? `preço mais antigo ${oldest}` : 'um dos preços sem data', ...keep] };
 }
 
 function ageText(ageMin: number | null): string {
   return ageLabel(ageMin);
 }
 
-function staleRisk(ages: (number | null)[]): string | null {
+function staleRisk(ages: (number | null)[], x: Txt = TXT_PT): string | null {
   const known = ages.filter((a): a is number => a != null);
-  if (known.length < ages.length) return 'Um dos preços não tem data: confirme no jogo antes de comprar.';
+  if (known.length < ages.length) {
+    return x.t('Um dos preços não tem data: confirme no jogo antes de comprar.', 'Uno de los precios no tiene fecha: confírmalo en el juego antes de comprar.');
+  }
   const max = Math.max(...known);
-  return max > 30 ? `O preço mais antigo da conta foi ${ageLabel(max)}: confirme no jogo antes de comprar.` : null;
+  if (max <= 30) return null;
+  return x.es
+    ? `El precio más antiguo del cálculo fue ${ageLabelEs(max)}: confírmalo en el juego antes de comprar.`
+    : `O preço mais antigo da conta foi ${ageLabel(max)}: confirme no jogo antes de comprar.`;
 }
 
 function score(o: HojeOpcaoX): number {
@@ -187,9 +277,9 @@ function topDistinct(cands: { key: string; op: HojeOpcaoX }[], n = MAX_POR_TRILH
 
 function item(
   id: string, qtd: number, compra: number | null, venda: number | null, cidadeCompra: City | null, cidadeVenda: City | null,
-  idadeCompraMin: number | null, idadeVendaMin: number | null,
+  idadeCompraMin: number | null, idadeVendaMin: number | null, lang: HojeLang = 'pt',
 ): HojeItem {
-  return { id, nome: NOMES[id] ?? id, qtd, compra, venda, cidadeCompra, cidadeVenda, idadeCompraMin, idadeVendaMin };
+  return { id, nome: nomeDe(id, lang), qtd, compra, venda, cidadeCompra, cidadeVenda, idadeCompraMin, idadeVendaMin };
 }
 
 function capByVolume(vol: number | null | undefined, semVolume: number): { cap: number; known: boolean } {
@@ -217,8 +307,12 @@ function originVol(volume: HojeSnapshot['volume'], id: string, city: City): { vo
 export function planFlip(s: HojeSnapshot, p: HojeParams, now: number): HojeOpcaoX[] {
   const get = indexRows(s.rows);
   const tax = salesTax(p.premium);
+  const x = txt(p.lang);
+  const lang: HojeLang = x.es ? 'es' : 'pt';
+  const bmName = x.city(BM);
   const cands: { key: string; op: HojeOpcaoX }[] = [];
   for (const it of FLIP_ITEMS) {
+    const nome = x.nome(it.id);
     const bm = get(it.id, BM);
     if (!bm?.buyMax) continue;
     const sell = bm.buyMax;
@@ -252,45 +346,71 @@ export function planFlip(s: HojeSnapshot, p: HojeParams, now: number): HojeOpcao
         [{ price: buy, ageMin: ageBuy, vol: orig.vol }, { price: sell, ageMin: ageSell, vol: bmVol }],
         risco,
         s.stale,
+        lang,
       );
       if (!known) conf.score = Math.max(1, Math.round(conf.score * 0.85));
-      if (!known) conf.motivos.push('volume do Black Market desconhecido');
+      if (!known) conf.motivos.push(x.t('volume do Black Market desconhecido', 'volumen del Mercado Negro desconocido'));
 
-      const passos = [
-        `Em ${from}, compre ${fmt(qty)} × ${it.nome} na ordem de venda mais barata (${fmt(buy)} cada, ${ageText(ageBuy)}).`,
-        from === 'Caerleon'
-          ? 'Leve até o Black Market, que fica dentro de Caerleon.'
-          : `Leve até o Black Market, em Caerleon (cerca de ${travel} min, cruzando zona vermelha).`,
-        `Venda na hora para a ordem de compra do Black Market (${fmt(sell)} cada, ${ageText(ageSell)}). Imposto de ${pct(tax)} ${p.premium ? 'com' : 'sem'} Premium; venda direta não paga taxa de anúncio.`,
-      ];
-      if (tripsUsed > 1) passos.push(`O capital cobre ${perTrip} por viagem: são ${tripsUsed} viagens de cerca de ${cycle} min cada.`);
+      const passos = x.es
+        ? [
+          `En ${from}, compra ${x.n(qty)} × ${nome} en la orden de venta más barata (${x.n(buy)} cada uno, ${x.age(ageBuy)}).`,
+          from === 'Caerleon'
+            ? 'Llévalo al Mercado Negro, que está dentro de Caerleon.'
+            : `Llévalo al Mercado Negro, en Caerleon (unos ${travel} min, cruzando zona roja).`,
+          `Vende de inmediato a la orden de compra del Mercado Negro (${x.n(sell)} cada uno, ${x.age(ageSell)}). Impuesto de ${x.pct(tax)} ${p.premium ? 'con' : 'sin'} Premium; la venta directa no paga cuota de preparación.`,
+        ]
+        : [
+          `Em ${from}, compre ${fmt(qty)} × ${nome} na ordem de venda mais barata (${fmt(buy)} cada, ${ageText(ageBuy)}).`,
+          from === 'Caerleon'
+            ? 'Leve até o Black Market, que fica dentro de Caerleon.'
+            : `Leve até o Black Market, em Caerleon (cerca de ${travel} min, cruzando zona vermelha).`,
+          `Venda na hora para a ordem de compra do Black Market (${fmt(sell)} cada, ${ageText(ageSell)}). Imposto de ${pct(tax)} ${p.premium ? 'com' : 'sem'} Premium; venda direta não paga taxa de anúncio.`,
+        ];
+      if (tripsUsed > 1) {
+        passos.push(x.es
+          ? `El capital alcanza para ${perTrip} por viaje: son ${tripsUsed} viajes de unos ${cycle} min cada uno.`
+          : `O capital cobre ${perTrip} por viagem: são ${tripsUsed} viagens de cerca de ${cycle} min cada.`);
+      }
 
       const riscos: string[] = [];
       if (risco === 'vermelha') {
-        riscos.push(`A rota de ${from} até Caerleon cruza zona vermelha: se morrer, perde a carga (${fmt(capital)} de prata) e o que estiver vestindo.`);
+        riscos.push(x.es
+          ? `La ruta de ${from} a Caerleon cruza zona roja: si mueres, pierdes la carga (${x.n(capital)} de plata) y lo que lleves puesto.`
+          : `A rota de ${from} até Caerleon cruza zona vermelha: se morrer, perde a carga (${fmt(capital)} de prata) e o que estiver vestindo.`);
       }
-      riscos.push('O Black Market compra conforme a demanda: a ordem pode baixar ou sumir antes de você chegar.');
-      const st = staleRisk([ageBuy, ageSell]);
+      riscos.push(x.t(
+        'O Black Market compra conforme a demanda: a ordem pode baixar ou sumir antes de você chegar.',
+        'El Mercado Negro compra según la demanda: la orden puede bajar o desaparecer antes de que llegues.',
+      ));
+      const st = staleRisk([ageBuy, ageSell], x);
       if (st) riscos.push(st);
-      if (!known) riscos.push(`Sem histórico de vendas no Black Market para medir quanto ele absorve: a quantidade foi limitada a ${CAP_SEM_VOLUME.flip}.`);
+      if (!known) {
+        riscos.push(x.es
+          ? `No hay historial de ventas en el Mercado Negro para medir cuánto absorbe: la cantidad se limitó a ${CAP_SEM_VOLUME.flip}.`
+          : `Sem histórico de vendas no Black Market para medir quanto ele absorve: a quantidade foi limitada a ${CAP_SEM_VOLUME.flip}.`);
+      }
       if (qty === orig.cap && orig.cap < Math.min(perTrip * trips, cap)) {
-        riscos.push(`Limitado a ${fmt(qty)} unidades: ${from} vendeu ${orig.vol ? `cerca de ${fmt(orig.vol)}` : 'quase nada'} por dia nos últimos 7 dias, e comprar mais esvazia as ofertas baratas.`);
+        riscos.push(x.es
+          ? `Limitado a ${x.n(qty)} unidades: ${from} vendió ${orig.vol ? `unas ${x.n(orig.vol)}` : 'casi nada'} por día en los últimos 7 días, y comprar más agota las ofertas baratas.`
+          : `Limitado a ${fmt(qty)} unidades: ${from} vendeu ${orig.vol ? `cerca de ${fmt(orig.vol)}` : 'quase nada'} por dia nos últimos 7 dias, e comprar mais esvazia as ofertas baratas.`);
       } else if (known && qty === cap && cap < perTrip * trips) {
-        riscos.push(`Limitado a ${fmt(qty)} unidades: é o que o Black Market comprou por dia, em média, nos últimos 7 dias.`);
+        riscos.push(x.es
+          ? `Limitado a ${x.n(qty)} unidades: es lo que el Mercado Negro compró por día, en promedio, en los últimos 7 días.`
+          : `Limitado a ${fmt(qty)} unidades: é o que o Black Market comprou por dia, em média, nos últimos 7 dias.`);
       }
 
       cands.push({
         key: it.id,
         op: {
           trilha: 'flip',
-          titulo: `Flip: ${it.nome}, de ${from} para o Black Market`,
+          titulo: x.es ? `Reventa: ${nome}, de ${from} al ${bmName}` : `Flip: ${nome}, de ${from} para o Black Market`,
           passos,
           lucro,
           capital,
           minutos: Math.min(p.minutos, tripsUsed * cycle),
           confianca: conf.score,
           riscos,
-          itens: [item(it.id, qty, buy, sell, from, BM, ageBuy, ageSell)],
+          itens: [item(it.id, qty, buy, sell, from, BM, ageBuy, ageSell, lang)],
           conta: { compra, venda, taxas, lucro },
           motivos: conf.motivos,
           deslocamentoMin: travel,
@@ -335,8 +455,13 @@ export function planRefino(s: HojeSnapshot, p: HojeParams, now: number): HojeOpc
   const get = indexRows(s.rows);
   const feeRate = SETUP_FEE + salesTax(p.premium);
   const daily = dailyRefining(s.daily, now);
+  const x = txt(p.lang);
+  const lang: HojeLang = x.es ? 'es' : 'pt';
   const cands: { key: string; op: HojeOpcaoX }[] = [];
   for (const r of RECEITAS) {
+    const rawNome = x.nome(r.raw.id);
+    const lowerNome = x.nome(r.lower.id);
+    const refNome = x.nome(r.ref.id);
     const city = r.cidade;
     const raw = get(r.raw.id, city);
     const lower = get(r.lower.id, city);
@@ -366,41 +491,71 @@ export function planRefino(s: HojeSnapshot, p: HojeParams, now: number): HojeOpc
       [{ price: raw.sellMin, ageMin: ageRaw }, { price: lower.sellMin, ageMin: ageLower }, { price: ref.sellMin, ageMin: ageRef, vol }],
       'nenhuma',
       s.stale,
+      lang,
     );
-    if (!known) conf.motivos.push('volume de venda desconhecido');
+    if (!known) conf.motivos.push(x.t('volume de venda desconhecido', 'volumen de venta desconocido'));
 
     const passos: string[] = [];
-    if (dia) passos.push(`Hoje há bônus de refino de ${def.bruto} (+${pct(dia.valor)}) até ${fmtBr(dia.fim)} (horário de Brasília).`);
-    passos.push(
-      `Em ${city} (cidade com bônus de ${def.rotulo}), compre ${fmt(c.crafts * r.rawPorCraft)} × ${r.raw.nome} (${fmt(raw.sellMin)} cada, ${ageText(ageRaw)}) e ${fmt(c.crafts)} × ${r.lower.nome} (${fmt(lower.sellMin)} cada, ${ageText(ageLower)}).`,
-      `Refine sem foco: com o bônus da cidade${dia ? ' e o do dia' : ''}, o retorno médio de material é de ${pct(r0)}; reinvestindo o que volta, sai cerca de ${fmt(c.produz)} × ${r.ref.nome}.`,
-      `Anuncie em ordem de venda por ${fmt(ref.sellMin)} cada (${ageText(ageRef)}): taxa de anúncio de ${pct(SETUP_FEE)} e imposto de ${pct(salesTax(p.premium))} ${p.premium ? 'com' : 'sem'} Premium.`,
-    );
-    if (foco && foco.lucro > c.lucro) {
-      passos.push(`Com foco, o retorno sobe para ${pct(rF)} e o lucro estimado para ${fmt(foco.lucro)} de prata. O foco gasto por item depende da sua especialização no refino.`);
+    if (x.es) {
+      if (dia) passos.push(`Hoy hay bonificación de refinado de ${def.brutoEs} (+${x.pct(dia.valor)}) hasta ${fmtBr(dia.fim)} (horario de Brasilia).`);
+      passos.push(
+        `En ${city} (ciudad con bonificación de ${def.rotuloEs}), compra ${x.n(c.crafts * r.rawPorCraft)} × ${rawNome} (${x.n(raw.sellMin)} cada uno, ${x.age(ageRaw)}) y ${x.n(c.crafts)} × ${lowerNome} (${x.n(lower.sellMin)} cada uno, ${x.age(ageLower)}).`,
+        `Refina sin foco: con la bonificación de la ciudad${dia ? ' y la del día' : ''}, la devolución media de recursos es de ${x.pct(r0)}; reinvirtiendo lo que vuelve, salen unos ${x.n(c.produz)} × ${refNome}.`,
+        `Publica una orden de venta a ${x.n(ref.sellMin)} cada uno (${x.age(ageRef)}): cuota de preparación de ${x.pct(SETUP_FEE)} e impuesto de ${x.pct(salesTax(p.premium))} ${p.premium ? 'con' : 'sin'} Premium.`,
+      );
+      if (foco && foco.lucro > c.lucro) {
+        passos.push(`Con foco, la devolución sube a ${x.pct(rF)} y la ganancia estimada a ${x.n(foco.lucro)} de plata. El foco que gasta cada objeto depende de tu especialización en refinado.`);
+      }
+    } else {
+      if (dia) passos.push(`Hoje há bônus de refino de ${def.bruto} (+${pct(dia.valor)}) até ${fmtBr(dia.fim)} (horário de Brasília).`);
+      passos.push(
+        `Em ${city} (cidade com bônus de ${def.rotulo}), compre ${fmt(c.crafts * r.rawPorCraft)} × ${rawNome} (${fmt(raw.sellMin)} cada, ${ageText(ageRaw)}) e ${fmt(c.crafts)} × ${lowerNome} (${fmt(lower.sellMin)} cada, ${ageText(ageLower)}).`,
+        `Refine sem foco: com o bônus da cidade${dia ? ' e o do dia' : ''}, o retorno médio de material é de ${pct(r0)}; reinvestindo o que volta, sai cerca de ${fmt(c.produz)} × ${refNome}.`,
+        `Anuncie em ordem de venda por ${fmt(ref.sellMin)} cada (${ageText(ageRef)}): taxa de anúncio de ${pct(SETUP_FEE)} e imposto de ${pct(salesTax(p.premium))} ${p.premium ? 'com' : 'sem'} Premium.`,
+      );
+      if (foco && foco.lucro > c.lucro) {
+        passos.push(`Com foco, o retorno sobe para ${pct(rF)} e o lucro estimado para ${fmt(foco.lucro)} de prata. O foco gasto por item depende da sua especialização no refino.`);
+      }
     }
 
-    const riscos = [
-      'Venda por ordem de venda: pode levar horas para sair, e o preço pode cair até lá.',
-      'O retorno de material é uma média: em poucos ciclos pode vir um pouco mais ou um pouco menos.',
-      'A taxa de uso da estação de refino não entra na conta (cada estação cobra a sua).',
-    ];
-    const st = staleRisk([ageRaw, ageLower, ageRef]);
+    const riscos = x.es
+      ? [
+        'Venta por orden de venta: puede tardar horas en venderse, y el precio puede bajar mientras tanto.',
+        'La devolución de recursos es un promedio: en pocos ciclos puede salir un poco más o un poco menos.',
+        'La tasa de uso de la estación de refinado no entra en el cálculo (cada estación cobra la suya).',
+      ]
+      : [
+        'Venda por ordem de venda: pode levar horas para sair, e o preço pode cair até lá.',
+        'O retorno de material é uma média: em poucos ciclos pode vir um pouco mais ou um pouco menos.',
+        'A taxa de uso da estação de refino não entra na conta (cada estação cobra a sua).',
+      ];
+    const st = staleRisk([ageRaw, ageLower, ageRef], x);
     if (st) riscos.push(st);
     if (c.produz === timeCap && timeCap < volCap) {
-      riscos.push(`Limitado a ${fmt(timeCap)} unidades: é o que dá para refinar em ${p.minutos - REFINO_MIN} min (cerca de ${fmtDec(tPorItem * 60)} s por item, fora comprar e anunciar).`);
+      riscos.push(x.es
+        ? `Limitado a ${x.n(timeCap)} unidades: es lo que se puede refinar en ${p.minutos - REFINO_MIN} min (unos ${x.dec(tPorItem * 60)} s por objeto, sin contar comprar y publicar).`
+        : `Limitado a ${fmt(timeCap)} unidades: é o que dá para refinar em ${p.minutos - REFINO_MIN} min (cerca de ${fmtDec(tPorItem * 60)} s por item, fora comprar e anunciar).`);
     } else if (!known) {
-      riscos.push(`Sem histórico de vendas de ${r.ref.nome} em ${city}: a quantidade foi limitada a ${CAP_SEM_VOLUME.refino}.`);
+      riscos.push(x.es
+        ? `No hay historial de ventas de ${refNome} en ${city}: la cantidad se limitó a ${CAP_SEM_VOLUME.refino}.`
+        : `Sem histórico de vendas de ${refNome} em ${city}: a quantidade foi limitada a ${CAP_SEM_VOLUME.refino}.`);
     } else if (c.produz === volCap) {
-      riscos.push(`Limitado a ${fmt(volCap)} unidades: é o que ${city} vendeu por dia, em média, nos últimos 7 dias.`);
+      riscos.push(x.es
+        ? `Limitado a ${x.n(volCap)} unidades: es lo que ${city} vendió por día, en promedio, en los últimos 7 días.`
+        : `Limitado a ${fmt(volCap)} unidades: é o que ${city} vendeu por dia, em média, nos últimos 7 dias.`);
     }
-    riscos.push('Comprar muito de uma vez esgota as ofertas mais baratas e o preço médio de compra sobe.');
+    riscos.push(x.t(
+      'Comprar muito de uma vez esgota as ofertas mais baratas e o preço médio de compra sobe.',
+      'Comprar mucho de una vez agota las ofertas más baratas y el precio medio de compra sube.',
+    ));
 
     cands.push({
       key: r.ref.id,
       op: {
         trilha: 'refino',
-        titulo: `Refino: ${r.ref.nome} em ${city}${dia ? ' (bônus do dia)' : ''}`,
+        titulo: x.es
+          ? `Refinado: ${refNome} en ${city}${dia ? ' (bonificación del día)' : ''}`
+          : `Refino: ${refNome} em ${city}${dia ? ' (bônus do dia)' : ''}`,
         passos,
         lucro: c.lucro,
         capital: c.compra,
@@ -408,9 +563,9 @@ export function planRefino(s: HojeSnapshot, p: HojeParams, now: number): HojeOpc
         confianca: known ? conf.score : Math.max(1, Math.round(conf.score * 0.85)),
         riscos,
         itens: [
-          item(r.raw.id, c.crafts * r.rawPorCraft, raw.sellMin, null, city, null, ageRaw, null),
-          item(r.lower.id, c.crafts, lower.sellMin, null, city, null, ageLower, null),
-          item(r.ref.id, c.produz, null, ref.sellMin, null, city, null, ageRef),
+          item(r.raw.id, c.crafts * r.rawPorCraft, raw.sellMin, null, city, null, ageRaw, null, lang),
+          item(r.lower.id, c.crafts, lower.sellMin, null, city, null, ageLower, null, lang),
+          item(r.ref.id, c.produz, null, ref.sellMin, null, city, null, ageRef, lang),
         ],
         conta: { compra: c.compra, venda: c.venda, taxas: c.taxas, lucro: c.lucro },
         motivos: conf.motivos,
@@ -429,11 +584,19 @@ const ROUTE_TEXT: Record<RotaRisco, string> = {
   vermelha: 'cruzando zona vermelha',
   brumas: 'pelo portal das Brumas, tempo variável',
 };
+const ROUTE_TEXT_ES: Record<RotaRisco, string> = {
+  nenhuma: '',
+  segura: 'se puede ir solo por zonas azules y amarillas',
+  vermelha: 'cruzando zona roja',
+  brumas: 'por el portal de las Nieblas, tiempo variable',
+};
 
 export function planTransporte(s: HojeSnapshot, p: HojeParams, now: number): HojeOpcaoX[] {
   const get = indexRows(s.rows);
   const tax = salesTax(p.premium);
   const feeRate = SETUP_FEE + tax;
+  const x = txt(p.lang);
+  const lang: HojeLang = x.es ? 'es' : 'pt';
   const cands: { key: string; op: HojeOpcaoX }[] = [];
   for (const id of basketIds()) {
     for (const A of TRANSPORT_CITIES) {
@@ -467,40 +630,68 @@ export function planTransporte(s: HojeSnapshot, p: HojeParams, now: number): Hoj
           [{ price: buy, ageMin: ageBuy, vol: orig.vol }, { price: sell, ageMin: ageSell, vol }],
           risco,
           s.stale,
+          lang,
         );
-        if (!known) conf.motivos.push('volume de venda desconhecido');
-        const nome = NOMES[id] ?? id;
+        if (!known) conf.motivos.push(x.t('volume de venda desconhecido', 'volumen de venta desconocido'));
+        const nome = x.nome(id);
 
         const riscos: string[] = [];
-        if (risco === 'vermelha') riscos.push(`A rota cruza zona vermelha: se morrer, perde a carga inteira (${fmt(compra)} de prata) e o que estiver vestindo.`);
-        else if (risco === 'brumas') riscos.push('Brecilien só se alcança pelas Brumas: o caminho muda, pode passar por Brumas letais (perde tudo ao morrer) e o tempo é incerto.');
-        else riscos.push('Indo só por zonas azuis e amarelas você não perde a carga; cortar caminho por zona vermelha arrisca tudo.');
-        riscos.push('Venda por ordem de venda: pode levar horas para sair, e o preço pode cair até lá.');
-        const st = staleRisk([ageBuy, ageSell]);
-        if (st) riscos.push(st);
-        if (!known) riscos.push(`Sem histórico de vendas em ${B}: a quantidade foi limitada a ${CAP_SEM_VOLUME.transporte}.`);
-        else if (qty === cap && cap < Math.min(perCapital, orig.cap)) riscos.push(`Limitado a ${fmt(qty)} unidades: é o que ${B} vendeu por dia, em média, nos últimos 7 dias.`);
-        if (qty === orig.cap && orig.cap < Math.min(perCapital, cap)) {
-          riscos.push(`Limitado a ${fmt(qty)} unidades: ${A} vendeu ${orig.vol ? `cerca de ${fmt(orig.vol)}` : 'quase nada'} por dia nos últimos 7 dias, e comprar mais esvazia as ofertas baratas.`);
+        if (x.es) {
+          if (risco === 'vermelha') riscos.push(`La ruta cruza zona roja: si mueres, pierdes toda la carga (${x.n(compra)} de plata) y lo que lleves puesto.`);
+          else if (risco === 'brumas') riscos.push('A Brecilien solo se llega por las Nieblas: el camino cambia, puede pasar por Nieblas letales (lo pierdes todo al morir) y el tiempo es incierto.');
+          else riscos.push('Yendo solo por zonas azules y amarillas no pierdes la carga; acortar por zona roja lo arriesga todo.');
+          riscos.push('Venta por orden de venta: puede tardar horas en venderse, y el precio puede bajar mientras tanto.');
+        } else {
+          if (risco === 'vermelha') riscos.push(`A rota cruza zona vermelha: se morrer, perde a carga inteira (${fmt(compra)} de prata) e o que estiver vestindo.`);
+          else if (risco === 'brumas') riscos.push('Brecilien só se alcança pelas Brumas: o caminho muda, pode passar por Brumas letais (perde tudo ao morrer) e o tempo é incerto.');
+          else riscos.push('Indo só por zonas azuis e amarelas você não perde a carga; cortar caminho por zona vermelha arrisca tudo.');
+          riscos.push('Venda por ordem de venda: pode levar horas para sair, e o preço pode cair até lá.');
         }
-        riscos.push('Confira o peso da carga: acima do limite a montaria fica lenta.');
+        const st = staleRisk([ageBuy, ageSell], x);
+        if (st) riscos.push(st);
+        const bName = x.city(B);
+        const aName = x.city(A);
+        if (!known) {
+          riscos.push(x.es
+            ? `No hay historial de ventas en ${bName}: la cantidad se limitó a ${CAP_SEM_VOLUME.transporte}.`
+            : `Sem histórico de vendas em ${B}: a quantidade foi limitada a ${CAP_SEM_VOLUME.transporte}.`);
+        } else if (qty === cap && cap < Math.min(perCapital, orig.cap)) {
+          riscos.push(x.es
+            ? `Limitado a ${x.n(qty)} unidades: es lo que ${bName} vendió por día, en promedio, en los últimos 7 días.`
+            : `Limitado a ${fmt(qty)} unidades: é o que ${B} vendeu por dia, em média, nos últimos 7 dias.`);
+        }
+        if (qty === orig.cap && orig.cap < Math.min(perCapital, cap)) {
+          riscos.push(x.es
+            ? `Limitado a ${x.n(qty)} unidades: ${aName} vendió ${orig.vol ? `unas ${x.n(orig.vol)}` : 'casi nada'} por día en los últimos 7 días, y comprar más agota las ofertas baratas.`
+            : `Limitado a ${fmt(qty)} unidades: ${A} vendeu ${orig.vol ? `cerca de ${fmt(orig.vol)}` : 'quase nada'} por dia nos últimos 7 dias, e comprar mais esvazia as ofertas baratas.`);
+        }
+        riscos.push(x.t(
+          'Confira o peso da carga: acima do limite a montaria fica lenta.',
+          'Revisa el peso de la carga: por encima del límite la montura se vuelve lenta.',
+        ));
 
         cands.push({
           key: id,
           op: {
             trilha: 'transporte',
-            titulo: `Transporte: ${nome}, de ${A} para ${B}`,
-            passos: [
-              `Em ${A}, compre ${fmt(qty)} × ${nome} na ordem de venda mais barata (${fmt(buy)} cada, ${ageText(ageBuy)}).`,
-              `Leve até ${B} (cerca de ${travel} min, ${ROUTE_TEXT[risco]}).`,
-              `Anuncie em ordem de venda por ${fmt(sell)} cada (${ageText(ageSell)}): taxa de anúncio de ${pct(SETUP_FEE)} e imposto de ${pct(tax)} ${p.premium ? 'com' : 'sem'} Premium.`,
-            ],
+            titulo: x.es ? `Transporte: ${nome}, de ${aName} a ${bName}` : `Transporte: ${nome}, de ${A} para ${B}`,
+            passos: x.es
+              ? [
+                `En ${aName}, compra ${x.n(qty)} × ${nome} en la orden de venta más barata (${x.n(buy)} cada uno, ${x.age(ageBuy)}).`,
+                `Llévalo a ${bName} (unos ${travel} min, ${ROUTE_TEXT_ES[risco]}).`,
+                `Publica una orden de venta a ${x.n(sell)} cada uno (${x.age(ageSell)}): cuota de preparación de ${x.pct(SETUP_FEE)} e impuesto de ${x.pct(tax)} ${p.premium ? 'con' : 'sin'} Premium.`,
+              ]
+              : [
+                `Em ${A}, compre ${fmt(qty)} × ${nome} na ordem de venda mais barata (${fmt(buy)} cada, ${ageText(ageBuy)}).`,
+                `Leve até ${B} (cerca de ${travel} min, ${ROUTE_TEXT[risco]}).`,
+                `Anuncie em ordem de venda por ${fmt(sell)} cada (${ageText(ageSell)}): taxa de anúncio de ${pct(SETUP_FEE)} e imposto de ${pct(tax)} ${p.premium ? 'com' : 'sem'} Premium.`,
+              ],
             lucro,
             capital: compra,
             minutos: travel + TRADE_MIN,
             confianca: known ? conf.score : Math.max(1, Math.round(conf.score * 0.85)),
             riscos,
-            itens: [item(id, qty, buy, sell, A, B, ageBuy, ageSell)],
+            itens: [item(id, qty, buy, sell, A, B, ageBuy, ageSell, lang)],
             conta: { compra, venda, taxas, lucro },
             motivos: conf.motivos,
             deslocamentoMin: travel,
@@ -564,21 +755,48 @@ export function buildHoje(s: HojeSnapshot, p: HojeParams, now: number): HojeResp
   const flip = planFlip(s, p, now);
   const refino = planRefino(s, p, now);
   const transporte = planTransporte(s, p, now);
+  const x = txt(p.lang);
   const notas: string[] = [];
-  if (s.stale) notas.push('O Albion Data Project não respondeu agora: parte dos preços veio da última cópia guardada.');
+  if (s.stale) {
+    notas.push(x.t(
+      'O Albion Data Project não respondeu agora: parte dos preços veio da última cópia guardada.',
+      'El Albion Data Project no respondió ahora: parte de los precios viene de la última copia guardada.',
+    ));
+  }
   const daily = dailyRefining(s.daily, now);
   const ativos = RECURSOS.filter((r) => daily[r.recurso]);
-  if (!s.festOk) notas.push('Não deu para consultar o bônus do dia; o refino foi calculado só com o bônus da cidade.');
-  else if (ativos.length) notas.push(`Bônus de refino hoje: ${ativos.map((r) => `${r.bruto} (+${pct(daily[r.recurso]!.valor)}, em ${r.cidade} vale mais)`).join('; ')}.`);
-  else notas.push('Nenhum bônus de refino hoje; o refino usa só o bônus da cidade especializada.');
-  const vazio: Record<HojeTrilha, string> = {
-    flip: 'Nenhum flip para o Black Market dá lucro com a prata e o tempo informados agora.',
-    refino:
-      p.minutos < REFINO_MIN
-        ? `Com menos de ${REFINO_MIN} minutos não dá para fechar um ciclo de refino (comprar, refinar e anunciar).`
-        : 'Nenhum refino dá lucro agora com a prata informada (ou faltam preços nas cidades com bônus).',
-    transporte: 'Nenhum transporte entre cidades dá lucro, depois das taxas, com a prata e o tempo informados agora.',
-  };
+  if (!s.festOk) {
+    notas.push(x.t(
+      'Não deu para consultar o bônus do dia; o refino foi calculado só com o bônus da cidade.',
+      'No se pudo consultar la bonificación del día; el refinado se calculó solo con la bonificación de la ciudad.',
+    ));
+  } else if (ativos.length) {
+    notas.push(x.es
+      ? `Bonificación de refinado hoy: ${ativos.map((r) => `${r.brutoEs} (+${x.pct(daily[r.recurso]!.valor)}, en ${r.cidade} vale más)`).join('; ')}.`
+      : `Bônus de refino hoje: ${ativos.map((r) => `${r.bruto} (+${pct(daily[r.recurso]!.valor)}, em ${r.cidade} vale mais)`).join('; ')}.`);
+  } else {
+    notas.push(x.t(
+      'Nenhum bônus de refino hoje; o refino usa só o bônus da cidade especializada.',
+      'No hay bonificación de refinado hoy; el refinado usa solo la bonificación de la ciudad especializada.',
+    ));
+  }
+  const vazio: Record<HojeTrilha, string> = x.es
+    ? {
+      flip: 'Ninguna reventa al Mercado Negro da ganancia ahora con la plata y el tiempo indicados.',
+      refino:
+        p.minutos < REFINO_MIN
+          ? `Con menos de ${REFINO_MIN} minutos no alcanza para cerrar un ciclo de refinado (comprar, refinar y publicar).`
+          : 'Ningún refinado da ganancia ahora con la plata indicada (o faltan precios en las ciudades con bonificación).',
+      transporte: 'Ningún transporte entre ciudades da ganancia, después de los impuestos, con la plata y el tiempo indicados ahora.',
+    }
+    : {
+      flip: 'Nenhum flip para o Black Market dá lucro com a prata e o tempo informados agora.',
+      refino:
+        p.minutos < REFINO_MIN
+          ? `Com menos de ${REFINO_MIN} minutos não dá para fechar um ciclo de refino (comprar, refinar e anunciar).`
+          : 'Nenhum refino dá lucro agora com a prata informada (ou faltam preços nas cidades com bônus).',
+      transporte: 'Nenhum transporte entre cidades dá lucro, depois das taxas, com a prata e o tempo informados agora.',
+    };
   if (!flip.length) notas.push(vazio.flip);
   if (!refino.length) notas.push(vazio.refino);
   if (!transporte.length) notas.push(vazio.transporte);
@@ -586,21 +804,36 @@ export function buildHoje(s: HojeSnapshot, p: HojeParams, now: number): HojeResp
   return { prata: p.prata, minutos: p.minutos, premium: p.premium, opcoes, fetchedAt: s.at, notas, stale: s.stale };
 }
 
-/** Valida a consulta. Erro volta como texto pronto para o usuário. */
+/**
+ * Valida a consulta. Erro volta como texto pronto para o usuário, na língua de `lang` (lida antes de tudo).
+ * Sem `lang` (ou com valor diferente de "es") o resultado é o mesmo de antes, sem o campo `lang`.
+ */
 export function parseHojeParams(q: URLSearchParams): HojeParams | { error: string } {
+  const lang = hojeLang(q.get('lang'));
+  const x = txt(lang);
   const rawPrata = (q.get('prata') ?? '').trim().replace(/[.\s_]/g, '').replace(',', '.');
-  if (!rawPrata) return { error: 'Informe quanta prata você tem (parâmetro prata).' };
+  if (!rawPrata) return { error: x.t('Informe quanta prata você tem (parâmetro prata).', 'Indica cuánta plata tienes (parámetro prata).') };
   const prata = Math.round(Number(rawPrata));
   if (!Number.isFinite(prata) || prata < LIMITS.prataMin || prata > LIMITS.prataMax) {
-    return { error: `A prata precisa ser um número de ${fmt(LIMITS.prataMin)} a ${fmt(LIMITS.prataMax)}.` };
+    return {
+      error: x.es
+        ? `La plata tiene que ser un número de ${x.n(LIMITS.prataMin)} a ${x.n(LIMITS.prataMax)}.`
+        : `A prata precisa ser um número de ${fmt(LIMITS.prataMin)} a ${fmt(LIMITS.prataMax)}.`,
+    };
   }
   const rawMin = (q.get('minutos') ?? '').trim();
   const minutos = rawMin ? Number(rawMin) : LIMITS.minutosPadrao;
   if (!Number.isInteger(minutos) || minutos < LIMITS.minutosMin || minutos > LIMITS.minutosMax) {
-    return { error: `Os minutos precisam ser um número inteiro de ${LIMITS.minutosMin} a ${LIMITS.minutosMax}.` };
+    return {
+      error: x.es
+        ? `Los minutos tienen que ser un número entero de ${LIMITS.minutosMin} a ${LIMITS.minutosMax}.`
+        : `Os minutos precisam ser um número inteiro de ${LIMITS.minutosMin} a ${LIMITS.minutosMax}.`,
+    };
   }
   const prem = (q.get('premium') ?? '').trim().toLowerCase();
-  return { prata, minutos, premium: prem === '1' || prem === 'true' || prem === 'sim' };
+  const out: HojeParams = { prata, minutos, premium: prem === '1' || prem === 'true' || prem === 'sim' || prem === 'si' || prem === 'sí' };
+  if (lang === 'es') out.lang = 'es';
+  return out;
 }
 
 // ---------- fontes ----------

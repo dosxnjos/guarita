@@ -20,6 +20,8 @@ export interface TabelaInfo {
   versao: number;
   atualizadoEm: string;
   origem: 'embutida' | 'remota';
+  /** Por que a última tabela do GitHub foi recusada (ex.: "tabela remota recusada (assinatura)"); null se aceita. */
+  recusa: string | null;
 }
 
 export interface NumerosCaptura {

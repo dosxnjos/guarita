@@ -1,7 +1,9 @@
 // Lógica pura da tela "O que fazer hoje" (src/routes/Hoje.svelte): conta aberta, consulta na URL, rótulos e selo.
+// Textos nas duas línguas: `loc` no fim (padrão: a língua atual do site, como em format.ts).
 import type { Confidence, HojeTrilha } from '../../../shared/types';
 import { scoreLabel } from '../../../shared/confidence';
 import type { HojeConta, HojeOpcao as HojeOpcaoX } from '../../../shared/types';
+import { currentLocale, type Locale } from '../i18n/core';
 
 export const PRATA_ATALHOS = [1_000_000, 5_000_000, 10_000_000] as const;
 export const MINUTOS_OPCOES = [30, 60, 120] as const;
@@ -19,10 +21,15 @@ const TRILHA: Record<HojeTrilha, string> = {
   refino: 'Refino com bônus',
   transporte: 'Transporte entre cidades',
 };
+const TRILHA_ES: Record<HojeTrilha, string> = {
+  flip: 'Reventa al Mercado Negro',
+  refino: 'Refinado con bonificación',
+  transporte: 'Transporte entre ciudades',
+};
 export const TRILHAS: HojeTrilha[] = ['flip', 'refino', 'transporte'];
 
-export function trilhaLabel(t: HojeTrilha): string {
-  return TRILHA[t];
+export function trilhaLabel(t: HojeTrilha, loc: Locale = currentLocale()): string {
+  return (loc === 'es' ? TRILHA_ES : TRILHA)[t];
 }
 
 /** Conta da opção: a que a API manda ou, sem ela, derivada dos itens (venda − compra − lucro = taxas). */
@@ -58,12 +65,20 @@ export function parseHojeQuery(search: string): HojeForm {
  * Frase curta para o leitor de tela (região role="status"): o resultado inteiro não fica dentro de aria-live, senão
  * o leitor tentaria ler dezenas de linhas a cada consulta.
  */
-export function anuncioHoje(s: { loading: boolean; error: string | null; contagem: Record<HojeTrilha, number> | null }): string {
-  if (s.loading) return 'Consultando os preços de agora…';
-  if (s.error) return `Não deu para montar as opções: ${s.error}`;
+export function anuncioHoje(
+  s: { loading: boolean; error: string | null; contagem: Record<HojeTrilha, number> | null },
+  loc: Locale = currentLocale(),
+): string {
+  const es = loc === 'es';
+  if (s.loading) return es ? 'Consultando los precios de ahora…' : 'Consultando os preços de agora…';
+  if (s.error) return es ? `No se pudieron armar las opciones: ${s.error}` : `Não deu para montar as opções: ${s.error}`;
   if (!s.contagem) return '';
-  const parte = (n: number, rotulo: string) => (n === 0 ? `nenhuma de ${rotulo}` : `${n} de ${rotulo}`);
   const c = s.contagem;
+  if (es) {
+    const parteEs = (n: number, rotulo: string) => (n === 0 ? `ninguna de ${rotulo}` : `${n} de ${rotulo}`);
+    return `Opciones listas: ${parteEs(c.flip, 'reventa')}, ${parteEs(c.refino, 'refinado')} y ${parteEs(c.transporte, 'transporte')}.`;
+  }
+  const parte = (n: number, rotulo: string) => (n === 0 ? `nenhuma de ${rotulo}` : `${n} de ${rotulo}`);
   return `Opções prontas: ${parte(c.flip, 'flip')}, ${parte(c.refino, 'refino')} e ${parte(c.transporte, 'transporte')}.`;
 }
 
@@ -71,9 +86,12 @@ export function hojeQuery(f: { prata: number; minutos: number; premium: boolean 
   return `?prata=${Math.round(f.prata)}&minutos=${f.minutos}&premium=${f.premium ? 1 : 0}`;
 }
 
-/** "1.500.000", "1,5 mi", "2kk" e "300k" → número. Vazio ou inválido → null. */
+/**
+ * "1.500.000", "1,5 mi", "2kk" e "300k" → número. Vazio ou inválido → null. Também aceita o jeito do espanhol:
+ * "2,500,000", "2.5 M" e o sufixo "plata".
+ */
 export function parsePrata(text: string): number | null {
-  const s = text.trim().toLowerCase().replace(/\s+/g, '').replace(/prata$/, '');
+  const s = text.trim().toLowerCase().replace(/\s+/g, '').replace(/(prata|plata)$/, '');
   if (!s) return null;
   const m = /^(\d+(?:[.,]\d+)*)(kk|mi|m|k|mil)?$/.exec(s);
   if (!m) return null;

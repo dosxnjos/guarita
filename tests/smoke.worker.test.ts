@@ -24,7 +24,9 @@ const ctx = { waitUntil: (p: Promise<unknown>) => void pending.push(p), passThro
 function fakeEnv(): Env {
   const ASSETS = {
     async fetch(input: RequestInfo | URL) {
-      const path = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).pathname;
+      let path = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).pathname;
+      // Como o ASSETS do Pages: pasta ("/") serve o index.html.
+      if (path.endsWith('/')) path += 'index.html';
       // index.html não mora em public/: o do build (dist/, com a cabeça do Vite) ou, sem build, o da raiz.
       let file = new URL('../public' + path, import.meta.url);
       if (path === '/index.html') {
@@ -429,6 +431,67 @@ describe.skipIf(!RUN)('fumaça do worker contra as APIs reais', () => {
     expect(html).toContain('<meta property="og:title" content="Bolsa do Adepto (T4) · Guarita"');
     expect(html).toContain('<link rel="canonical" href="https://guarita.pages.dev/item/T4_BAG"');
   });
+
+  // ---------- Rodada 2: espanhol e /status ----------
+
+  async function page(path: string): Promise<{ status: number; html: string }> {
+    const res = await worker.fetch(new Request(ORIGIN + path, { headers: { accept: 'text/html' } }), env, ctx);
+    const html = await res.text();
+    console.log(`[fumaça] ${path} → ${res.status}, <title>${/<title>([^<]*)<\/title>/.exec(html)?.[1]}</title>`);
+    return { status: res.status, html };
+  }
+
+  it('HTML de /es: lang es, título em espanhol e hreflang das duas línguas', async () => {
+    const { status, html } = await page('/es');
+    expect(status).toBe(200);
+    expect(html).toMatch(/<html\b[^>]*\slang="es"/);
+    expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toBe('Guarita: compañero de Albion Online en español');
+    expect(html).toContain('<link rel="alternate" hreflang="pt-BR" href="https://guarita.pages.dev/"');
+    expect(html).toContain('<link rel="alternate" hreflang="es" href="https://guarita.pages.dev/es"');
+    expect(html).toContain('<link rel="alternate" hreflang="x-default" href="https://guarita.pages.dev/"');
+    expect(html).toContain('<link rel="canonical" href="https://guarita.pages.dev/es"');
+    expect(html).toContain('<meta property="og:locale" content="es_LA"');
+    // o português segue sem prefixo e com lang pt-BR
+    const pt = await page('/');
+    expect(pt.html).toMatch(/<html\b[^>]*\slang="pt-BR"/);
+  });
+
+  it('HTML de /es/item/T4_BAG sai com o nome do item em espanhol', async () => {
+    const { status, html } = await page('/es/item/T4_BAG');
+    expect(status).toBe(200);
+    expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toBe('Bolsa del iniciado (T4) · Guarita');
+    expect(html).toMatch(/<html\b[^>]*\slang="es"/);
+    expect(html).toContain('<link rel="canonical" href="https://guarita.pages.dev/es/item/T4_BAG"');
+    expect(html).toContain('<link rel="alternate" hreflang="pt-BR" href="https://guarita.pages.dev/item/T4_BAG"');
+  });
+
+  it('HTML de /status e /es/status: título da tela, indexável', async () => {
+    const pt = await page('/status');
+    expect(pt.status).toBe(200);
+    expect(/<title>([^<]*)<\/title>/.exec(pt.html)?.[1]).toBe('Status e custos · Guarita');
+    expect(pt.html).not.toContain('noindex');
+    const es = await page('/es/status');
+    expect(es.status).toBe(200);
+    expect(/<title>([^<]*)<\/title>/.exec(es.html)?.[1]).toBe('Estado y costos · Guarita');
+  });
+
+  it('/api/hoje?…&lang=es devolve o texto em espanhol com os mesmos números', async () => {
+    const path = '/api/hoje?prata=2000000&minutos=60&premium=1&lang=es';
+    const r = await call(path);
+    if (upstreamDown(r, path)) return;
+    expect(r.status).toBe(200);
+    const es = r.body as HojeResponse;
+    const pt = (await call('/api/hoje?prata=2000000&minutos=60&premium=1')).body as HojeResponse;
+    expect(es.opcoes.map((o) => [o.trilha, o.lucro])).toEqual(pt.opcoes.map((o) => [o.trilha, o.lucro]));
+    const text = JSON.stringify([es.opcoes.map((o) => [o.titulo, o.passos, o.riscos]), es.notas ?? []]);
+    // palavras que só existem no português não podem aparecer no espanhol
+    expect(text).not.toMatch(/\b(você|não|comprar em|vender em|prata)\b/i);
+    if (es.opcoes.length) expect(es.opcoes[0].titulo).not.toBe(pt.opcoes[0].titulo);
+    console.log(`[fumaça] hoje ES: ${es.opcoes.map((o) => o.titulo).join(' | ')}; notas: ${(es.notas ?? []).join(' | ').slice(0, 200)}`);
+    const bad = await call('/api/hoje?lang=es');
+    expect(bad.status).toBe(400);
+    expect(String(bad.body.error)).not.toMatch(/\b(você|não)\b/i);
+  }, 60_000);
 
   it('/api/health e rota desconhecida', async () => {
     const h = await call('/api/health');

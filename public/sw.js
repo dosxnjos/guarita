@@ -2,7 +2,7 @@
 // vêm do cache (para nunca mostrar preço velho): só quando a navegação falha por falta de rede é que sai a
 // offline.html guardada na instalação. O corpo do push vem do motor de alertas do guarita-core: {title, body, url, tag}.
 
-const SHELL_CACHE = 'guarita-shell-v1';
+const SHELL_CACHE = 'guarita-shell-v2'; // v2: offline.html com o âmbar de maior contraste e o texto em espanhol em /es (30/10/2026)
 const OFFLINE_URL = '/offline.html';
 const SHELL_FILES = [OFFLINE_URL, '/icons/icon.svg', '/icons/icon-192.png', '/manifest.webmanifest'];
 

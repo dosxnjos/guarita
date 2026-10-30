@@ -1,0 +1,3 @@
+# A assinatura (capture-codes.json.sig) vale para os bytes exatos que o GitHub serve: sem conversão de fim de linha.
+capture-codes.json -text
+capture-codes.json.sig -text

@@ -1,17 +1,26 @@
 // Calculadora "Premium compensa?" (lógica pura, sem DOM; testada em tests/gold.test.ts).
 // Nenhum preço em reais vem daqui: o usuário informa quanto paga. Premium de 30 dias = 3.750 ouro
 // (PREMIUM_30D_GOLD, gamedata.xml); imposto de venda 8% sem e 4% com Premium (SALES_TAX*, shared/market.ts).
+// Espanhol: quem joga na versão em espanhol não paga em reais; a tela pede o valor "na sua moeda" e fmtBrl mostra o
+// número sem símbolo (o cálculo não depende da moeda).
 import { PREMIUM_30D_GOLD, SALES_TAX, SALES_TAX_PREMIUM } from '../../../shared/market';
+import { currentLocale, type Locale } from '../i18n/core';
 
 /**
  * Número digitado em pt-BR → number. Aceita "19,90", "1.234,56", "1234.5", "R$ 29,90", "2 mil" não (null).
  * Ponto seguido de exatamente 3 dígitos é separador de milhar ("1.000" = mil); vazio ou inválido → null.
+ * Espanhol (loc 'es'): vírgula em grupos de 3 dígitos também é milhar ("1,000" = mil, "1,234.5"), como no es-419;
+ * fora disso vale a mesma regra ("29,90" e "29.90" = 29,9).
  */
-export function parseDecimalBr(raw: string | null | undefined): number | null {
+export function parseDecimalBr(raw: string | null | undefined, loc: Locale = currentLocale()): number | null {
   if (raw === null || raw === undefined) return null;
-  let s = raw.trim().replace(/^r\$\s*/i, '').replace(/\s+/g, '');
+  let s = raw.trim().replace(/^r\$\s*/i, '').replace(/^\$\s*/, '').replace(/\s+/g, '');
   if (!s) return null;
   if (!/^[\d.,]+$/.test(s)) return null;
+  if (loc === 'es' && /^\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) {
+    const n = Number(s.replace(/,/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
   if (s.includes(',')) {
     // vírgula = decimal; pontos = milhar
     if (s.indexOf(',') !== s.lastIndexOf(',')) return null;
@@ -73,14 +82,21 @@ export function premiumCalc(i: PremiumInput): PremiumResult {
 const brlFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const brlFine = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 4 });
 
-/** R$ formatado; fine: até 4 casas (preço de 1 ouro costuma ser centavos). */
-export function fmtBrl(n: number | null | undefined, fine = false): string {
+const moneyEs = new Intl.NumberFormat('es-419', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const moneyEsFine = new Intl.NumberFormat('es-419', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+
+/**
+ * R$ formatado; fine: até 4 casas (preço de 1 ouro costuma ser centavos). Espanhol: só o número, sem símbolo
+ * ("29.90"), porque o valor está na moeda de quem preencheu.
+ */
+export function fmtBrl(n: number | null | undefined, fine = false, loc: Locale = currentLocale()): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
+  if (loc === 'es') return (fine ? moneyEsFine : moneyEs).format(n);
   return (fine ? brlFine : brlFmt).format(n);
 }
 
-/** Horas → "45 min", "3 h 20 min", "12 h", "2 dias e 4 h" (de jogo). */
-export function fmtHours(h: number | null | undefined): string {
+/** Horas → "45 min", "3 h 20 min", "12 h", "2 dias e 4 h" (de jogo; es: "2 días y 4 h"). */
+export function fmtHours(h: number | null | undefined, loc: Locale = currentLocale()): string {
   if (typeof h !== 'number' || !Number.isFinite(h) || h < 0) return '—';
   const totalMin = Math.max(1, Math.round(h * 60));
   if (totalMin < 60) return `${totalMin} min`;
@@ -90,5 +106,6 @@ export function fmtHours(h: number | null | undefined): string {
   if (hh < 48) return `${Math.round(h)} h`;
   const d = Math.floor(hh / 24);
   const rest = hh % 24;
+  if (loc === 'es') return rest ? `${d} días y ${rest} h` : `${d} días`;
   return rest ? `${d} dias e ${rest} h` : `${d} dias`;
 }

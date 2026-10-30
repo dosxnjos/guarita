@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import worker from '../worker/index';
 import type { Env } from '../worker/env';
 import {
-  FIXED_ROUTES, SITE, applyMetaToHtml, escapeHtml, headTags, itemIdFromPath, routeMeta, sitemapPaths, sitemapXml,
+  FIXED_ES, FIXED_ROUTES, SITE, applyMetaToHtml, escapeHtml, headTags, itemIdFromPath, routeMeta, sitemapPaths, sitemapXml,
 } from '../worker/seo';
 import { HEALTH_BASKET } from '../worker/api/goldHealth';
 import { readPublic } from './helpers/public';
@@ -208,8 +208,102 @@ describe('_worker.js', () => {
     expect(res.headers.get('content-type')).toContain('application/xml');
     expect(html).toContain(`<loc>${SITE}/item/T4_BAG</loc>`);
     expect(html).toContain(`<loc>${SITE}/relogio</loc>`);
+    expect(html).toContain(`<loc>${SITE}/es/relogio</loc>`);
+    expect(html).toContain(`<loc>${SITE}/es/item/T4_BAG</loc><changefreq>hourly</changefreq>`);
+  });
+
+  it('página em português leva lang pt-BR, hreflang das duas línguas e canonical sem /es', async () => {
+    const { html } = await page('/perdas');
+    expect(html).toContain('<html lang="pt-BR">');
+    expect(html).toContain(`<link rel="canonical" href="${SITE}/perdas" />`);
+    expect(html).toContain(`<link rel="alternate" hreflang="pt-BR" href="${SITE}/perdas" />`);
+    expect(html).toContain(`<link rel="alternate" hreflang="es" href="${SITE}/es/perdas" />`);
+    expect(html).toContain(`<link rel="alternate" hreflang="x-default" href="${SITE}/perdas" />`);
+    expect(metaOf(html, 'property', 'og:locale')).toBe('pt_BR');
+  });
+
+  it('/es/... serve o index.html em espanhol: lang es, título e descrição da tabela, canonical em /es', async () => {
+    const { res, html, env } = await page('/es/perdas');
+    expect(res.status).toBe(200);
+    expect(env.hits).toContain('/index.html');
+    expect(html).toContain('<html lang="es">');
+    expect(titleOf(html)).toBe('Pérdidas en PvP · Guarita');
+    expect(metaOf(html, 'name', 'description')).toContain('Los objetos que más se pierden');
+    expect(html).toContain(`<link rel="canonical" href="${SITE}/es/perdas" />`);
+    expect(html).toContain(`<link rel="alternate" hreflang="pt-BR" href="${SITE}/perdas" />`);
+    expect(html).toContain(`<link rel="alternate" hreflang="es" href="${SITE}/es/perdas" />`);
+    expect(html).toContain(`<link rel="alternate" hreflang="x-default" href="${SITE}/perdas" />`);
+    expect(metaOf(html, 'property', 'og:locale')).toBe('es_LA');
+    expect(html).toContain('<script type="module" crossorigin src="/assets/index-x.js"></script>');
+  });
+
+  it('/es e /es/ são o início em espanhol', async () => {
+    for (const p of ['/es', '/es/']) {
+      const { html } = await page(p);
+      expect(titleOf(html), p).toBe('Guarita: compañero de Albion Online en español');
+      expect(html, p).toContain(`<link rel="canonical" href="${SITE}/es" />`);
+      expect(html, p).toContain(`<link rel="alternate" hreflang="pt-BR" href="${SITE}/" />`);
+    }
+  });
+
+  it('/es/item/:id usa o nome em espanhol da fatia names-es do tier e mantém o canonical em /es', async () => {
+    const { html, env } = await page('/es/item/t4_bag@2');
+    expect(titleOf(html)).toBe('Bolsa del iniciado (T4.2) · Guarita');
+    expect(metaOf(html, 'name', 'description')).toContain('Precio de Bolsa del iniciado (T4.2)');
+    expect(html).toContain(`<link rel="canonical" href="${SITE}/es/item/T4_BAG@2" />`);
+    expect(env.hits).toContain('/data/names-es/t4.json');
+    expect(env.hits.some((h) => h.includes('items-index'))).toBe(false);
+  });
+
+  it('caminho desconhecido em espanhol: noindex, título em espanhol e sem hreflang', async () => {
+    const { html } = await page('/es/nao-existe');
+    expect(titleOf(html)).toBe('Página no encontrada · Guarita');
+    expect(html).toContain('<meta name="robots" content="noindex" />');
+    expect(html).not.toContain('hreflang');
   });
 });
+
+describe('espanhol (routeMeta)', () => {
+  it('toda rota fixa tem título e descrição em espanhol', () => {
+    for (const [path] of FIXED_ROUTES) {
+      const es = FIXED_ES[path];
+      expect(es, path).toBeDefined();
+      expect(routeMeta(localizedEs(path)).title, path).toBe(es[0]);
+      expect(routeMeta(localizedEs(path)).locale).toBe('es');
+    }
+  });
+
+  it('/estrada não é espanhol', () => {
+    expect(routeMeta('/estrada').locale).toBe('pt');
+    expect(routeMeta('/estrada').title).toBe('Página não encontrada · Guarita');
+  });
+
+  it('dinâmicas em espanhol continuam fora do buscador', () => {
+    expect(routeMeta('/es/guilda/Os%20Bagres').title).toBe('Os Bagres · Gremio · Guarita');
+    expect(routeMeta('/es/guilda/Os%20Bagres').noindex).toBe(true);
+    expect(routeMeta('/es/jogador/abc').title).toBe('Dosier · Guarita');
+    expect(routeMeta('/es/jogador/abc/morte').title).toBe('Autopsia · Guarita');
+    expect(routeMeta('/es/live').noindex).toBe(true);
+    expect(routeMeta('/es/previsao/T4_BAG', 'Bolsa do Adepto (T4)').title).toBe('Previsión: Bolsa do Adepto (T4) · Guarita');
+    expect(routeMeta('/es/item/NAO_EXISTE', null).title).toBe('Precio de objeto · Guarita');
+  });
+
+  it('itemIdFromPath aceita o prefixo /es', () => {
+    expect(itemIdFromPath('/es/item/t4_bag@1')).toBe('T4_BAG@1');
+    expect(itemIdFromPath('/es/previsao/T6_2H_BOW')).toBe('T6_2H_BOW');
+    expect(itemIdFromPath('/es/perdas')).toBeNull();
+  });
+
+  it('não duplica hreflang nem troca o lang duas vezes', () => {
+    const once = applyMetaToHtml(INDEX_HTML, routeMeta('/es/perdas'));
+    const twice = applyMetaToHtml(once, routeMeta('/relogio'));
+    expect(twice.match(/hreflang="es"/g)).toHaveLength(1);
+    expect(twice).toContain('<html lang="pt-BR">');
+    expect(twice.match(/og:locale:alternate/g)).toHaveLength(1);
+  });
+});
+
+const localizedEs = (p: string) => (p === '/' ? '/es' : `/es${p}`);
 
 describe('sitemap', () => {
   it('rotas fixas indexáveis + itens populares, sem live nem rota dinâmica', () => {
@@ -218,7 +312,20 @@ describe('sitemap', () => {
     expect(paths).not.toContain('/live');
     expect(paths.filter((p) => p.startsWith('/item/'))).toHaveLength(new Set(HEALTH_BASKET).size);
     expect(paths.some((p) => p.startsWith('/jogador/') || p.startsWith('/guilda/'))).toBe(false);
-    expect(paths.length).toBe(FIXED_ROUTES.length - 1 + new Set(HEALTH_BASKET).size);
+    // Português e a cópia em espanhol (/es) de cada caminho.
+    expect(paths.length).toBe(2 * (FIXED_ROUTES.length - 1 + new Set(HEALTH_BASKET).size));
+  });
+
+  it('cada caminho em português tem o par em /es, e /es não repete', () => {
+    const paths = sitemapPaths();
+    const pt = paths.filter((p) => !p.startsWith('/es'));
+    const es = paths.filter((p) => p === '/es' || p.startsWith('/es/'));
+    expect(es.length).toBe(pt.length);
+    expect(es).toContain('/es');
+    expect(es).toContain('/es/relogio');
+    expect(es).toContain('/es/item/T4_BAG');
+    expect(es).not.toContain('/es/live');
+    expect(new Set(paths).size).toBe(paths.length);
   });
 
   it('XML válido e escapado', () => {

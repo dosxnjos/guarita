@@ -3,7 +3,7 @@
 // Quem liga e desliga é o painel (controle abaixo); os widgets só leem o estado e o retrato.
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '../windows';
-import { URL_CODIGOS, URL_ITENS, URL_MAPAS, parseItensTxt, parseMapasTxt, textoComCopia } from './dados';
+import { URL_ITENS, URL_MAPAS, codigosAssinados, parseItensTxt, parseMapasTxt, textoComCopia } from './dados';
 import { normalizarPref, prefPadrao } from './sessao';
 import {
   EV_CAPTURA_ESTADO,
@@ -25,7 +25,8 @@ export const sessaoCaptura = () => invoke<RetratoSessao>('captura_sessao');
 export const ligarCaptura = () => invoke<EstadoCaptura>('captura_ligar');
 export const desligarCaptura = () => invoke<EstadoCaptura>('captura_desligar');
 export const novaSessao = () => invoke<RetratoSessao>('captura_nova_sessao');
-export const definirCodigos = (json: string) => invoke<TabelaInfo>('captura_definir_codigos', { json });
+export const definirCodigos = (json: string, assinatura: string | null) =>
+  invoke<TabelaInfo>('captura_definir_codigos', { json, assinatura });
 export const definirDados = (itens: string[], zonas: Record<string, string>) => invoke<void>('captura_definir_dados', { itens, zonas });
 export const definirDiagnostico = (ligado: boolean) => invoke<EstadoCaptura>('captura_diagnostico', { ligado });
 
@@ -84,9 +85,11 @@ export async function entregarDados(): Promise<{ tabela: TabelaInfo | null; erro
   const erros: string[] = [];
   let tabela: TabelaInfo | null = null;
   try {
-    tabela = await definirCodigos(await textoComCopia(URL_CODIGOS));
+    const baixada = await codigosAssinados();
+    tabela = await definirCodigos(baixada.json, baixada.assinatura);
+    await baixada.guardar();
   } catch (e) {
-    // Sem rede ou tabela recusada: vale a embutida no app.
+    // Sem rede ou tabela recusada (assinatura, validação): vale a embutida no app; o motivo fica em tabela.recusa.
     erros.push(`tabela de códigos: ${e instanceof Error ? e.message : String(e)}`);
   }
   try {

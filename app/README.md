@@ -22,6 +22,7 @@ npm run dev      # tauri dev: sobe o Vite na porta 1420 e abre o app (recarrega 
 npm run check    # svelte-check + cargo check
 npm test         # vitest (tests/)
 npm run vite:dev # só o front no navegador; ?w=preco mostra um widget. Sem Tauri, comandos de janela falham.
+npm run codes:sign # assina capture-codes.json → capture-codes.json.sig (chave no Doppler pessoal; seção da captura)
 ```
 
 ## Gerar o instalador
@@ -35,9 +36,12 @@ aponta para `C:\pt`, então o instalador sai em `C:\pt\release\bundle\`; sem a v
 `app/src-tauri/target/release/bundle/`. Sem certificado de assinatura, o Windows mostra o aviso do SmartScreen
 ("Mais informações" > "Executar assim mesmo"). v1 sem atualização automática: instalador novo no GitHub Releases.
 
-Arquivos gerados (v0.2.0, 30/10/2026): `nsis/Guarita_0.2.0_x64-setup.exe` (2.561.688 bytes, instala por usuário,
-sem pedir administrador) e `msi/Guarita_0.2.0_x64_pt-BR.msi` (3.522.560 bytes). A versão mora em três lugares que
-andam juntos: `package.json`, `src-tauri/tauri.conf.json` e `src-tauri/Cargo.toml`. Se faltar o WebView2 (Windows 10 antigo), o
+Arquivos gerados (v0.2.1, 30/10/2026; tabela de códigos remota só com assinatura válida):
+`nsis/Guarita_0.2.1_x64-setup.exe` (2.589.885 bytes, instala por usuário, sem pedir administrador; SHA-256
+`fec5f91d706c35cdeaf4810399cfa541d6f41fa02412c91322778387c9ea6b42`) e `msi/Guarita_0.2.1_x64_pt-BR.msi`
+(3.555.328 bytes; SHA-256 `4060bbba3fb60c84abcdd331a081c4d9aff2d92725decbd5455d25c20cf6098d`). A versão mora em
+cinco lugares que andam juntos: `package.json`, `package-lock.json` (raiz do pacote), `src-tauri/tauri.conf.json`,
+`src-tauri/Cargo.toml` e `src-tauri/Cargo.lock`. O app segue só em português (o site também tem `/es`). Se faltar o WebView2 (Windows 10 antigo), o
 instalador NSIS baixa o instalador oficial da Microsoft (modo padrão `downloadBootstrapper`, precisa de internet).
 Nenhum dos dois cria tarefa agendada, serviço ou entrada de inicialização.
 
@@ -77,7 +81,7 @@ ficam fora de `releases/latest` e a página continua em "Em breve". Nas notas da
 - **Capabilities por janela** (`src-tauri/capabilities/`): `painel.json` (criar widgets, atalhos globais, notificação,
   iniciar com o Windows, store, http, todos os comandos da captura) e `widgets.json` (arrastar, minimizar, fechar,
   fixar, store, http, ler estado e sessão da captura). Nada de shell, nada de sistema de arquivos. O `http` do painel
-  também alcança três URLs exatas do `raw.githubusercontent.com` (tabela de códigos e listas do ao-bin-dumps). Comandos do app também passam por permissão (`build.rs` + capability).
+  também alcança quatro URLs exatas do `raw.githubusercontent.com` (tabela de códigos, a assinatura dela e listas do ao-bin-dumps). Comandos do app também passam por permissão (`build.rs` + capability).
 - **Rede**: dentro do app, a API sai pelo `tauri-plugin-http` com escopo só em `https://guarita.pages.dev/*` (a API
   do site não manda CORS para a origem do app). Links externos abrem no navegador (`tauri-plugin-opener`, escopo
   fechado).
@@ -133,10 +137,24 @@ big-endian, valores do Protocol18 em little-endian com varint/zigzag; comandos 6
 do evento vem em `params[252]` e o da operação em `params[253]`. Prata e fama em FixPoint (×10000).
 
 **Tabela de códigos** (`app/capture-codes.json`, fonte única): vai embutida no binário (`include_str!`) e o painel
-baixa a mesma de `https://raw.githubusercontent.com/dosxnjos/guarita/main/app/capture-codes.json`; se a de lá tiver
-`versao` maior e passar na validação (porta 5055/5056, no máximo 1000 versões acima da embutida, todos os eventos
-usados presentes), vale sem nova versão do app. Cada código tem a fonte e a data no próprio JSON.
-Depois de um patch do Albion: conferir os números (modo de diagnóstico), subir `versao`, publicar no `main`.
+baixa a mesma de `https://raw.githubusercontent.com/dosxnjos/guarita/main/app/capture-codes.json`, junto com
+`capture-codes.json.sig` (assinatura Ed25519 em base64 sobre os bytes exatos do arquivo). O Rust confere a
+assinatura com a chave pública embutida (`CHAVE_PUBLICA_B64` em `src-tauri/src/capture/codigos.rs`) **antes** de ler
+o JSON; sem assinatura válida fica a tabela atual e o motivo ("tabela remota recusada (assinatura)") vai para
+`TabelaInfo.recusa`, para o log e para `tabela.recusaRemota` no arquivo de diagnóstico. Com a assinatura válida, se a
+de lá tiver `versao` maior e passar na validação (porta 5055/5056, no máximo 1000 versões acima da embutida, todos
+os eventos usados presentes), vale sem nova versão do app. O painel guarda o par (tabela + assinatura) junto, por
+24 h, e só depois de o Rust aceitar. Cada código tem a fonte e a data no próprio JSON. A 0.2.0 ignora o `.sig`.
+Depois de um patch do Albion: conferir os números (modo de diagnóstico), subir `versao`, rodar `npm run codes:sign` e
+publicar no `main` **os dois arquivos no mesmo commit**.
+
+**Chave de assinatura.** A privada mora só no Doppler pessoal (`GUARITA_CODES_SIGN_KEY`, PKCS8 em base64); nunca em
+disco nem em log. `scripts/sign-codes.mjs` (raiz do repo): sem argumento assina (lê a chave do ambiente; o
+`codes:sign` já roda com `doppler run`), confere que a pública da chave é a embutida no app e grava o `.sig`;
+`--publica` mostra a pública da chave do Doppler; `--gerar` cria um par novo, grava a privada no Doppler pelo stdin
+(recusa se o segredo já existir) e imprime a pública. Trocar a chave = `--gerar` depois de apagar o segredo,
+embutir a pública nova, assinar e lançar versão nova do app (as versões antigas passam a recusar a tabela remota).
+O teste `assinatura_commitada_vale_para_a_tabela_atual` (cargo) falha se o JSON mudar sem assinar de novo.
 
 **Dados de apoio** (`src/lib/capture/dados.ts`): `formatted/items.txt` (índice numérico do item → id) e
 `formatted/world.txt` (id do mapa → nome, em inglês) do `ao-data/ao-bin-dumps`, com cópia local de 24 h no Cache
@@ -146,7 +164,7 @@ Storage, entregues ao Rust por `captura_definir_dados`. Sem eles, o loot aparece
 `<pasta de logs do app>/captura-diagnostico.json` com a contagem de eventos, respostas e requisições **por código**
 (com o nome que a tabela conhece), fatos próprios aceitos e descartes. Só números: nenhum conteúdo de mensagem.
 
-**Validação ao vivo: pendente.** Os testes (`cargo test --lib capture`, 43 testes, inclusive pacote hostil, dois fluxos e queda da rede) usam pacotes Photon montados
+**Validação ao vivo: pendente.** Os testes (`cargo test --lib capture`, 48 testes, inclusive pacote hostil, assinatura da tabela, dois fluxos e queda da rede) usam pacotes Photon montados
 pelo próprio teste (codificador em `protocol18::enc` e `photon::montar`). Falta abrir o jogo com a captura e o
 diagnóstico ligados e conferir: Join reconhecido, fama/prata batendo com o jogo, loot com os ids certos.
 
@@ -171,7 +189,7 @@ diagnóstico ligados e conferir: Join reconhecido, fama/prata batendo com o jogo
 | `lens/aodpWs.ts` | lente de mercado: escuta `ws://localhost:8099/ws` do cliente oficial do AODP, lê só `marketorders.ingest`, reconecta com espera crescente; widget em `widgets/Lente.svelte` | (c) lente (pronto) |
 | `capture/tipos.ts` | tipos dos eventos e comandos da captura (espelho de `src-tauri/src/capture`) | (a) captura (pronto) |
 | `capture/captura.ts` | comandos, eventos, escolha do usuário (`captura.json`) e `iniciarCapturaNoPainel` | (a) captura (pronto) |
-| `capture/dados.ts` | baixa tabela de códigos, `items.txt` e `world.txt` (cópia local de 24 h); parsers | (a) captura (pronto) |
+| `capture/dados.ts` | baixa tabela de códigos com o `.sig`, `items.txt` e `world.txt` (cópia local de 24 h); parsers | (a) captura (pronto) |
 | `capture/sessao.ts`, `capture/precos.ts` | regras puras: ritmo por hora, valor do loot (mediana), textos; preço em lote | (a) captura (pronto) |
 | `painel/CapturaAjustes.svelte`, `widgets/{Sessao,Loot}.svelte` | bloco de ligar/desligar com aviso e Npcap; widgets da sessão | (a) captura (pronto) |
 | `painel/Painel.svelte` | abas Início (status da API e do servidor, widgets), Ajustes (atalhos, voz, avisos, opacidade, "por cima" com aviso SBI, tema, iniciar com o Windows, bandeja) e Sobre | (a) janelas e widgets (pronto) |

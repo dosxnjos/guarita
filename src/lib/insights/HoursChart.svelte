@@ -1,6 +1,7 @@
 <script lang="ts">
   // Kills por hora do dia em horário de Brasília (24 barras em SVG). O pico ganha destaque e rótulo.
   import { hourBands, hoursAria, peakHours } from './format';
+  import { tx } from '../i18n/index.svelte';
 
   let { hours }: { hours: number[] } = $props();
 
@@ -21,14 +22,14 @@
       {#each hours as v, i (i)}
         {@const h = v > 0 ? Math.max(2, (v / max) * (BASE - 8)) : 0}
         <rect x={i * step + 1} y={BASE - h} width={step - 2} height={h} rx="1.5" class:peak={peaks.has(i)}>
-          <title>{i}h: {v} {v === 1 ? 'kill' : 'kills'}</title>
+          <title>{i}h: {v} {v === 1 ? tx('kill', 'asesinato') : tx('kills', 'asesinatos')}</title>
         </rect>
         {#if i % 3 === 0}
           <text x={i * step + step / 2} y={H - 4} text-anchor="middle">{i}h</text>
         {/if}
       {/each}
     </svg>
-    <figcaption class="muted small">Horário de Brasília. Barra mais escura: hora de pico.</figcaption>
+    <figcaption class="muted small">{tx('Horário de Brasília. Barra mais escura: hora de pico.', 'Horario de Brasilia. Barra más oscura: hora pico.')}</figcaption>
   </figure>
   <ul class="bands small">
     {#each bands as b (b.label)}
@@ -36,7 +37,7 @@
     {/each}
   </ul>
 {:else}
-  <p class="muted small">Ainda sem kills da guilda na amostra para mostrar os horários.</p>
+  <p class="muted small">{tx('Ainda sem kills da guilda na amostra para mostrar os horários.', 'Todavía no hay asesinatos del gremio en la muestra para mostrar los horarios.')}</p>
 {/if}
 
 <style>

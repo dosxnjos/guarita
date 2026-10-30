@@ -1,9 +1,13 @@
 <script lang="ts">
-  // Glossário do Albion em PT-BR/EN: busca instantânea, índice por letra e filtro por assunto.
+  // Glossário do Albion em PT-BR/EN (em /es, ES/EN): busca instantânea, índice por letra e filtro por assunto.
+  // O espanhol mora em src/lib/institucional/glossario.ts, pelo mesmo id; a busca roda sobre a lista da língua atual.
   import { go } from '../lib/router';
-  import {
-    GLOSSARY, GLOSSARY_CATEGORY_LABEL, glossLetter, searchGlossary, type GlossaryCategory, type GlossaryTerm,
-  } from '../../shared/glossary';
+  import { glossLetter, searchGlossary, type GlossaryCategory, type GlossaryTerm } from '../../shared/glossary';
+  import { glossaryCategoryLabel, glossaryFor } from '../lib/institucional/glossario';
+  import { getLocale, href, tx } from '../lib/i18n/index.svelte';
+
+  const GLOSSARY = $derived(glossaryFor(getLocale()));
+  const GLOSSARY_CATEGORY_LABEL = $derived(glossaryCategoryLabel(getLocale()));
 
   // params não usado: a busca vive em ?q= no endereço
   let { params: _params = {} }: { params?: Record<string, string> } = $props();
@@ -14,9 +18,9 @@
 
   let q = $state(initial);
   let cat = $state<GlossaryCategory | ''>('');
-  const cats = Object.keys(GLOSSARY_CATEGORY_LABEL) as GlossaryCategory[];
+  const cats = $derived(Object.keys(GLOSSARY_CATEGORY_LABEL) as GlossaryCategory[]);
 
-  const results = $derived(searchGlossary(q).filter((t) => !cat || t.cat === cat));
+  const results = $derived(searchGlossary(q, GLOSSARY).filter((t) => !cat || t.cat === cat));
   const searching = $derived(q.trim().length > 0);
   // Sem busca: agrupa por letra. Com busca: lista por relevância.
   const groups = $derived.by(() => {
@@ -43,38 +47,45 @@
     document.getElementById(`letra-${l}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  // Mesmo título que o _worker.js injeta (worker/seo.ts, FIXED_ROUTES e FIXED_ES).
   $effect(() => {
-    document.title = 'Glossário · Guarita';
+    document.title = tx('Glossário · Guarita', 'Glosario · Guarita');
   });
 </script>
 
 <section class="page stack">
   <header>
-    <h1>Glossário</h1>
-    <p class="muted">{GLOSSARY.length} termos e gírias que você vai ouvir no chat, no Discord e nos vídeos, em português e em inglês.</p>
+    <h1>{tx('Glossário', 'Glosario')}</h1>
+    <p class="muted">{tx(
+      `${GLOSSARY.length} termos e gírias que você vai ouvir no chat, no Discord e nos vídeos, em português e em inglês.`,
+      `${GLOSSARY.length} términos y expresiones que vas a escuchar en el chat, en Discord y en los videos, en español y en inglés.`,
+    )}</p>
   </header>
 
   <div class="card stack sticky">
-    <label for="gloss-q" class="sr-only">Buscar termo</label>
+    <label for="gloss-q" class="sr-only">{tx('Buscar termo', 'Buscar término')}</label>
     <input id="gloss-q" class="input" type="search" autocomplete="off" spellcheck="false"
-      placeholder="Buscar: gank, regear, zona preta, IP…" bind:value={q} oninput={onInput} />
-    <div class="seg" role="group" aria-label="Assunto">
-      <button type="button" aria-pressed={cat === ''} onclick={() => (cat = '')}>Todos</button>
+      placeholder={tx('Buscar: gank, regear, zona preta, IP…', 'Buscar: gank, regear, zona negra, IP…')} bind:value={q} oninput={onInput} />
+    <div class="seg" role="group" aria-label={tx('Assunto', 'Tema')}>
+      <button type="button" aria-pressed={cat === ''} onclick={() => (cat = '')}>{tx('Todos', 'Todos')}</button>
       {#each cats as c (c)}
         <button type="button" aria-pressed={cat === c} onclick={() => (cat = cat === c ? '' : c)}>{GLOSSARY_CATEGORY_LABEL[c]}</button>
       {/each}
     </div>
     {#if !searching && letters.length > 1}
-      <nav aria-label="Letras" class="letters">
+      <nav aria-label={tx('Letras', 'Letras')} class="letters">
         {#each letters as l (l)}<a href="#letra-{l}" onclick={(e) => jump(e, l)}>{l}</a>{/each}
       </nav>
     {/if}
   </div>
 
-  <p class="sr-only" aria-live="polite">{results.length} {results.length === 1 ? 'termo encontrado' : 'termos encontrados'}</p>
+  <p class="sr-only" aria-live="polite">{results.length} {results.length === 1 ? tx('termo encontrado', 'término encontrado') : tx('termos encontrados', 'términos encontrados')}</p>
 
   {#if !results.length}
-    <p class="empty card">Nenhum termo com “{q.trim()}”. Tente a palavra em inglês ou só o começo dela.</p>
+    <p class="empty card">{tx(
+      `Nenhum termo com “${q.trim()}”. Tente a palavra em inglês ou só o começo dela.`,
+      `Ningún término con “${q.trim()}”. Prueba la palabra en inglés o solo el comienzo.`,
+    )}</p>
   {:else if searching}
     <dl class="terms">
       {#each results as t (t.id)}{@render term(t)}{/each}
@@ -90,10 +101,17 @@
     {/each}
   {/if}
 
-  <p class="callout small">
-    Faltou algum termo? Ele pode estar na página de <a href="/golpes" onclick={go}>golpes</a> ou na de
-    <a href="/arriscar" onclick={go}>quanto vale arriscar</a>, que explica as regras de cada zona.
-  </p>
+  {#if getLocale() === 'es'}
+    <p class="callout small">
+      ¿Falta algún término? Puede estar en la página de <a href={href('/golpes')} onclick={go}>estafas</a> o en la de
+      <a href={href('/arriscar')} onclick={go}>cuánto vale arriesgar</a>, que explica las reglas de cada zona.
+    </p>
+  {:else}
+    <p class="callout small">
+      Faltou algum termo? Ele pode estar na página de <a href={href('/golpes')} onclick={go}>golpes</a> ou na de
+      <a href={href('/arriscar')} onclick={go}>quanto vale arriscar</a>, que explica as regras de cada zona.
+    </p>
+  {/if}
 </section>
 
 {#snippet term(t: GlossaryTerm)}

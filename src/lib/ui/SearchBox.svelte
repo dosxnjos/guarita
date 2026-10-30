@@ -4,14 +4,16 @@
   import type { ItemHit, ItemsIndex } from '../../../shared/items';
   import { searchItems, tierLabel } from '../../../shared/items';
   import { loadIndex } from '../itemsClient';
+  // Nomes: hit.pt é o nome da língua atual (em /es o índice carregado é o espanhol, itemsClient.ts) e o inglês.
   import { navigate } from '../router';
+  import { tx } from '../i18n/index.svelte';
   import ItemIcon from './ItemIcon.svelte';
 
   let {
     onselect,
     size = 'md',
-    label = 'Buscar item',
-    placeholder = 'Ex.: bolsa T4, capa de Martlock, tábuas T5.1',
+    label: labelProp,
+    placeholder: placeholderProp,
     autofocus = false,
     limit = 8,
   }: {
@@ -22,6 +24,8 @@
     autofocus?: boolean;
     limit?: number;
   } = $props();
+  const label = $derived(labelProp ?? tx('Buscar item', 'Buscar objeto'));
+  const placeholder = $derived(placeholderProp ?? tx('Ex.: bolsa T4, capa de Martlock, tábuas T5.1', 'Ej.: bolsa T4, capa de Martlock, tablas T5.1'));
 
   const uid = 'sb-' + Math.random().toString(36).slice(2, 9);
   let q = $state('');
@@ -41,7 +45,10 @@
     try {
       index = await loadIndex();
     } catch {
-      indexError = 'Não foi possível carregar a lista de itens. Confira a conexão e tente de novo.';
+      indexError = tx(
+        'Não foi possível carregar a lista de itens. Confira a conexão e tente de novo.',
+        'No se pudo cargar la lista de objetos. Revisa la conexión e inténtalo de nuevo.',
+      );
     } finally {
       indexLoading = false;
     }
@@ -149,14 +156,16 @@
     />
   </div>
   <p id="{uid}-status" class="sr-only" aria-live="polite">
-    {#if showList}{hits.length ? `${hits.length} resultados; use as setas para escolher` : 'Nenhum item encontrado'}{/if}
+    {#if showList}{hits.length
+        ? tx(`${hits.length} resultados; use as setas para escolher`, `${hits.length} resultados; usa las flechas para elegir`)
+        : tx('Nenhum item encontrado', 'No se encontró ningún objeto')}{/if}
   </p>
   {#if indexError}
-    <p class="small sb-error" role="alert">{indexError} <button type="button" class="linkbtn" onclick={ensureIndex}>Tentar de novo</button></p>
+    <p class="small sb-error" role="alert">{indexError} <button type="button" class="linkbtn" onclick={ensureIndex}>{tx('Tentar de novo', 'Intentar de nuevo')}</button></p>
   {:else if indexLoading && q.trim()}
-    <p class="small muted">Carregando a lista de itens…</p>
+    <p class="small muted">{tx('Carregando a lista de itens…', 'Cargando la lista de objetos…')}</p>
   {/if}
-  <ul bind:this={listEl} id="{uid}-list" class="sb-list" role="listbox" aria-label="Itens encontrados" hidden={!showList}>
+  <ul bind:this={listEl} id="{uid}-list" class="sb-list" role="listbox" aria-label={tx('Itens encontrados', 'Objetos encontrados')} hidden={!showList}>
     {#if showList}
       {#each hits as hit, i (hit.id)}
         <!-- teclado fica no input (padrão combobox com aria-activedescendant); o clique é atalho de mouse/toque -->
@@ -171,7 +180,10 @@
           {#if hit.tier}<span class="tag">{tierLabel(hit.tier, hit.ench)}</span>{/if}
         </li>
       {:else}
-        <li class="sb-none small muted" role="presentation">Nenhum item com esse nome. Tente o nome em inglês ou só uma palavra.</li>
+        <li class="sb-none small muted" role="presentation">{tx(
+          'Nenhum item com esse nome. Tente o nome em inglês ou só uma palavra.',
+          'Ningún objeto con ese nombre. Prueba el nombre en inglés o una sola palabra.',
+        )}</li>
       {/each}
     {/if}
   </ul>

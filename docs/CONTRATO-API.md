@@ -326,7 +326,7 @@ traz resumo em texto PT-BR e `structuredContent`.
 
 Roadmap: [`../../roadmap/2026-10-30-guarita-fase3.md`](../../roadmap/2026-10-30-guarita-fase3.md).
 
-### `GET /api/hoje?prata=&minutos=&premium=0|1`
+### `GET /api/hoje?prata=&minutos=&premium=0|1&lang=pt|es`
 
 "O que fazer hoje" (`worker/api/hoje.ts`; cesta, receitas, bônus e fontes em `shared/hoje.ts`). Até 3 opções por
 trilha (`flip` para o Black Market, `refino` com bônus de cidade e do dia, `transporte` entre cidades reais), cada
@@ -334,7 +334,14 @@ uma com a conta aberta. É estimativa: a tela, o bot e o MCP dizem que não é p
 
 - `prata`: 1.000 a 100.000.000.000 (aceita `1.000.000`, `1 000 000`); ausente ou fora → 400.
 - `minutos`: inteiro de 15 a 480, padrão 60; fora → 400. `premium`: `1`, `true` ou `sim` = Premium (imposto de
-  venda 4% em vez de 8%; anúncio 2,5% sempre).
+  venda 4% em vez de 8%; anúncio 2,5% sempre). Com `lang=es`, `si` e `sí` também valem.
+- `lang`: `es` devolve em espanhol `titulo`, `passos`, `riscos`, `motivos`, `notas`, `itens[].nome` e a mensagem de
+  erro 400 (números em es-419, Black Market = "Mercado Negro", Brumas = "Nieblas"); ausente ou qualquer outro valor =
+  `pt`, resposta igual à de antes. Os números são os mesmos nas duas línguas; `trilha` e `cidadeCompra`/`cidadeVenda`
+  continuam como código (a tela traduz). O retrato em cache é um só para as duas línguas (espanhol não gasta
+  subrequest a mais); a resposta HTTP varia pela URL, que já leva o `lang`. No Worker: `getHoje(env, ctx, { prata,
+  minutos, premium, lang: 'es' })` (bot e MCP); `lang` aceita só `'pt' | 'es'`, então o locale do Discord (`es-ES`,
+  `es-419`) precisa virar `'es'` antes.
 - Método ≠ GET/HEAD → 405. Um "retrato" do mercado único para todos (lote de `/prices` da cesta + festividades +
   histórico de 9 itens) fica 5 min na Cache API; a conta por prata/tempo/Premium roda a cada pedido. Sem retrato e
   com o AODP fora → 502; com retrato vencido e o AODP fora, responde com ele e `stale: true`. `Cache-Control` 300 s.
@@ -354,7 +361,7 @@ Bot: `/hoje prata:<n> minutos:<30|60|120> premium:<sim/não>` (resposta adiada q
 `o_que_fazer`, com `minutos` só 30, 60 ou 120 (enum no schema; outro valor → erro), as mesmas opções do site e do
 bot, para o link "conta completa" reproduzir a mesma conta. A API segue aceitando 15 a 480.
 
-### `GET /api/forecast/:id?city=&q=1`
+### `GET /api/forecast/:id?city=&q=1&lang=pt|es`
 
 Previsão de 1 a 3 dias com acerto publicado (`shared/forecast.ts`, rota em `worker/api/forecast.ts`). Usa o
 histórico diário do AODP (~30 dias, o mesmo pedido e o mesmo cache de 1 h da página de item; o dia UTC de hoje fica
@@ -363,6 +370,9 @@ de fora porque não fechou).
 - `city` vazio ou ausente: a API escolhe a cidade com mais unidades vendidas nos últimos 14 dias, sem o Black
   Market (sem histórico em nenhuma: Caerleon) e devolve a escolhida em `city`. Cidade desconhecida → 400.
 - Id inválido ou qualidade fora de 1–5 → 400; método ≠ GET/HEAD → 405; AODP fora → 502.
+- `lang`: `es` devolve `method` e as mensagens 400 em espanhol (o texto pt de `shared/forecast.ts` é traduzido molde
+  a molde em `forecastMethodEs`; molde desconhecido fica em pt); ausente ou outro valor = `pt`. O resto da resposta
+  é igual nas duas línguas, e o histórico (o subrequest) é o mesmo.
 - `Cache-Control`: o que falta para o cache de 1 h do histórico vencer, mínimo 60 s. No máximo 3 subrequests.
 - Modelo: com 21+ dias de venda e cada dia da semana visto 2+ vezes, média móvel exponencial do log do preço com
   ajuste por dia da semana; com menos, mediana dos últimos 7 dias com venda. Backtest walk-forward nos últimos 14
@@ -381,6 +391,8 @@ ForecastResponse = { id, quality, city, history: { date, avg, count }[],
 ```
 
 Telas: `/previsao` (`?item=&city=&q=`, ou `/previsao/:id`) e o bloco "Previsão dos próximos dias" em `/item/:id`.
+Em `/es/...` as telas pedem `lang=es` (`api.hoje(..., lang)` e `api.forecast(..., lang)` em `src/lib/api.ts`; em pt a
+URL não leva `lang`, a mesma de antes).
 
 ### Páginas e arquivos públicos (sem JSON)
 
@@ -388,6 +400,13 @@ Telas: `/previsao` (`?item=&city=&q=`, ou `/previsao/:id`) e o bloco "Previsão 
   (`worker/seo.ts`). `/item/:id` e `/previsao/:id` saem com o nome PT-BR do item (`Bolsa do Adepto (T4) · Guarita`),
   lido da fatia `names/t<tier>.json` como texto. `noindex`: guilda, jogador, autópsia, `/live`, item sem nome e
   caminho desconhecido. Resposta reescrita sai sem `etag` e sem `content-length`.
+- **Espanhol**: toda página existe também em `/es/...` (o mesmo `index.html`) com `<html lang="es">`, título e
+  descrição em espanhol, `og:locale es_LA`, canonical na própria língua e `hreflang` pt-BR / es / x-default nas duas
+  versões (só em página indexável). `/es/item/:id` sai com o nome do jogo em espanhol (`Bolsa del iniciado (T4) ·
+  Guarita`), da fatia `names-es/t<tier>.json`; sem ela, o nome em PT. O sitemap lista as duas línguas.
+- `/status` e `/es/status`: página de custos e saúde (indexável); a saúde ao vivo vem de `GET /api/health`.
+- Arquivos de dados em espanhol (estáticos, mesmo formato dos de PT): `/data/items-index-es.json` (nome ES na posição
+  1 da tupla), `/data/ac-es/k-<3 letras>.json` e `/data/names-es/t<tier>.json`.
 - `GET /sitemap.xml` (gerado: rotas fixas indexáveis + itens da cesta), `/robots.txt` (fecha `/api/` e `/discord`),
   `/offline.html` (o Pages também serve em `/offline`; tela do service worker sem rede), `/og.png` (1200×630).
 - `/live?blocos=relogio,precos,guilda&itens=A,B&cidade=&guilda=&tema=&tamanho=`: painel para o OBS, só leitura das

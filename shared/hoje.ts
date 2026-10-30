@@ -26,19 +26,24 @@ export interface CestaItem {
 }
 
 const TIER_NAME: Record<number, string> = { 3: 'Iniciante', 4: 'Adepto', 5: 'Perito', 6: 'Mestre' };
+/** Tier no nome do item em espanhol (minúsculo, como o jogo: "Bolsa del iniciado"; T3 = obrero, docs/glossario-es.md). */
+const TIER_NAME_ES: Record<number, string> = { 3: 'obrero', 4: 'iniciado', 5: 'experto', 6: 'maestro' };
+
+/** Língua dos textos que a API devolve (passos, riscos, notas, nomes). Qualquer outro valor vale 'pt'. */
+export type HojeLang = 'pt' | 'es';
 
 /** Itens de giro alto para o flip no Black Market: 10 bases × T4–T6 × comum e .1 = 60 itens. */
-const FLIP_BASES: { base: string; nome: (tier: string) => string }[] = [
-  { base: 'BAG', nome: (t) => `Bolsa do ${t}` },
-  { base: 'CAPE', nome: (t) => `Capa do ${t}` },
-  { base: 'MAIN_SWORD', nome: (t) => `Espada Larga do ${t}` },
-  { base: '2H_BOW', nome: (t) => `Arco do ${t}` },
-  { base: 'MAIN_CURSEDSTAFF', nome: (t) => `Cajado Amaldiçoado do ${t}` },
-  { base: 'MAIN_HOLYSTAFF', nome: (t) => `Cajado Sagrado do ${t}` },
-  { base: 'ARMOR_PLATE_SET1', nome: (t) => `Armadura de Soldado do ${t}` },
-  { base: 'ARMOR_LEATHER_SET1', nome: (t) => `Casaco de Mercenário do ${t}` },
-  { base: 'ARMOR_CLOTH_SET1', nome: (t) => `Robe de Erudito do ${t}` },
-  { base: 'SHOES_LEATHER_SET1', nome: (t) => `Sapatos de Mercenário do ${t}` },
+const FLIP_BASES: { base: string; nome: (tier: string) => string; nomeEs: (tier: string) => string }[] = [
+  { base: 'BAG', nome: (t) => `Bolsa do ${t}`, nomeEs: (t) => `Bolsa del ${t}` },
+  { base: 'CAPE', nome: (t) => `Capa do ${t}`, nomeEs: (t) => `Capa del ${t}` },
+  { base: 'MAIN_SWORD', nome: (t) => `Espada Larga do ${t}`, nomeEs: (t) => `Espada ancha del ${t}` },
+  { base: '2H_BOW', nome: (t) => `Arco do ${t}`, nomeEs: (t) => `Arco del ${t}` },
+  { base: 'MAIN_CURSEDSTAFF', nome: (t) => `Cajado Amaldiçoado do ${t}`, nomeEs: (t) => `Bastón maldito del ${t}` },
+  { base: 'MAIN_HOLYSTAFF', nome: (t) => `Cajado Sagrado do ${t}`, nomeEs: (t) => `Bastón sagrado del ${t}` },
+  { base: 'ARMOR_PLATE_SET1', nome: (t) => `Armadura de Soldado do ${t}`, nomeEs: (t) => `Armadura de soldado del ${t}` },
+  { base: 'ARMOR_LEATHER_SET1', nome: (t) => `Casaco de Mercenário do ${t}`, nomeEs: (t) => `Chaqueta de mercenario del ${t}` },
+  { base: 'ARMOR_CLOTH_SET1', nome: (t) => `Robe de Erudito do ${t}`, nomeEs: (t) => `Túnica de erudito del ${t}` },
+  { base: 'SHOES_LEATHER_SET1', nome: (t) => `Sapatos de Mercenário do ${t}`, nomeEs: (t) => `Zapatos de mercenario del ${t}` },
 ];
 
 function label(nome: string, tier: number, ench: number): string {
@@ -65,6 +70,11 @@ export interface RecursoDef {
   /** Plural do sufixo do encantado .1 ("Incomum" ou "Incomuns"), [bruto, refinado]. */
   incomum: [string, string];
   encantado: boolean;
+  /** Espanhol (cliente oficial ES-ES, public/data/items-index-es.json): rótulo do refino, do bruto e nomes por tier. */
+  rotuloEs: string;
+  brutoEs: string;
+  /** O .1 acrescenta " poco común" nos dois (o jogo não flexiona). */
+  nomesEs: Record<number, [string, string]>;
 }
 
 export const RECURSOS: RecursoDef[] = [
@@ -72,26 +82,37 @@ export const RECURSOS: RecursoDef[] = [
     recurso: 'ore', rotulo: 'barras de metal', bruto: 'minério', raw: 'ORE', ref: 'METALBAR', cidade: 'Thetford',
     nomes: { 3: ['', 'Barra de Bronze'], 4: ['Minério de Ferro', 'Barra de Aço'], 5: ['Minério de Titânio', 'Barra de Aço Titânio'], 6: ['Minério de Runita', 'Barra de Aço Runita'] },
     incomum: ['Incomum', 'Incomum'], encantado: true,
+    // o jogo abrevia "Ling. de acero poco común" no T4.1; aqui fica por extenso, igual aos outros tiers
+    rotuloEs: 'lingotes de metal', brutoEs: 'mineral',
+    nomesEs: { 3: ['', 'Lingote de bronce'], 4: ['Mineral de hierro', 'Lingote de acero'], 5: ['Mineral de titanio', 'Lingote de titanio'], 6: ['Mineral de runita', 'Lingote de runita'] },
   },
   {
     recurso: 'wood', rotulo: 'tábuas', bruto: 'madeira', raw: 'WOOD', ref: 'PLANKS', cidade: 'Fort Sterling',
     nomes: { 3: ['', 'Tábuas de Castanheira'], 4: ['Troncos de Pinho', 'Tábuas de Pinho'], 5: ['Troncos de Cedro', 'Tábuas de Cedro'], 6: ['Troncos de Carvalho-sangue', 'Tábuas de Carvalho-sangue'] },
     incomum: ['Incomuns', 'Incomuns'], encantado: true,
+    rotuloEs: 'tablas', brutoEs: 'madera',
+    nomesEs: { 3: ['', 'Tablas de castaño'], 4: ['Troncos de pino', 'Tablas de pino'], 5: ['Troncos de cedro', 'Tablas de cedro'], 6: ['Troncos de roble rojo', 'Tablas de roble rojo'] },
   },
   {
     recurso: 'fiber', rotulo: 'tecidos', bruto: 'fibra', raw: 'FIBER', ref: 'CLOTH', cidade: 'Lymhurst',
     nomes: { 3: ['', 'Tecido Limpo'], 4: ['Cânhamo', 'Tecido Fino'], 5: ['Verbena', 'Tecido Ornado'], 6: ['Algodão-dourado', 'Tecido Rico'] },
     incomum: ['Incomum', 'Incomum'], encantado: true,
+    rotuloEs: 'telas', brutoEs: 'fibra',
+    nomesEs: { 3: ['', 'Tela pulcra'], 4: ['Cáñamo', 'Tela fina'], 5: ['Duranta', 'Tela decorada'], 6: ['Algodón ambarino', 'Tela suntuosa'] },
   },
   {
     recurso: 'hide', rotulo: 'couros', bruto: 'pele', raw: 'HIDE', ref: 'LEATHER', cidade: 'Martlock',
     nomes: { 3: ['', 'Couro Grosso'], 4: ['Pelego Médio', 'Couro Trabalhado'], 5: ['Pelego Pesado', 'Couro Curtido'], 6: ['Pelego Robusto', 'Couro Endurecido'] },
     incomum: ['Incomum', 'Incomum'], encantado: true,
+    rotuloEs: 'cueros', brutoEs: 'piel',
+    nomesEs: { 3: ['', 'Cuero grueso'], 4: ['Piel media', 'Cuero trabajado'], 5: ['Piel pesada', 'Cuero curtido'], 6: ['Piel fornida', 'Cuero endurecido'] },
   },
   {
     recurso: 'rock', rotulo: 'blocos de pedra', bruto: 'pedra', raw: 'ROCK', ref: 'STONEBLOCK', cidade: 'Bridgewatch',
     nomes: { 3: ['', 'Bloco de Arenito'], 4: ['Travertino', 'Bloco de Travertino'], 5: ['Granito', 'Bloco de Granito'], 6: ['Ardósia', 'Bloco de Ardósia'] },
     incomum: ['Incomum', 'Incomum'], encantado: false,
+    rotuloEs: 'bloques de piedra', brutoEs: 'piedra',
+    nomesEs: { 3: ['', 'Bloque de arenisca'], 4: ['Travertino', 'Bloque de travertino'], 5: ['Granito', 'Bloque de granito'], 6: ['Pizarra', 'Bloque de pizarra'] },
   },
 ];
 
@@ -168,6 +189,32 @@ export const NOMES: Record<string, string> = Object.fromEntries([
   ...FLIP_ITEMS.map((i) => [i.id, i.nome] as const),
   ...RECEITAS.flatMap((r) => [[r.raw.id, r.raw.nome], [r.lower.id, r.lower.nome], [r.ref.id, r.ref.nome]] as const),
 ]);
+
+function resNomeEs(def: RecursoDef, tier: number, ench: number, which: 0 | 1): string {
+  const base = def.nomesEs[tier][which];
+  return label(ench ? `${base} poco común` : base, tier, ench);
+}
+
+/** id → nome em espanhol com tier (mesmos ids de NOMES), para a resposta com lang=es. */
+export const NOMES_ES: Record<string, string> = Object.fromEntries([
+  ...FLIP_BASES.flatMap((b) =>
+    [4, 5, 6].flatMap((t) => [0, 1].map((e) => [`T${t}_${b.base}${e ? `@${e}` : ''}`, label(b.nomeEs(TIER_NAME_ES[t]), t, e)] as const)),
+  ),
+  ...RECEITAS.flatMap((r) => {
+    const def = RECURSOS.find((d) => d.recurso === r.recurso)!;
+    const lowerEnch = r.tier > 4 ? r.ench : 0;
+    return [
+      [r.raw.id, resNomeEs(def, r.tier, r.ench, 0)],
+      [r.lower.id, resNomeEs(def, r.tier - 1, lowerEnch, 1)],
+      [r.ref.id, resNomeEs(def, r.tier, r.ench, 1)],
+    ] as const;
+  }),
+]);
+
+/** Nome do item da cesta na língua pedida (o id, se não for da cesta). */
+export function nomeDe(id: string, lang: HojeLang = 'pt'): string {
+  return (lang === 'es' ? NOMES_ES[id] : NOMES[id]) ?? NOMES[id] ?? id;
+}
 
 // ---------- deslocamento ----------
 // Estimativa da Guarita, NÃO medida: montaria comum, sem carga pesada, sem contratempo. A tela diz que é aproximada.

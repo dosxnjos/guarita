@@ -11,6 +11,7 @@ import type { Env } from '../env';
 import type { City, GuildHit, GuildSummary, LossItem, LossesResponse, PriceRow } from '../../shared/types';
 import { ROYAL_CITIES, minutesSince } from '../../shared/market';
 import { WEAPON_LABEL_PT, weaponFamily, type WeaponFamily } from '../../shared/weapons';
+import { labelFromShardText } from '../lib/shardText';
 import { aodpPricesMeta } from '../lib/aodp';
 import { cachedJson, cachedJsonMeta } from '../lib/cache';
 import { GameinfoError, gameinfoFetch, Budget } from '../lib/gameinfo';
@@ -49,26 +50,8 @@ export function cheapestById(rows: PriceRow[], now = Date.now()): Map<string, { 
   return out;
 }
 
-/**
- * Rótulo de um id dentro do TEXTO de uma fatia names/t<n>.json ({"ID":"rótulo",...}) sem JSON.parse do arquivo.
- * A chave vem entre aspas e seguida de ':', então "T4_BAG" não casa com "T4_BAG@1".
- */
-export function labelFromShardText(text: string, id: string): string | null {
-  const key = `"${id}":`;
-  const i = text.indexOf(key);
-  if (i < 0) return null;
-  let j = i + key.length;
-  while (text[j] === ' ') j++;
-  if (text[j] !== '"') return null;
-  let k = j + 1;
-  while (k < text.length && text[k] !== '"') k += text[k] === '\\' ? 2 : 1;
-  try {
-    const v = JSON.parse(text.slice(j, k + 1)) as unknown;
-    return typeof v === 'string' && v ? v : null;
-  } catch {
-    return null;
-  }
-}
+/** Rótulo recortado do texto da fatia (sem JSON.parse do arquivo). Mora em worker/lib/shardText.ts. */
+export { labelFromShardText };
 
 export interface CoreLossItem {
   type: string;

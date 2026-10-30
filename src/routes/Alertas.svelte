@@ -12,7 +12,9 @@
     COOLDOWNS, MAX_RULES, citiesForSide, defaultForm, describeRule, kindForSide, ruleDetails, toRule, validate, type AlertFormState,
   } from '../lib/player/alertForm';
   import { fmtAgo, isIosUA, QUALITY_LABEL } from '../lib/player/format';
-  import { parseQuality } from '../lib/format';
+  import { cityName, fmtAge, fmtInt, parseQuality, qualityName } from '../lib/format';
+  import { minutesSinceIso } from '../lib/ui/time';
+  import { getLocale, href, tx } from '../lib/i18n/index.svelte';
   import { DISCORD_INVITE } from '../lib/ui/links';
   import ItemPicker from '../lib/player/ItemPicker.svelte';
   import ItemIcon from '../lib/player/ItemIcon.svelte';
@@ -67,7 +69,8 @@
   let saveError = $state<string | null>(null);
   let saved = $state<string | null>(null);
 
-  const errors = $derived(validate(form, rules.length));
+  // Em espanhol "12,000" é milhar: parseNumberBR de alertForm.ts recebe a língua (validate e toRule repassam).
+  const errors = $derived(validate(form, rules.length, getLocale()));
   const canSubmit = $derived(!!subId && Object.keys(errors).length === 0 && !saving);
   const atLimit = $derived(rules.length >= MAX_RULES);
 
@@ -102,7 +105,7 @@
   });
 
   $effect(() => {
-    document.title = 'Alertas · Guarita';
+    document.title = tx('Alertas · Guarita', 'Alertas · Guarita');
     loadIndex().then((ix) => (index = ix)).catch(() => {});
   });
 
@@ -119,7 +122,10 @@
   }
 
   async function deactivate() {
-    if (!confirm('Desativar os avisos neste aparelho? As regras dele param de avisar.')) return;
+    if (!confirm(tx(
+      'Desativar os avisos neste aparelho? As regras dele param de avisar.',
+      '¿Desactivar los avisos en este dispositivo? Las reglas de este dispositivo dejarán de avisar.',
+    ))) return;
     pushError = null;
     try {
       await disablePush();
@@ -147,9 +153,12 @@
     if (!subId || Object.keys(errors).length) return;
     saving = true;
     try {
-      const payload = toRule(form, subId);
+      const payload = toRule(form, subId, getLocale());
       const rule = await api.createAlert(payload);
-      saved = `Regra criada: ${describeRule(rule, nameFor(rule))}.`;
+      saved = tx(
+        `Regra criada: ${describeRule(rule, nameFor(rule), 'pt')}.`,
+        `Regla creada: ${describeRule(rule, nameFor(rule), 'es')}.`,
+      );
       form = defaultForm();
       pickerKey++;
       tried = false;
@@ -183,83 +192,130 @@
     return r.itemId;
   }
 
-  const QUALITIES = Object.entries(QUALITY_LABEL).map(([q, l]) => ({ q: Number(q) as Quality, l }));
+  const QUALITIES = $derived(Object.keys(QUALITY_LABEL).map((q) => ({ q: Number(q) as Quality, l: qualityName(Number(q) as Quality, getLocale()) })));
+
+  /** "Último aviso há 5 min": o português segue o fmtAgo de sempre; o espanhol usa o fmtAge de format.ts. */
+  function lastFiredText(r: AlertRule): string {
+    if (!r.lastFiredAt) return tx('Ainda não avisou', 'Todavía no avisó');
+    return tx(`Último aviso ${fmtAgo(r.lastFiredAt)}`, `Último aviso ${fmtAge(minutesSinceIso(r.lastFiredAt), 'es')}`);
+  }
 </script>
 
 <section class="page stack">
   <header>
-    <h1>Alertas de preço</h1>
-    <p class="muted">A Guarita olha o mercado por você e avisa quando o preço chega onde você quer. Sem ficar apertando F5.</p>
+    <h1>{tx('Alertas de preço', 'Alertas de precio')}</h1>
+    <p class="muted">{tx(
+      'A Guarita olha o mercado por você e avisa quando o preço chega onde você quer. Sem ficar apertando F5.',
+      'La Guarita vigila el mercado por ti y te avisa cuando el precio llega a donde quieres. Sin estar presionando F5.',
+    )}</p>
   </header>
 
   <div class="grid">
     <div class="card">
-      <h2 class="first">Neste navegador</h2>
-      <p class="small">Uma notificação aparece no celular ou no computador, mesmo com a Guarita fechada. As regras ficam presas a este aparelho, sem conta nem login.</p>
+      <h2 class="first">{tx('Neste navegador', 'En este navegador')}</h2>
+      <p class="small">{tx(
+        'Uma notificação aparece no celular ou no computador, mesmo com a Guarita fechada. As regras ficam presas a este aparelho, sem conta nem login.',
+        'Aparece una notificación en el celular o en la computadora, incluso con la Guarita cerrada. Las reglas quedan ligadas a este dispositivo, sin cuenta ni inicio de sesión.',
+      )}</p>
     </div>
     <div class="card">
-      <h2 class="first">No Discord</h2>
+      <h2 class="first">{tx('No Discord', 'En Discord')}</h2>
       {#if DISCORD_INVITE}
-        <p class="small">Use o comando <code>/alerta criar</code> com o bot da Guarita e receba o aviso por mensagem direta. As regras do Discord são gerenciadas por lá.</p>
-        <p class="small"><a href={DISCORD_INVITE} target="_blank" rel="noopener">Adicionar a Guarita ao meu servidor</a></p>
+        {#if getLocale() === 'es'}
+          <p class="small">Usa el comando <code>/alerta crear</code> con el bot de la Guarita y recibe el aviso por mensaje directo. Las reglas de Discord se administran allí.</p>
+        {:else}
+          <p class="small">Use o comando <code>/alerta criar</code> com o bot da Guarita e receba o aviso por mensagem direta. As regras do Discord são gerenciadas por lá.</p>
+        {/if}
+        <p class="small"><a href={DISCORD_INVITE} target="_blank" rel="noopener">{tx('Adicionar a Guarita ao meu servidor', 'Agregar la Guarita a mi servidor')}</a></p>
       {:else}
-        <p class="small">O bot do Discord abre em breve. Até lá, os avisos chegam por notificação neste navegador.</p>
+        <p class="small">{tx(
+          'O bot do Discord abre em breve. Até lá, os avisos chegam por notificação neste navegador.',
+          'El bot de Discord llegará pronto. Mientras tanto, los avisos llegan por notificación en este navegador.',
+        )}</p>
       {/if}
     </div>
   </div>
 
   <div class="callout warn small">
-    Verificamos a cada 5 minutos. O preço vem de jogadores que usam o cliente do Albion Data Project, então pode demorar
-    para aparecer, principalmente em item pouco negociado.
+    {#if getLocale() === 'es'}
+      Revisamos cada 5 minutos. El precio viene de jugadores que usan el cliente del Albion Data Project, así que puede tardar
+      en aparecer, sobre todo en objetos poco comerciados.
+    {:else}
+      Verificamos a cada 5 minutos. O preço vem de jogadores que usam o cliente do Albion Data Project, então pode demorar
+      para aparecer, principalmente em item pouco negociado.
+    {/if}
   </div>
 
   <!-- ativação do push -->
   <div class="card stack">
-    <h2 class="first">Avisos neste aparelho</h2>
+    <h2 class="first">{tx('Avisos neste aparelho', 'Avisos en este dispositivo')}</h2>
     {#if ios && !standalone}
       <div class="callout small">
-        <strong>No iPhone e no iPad</strong>, as notificações só funcionam com a Guarita instalada na tela inicial: no Safari,
-        toque em Compartilhar e depois em “Adicionar à Tela de Início”. Abra a Guarita pelo ícone e volte aqui.
+        {#if getLocale() === 'es'}
+          <strong>En iPhone y iPad</strong>, las notificaciones solo funcionan con la Guarita instalada en la pantalla de inicio: en Safari,
+          toca Compartir y luego “Agregar a inicio”. Abre la Guarita desde el ícono y vuelve aquí.
+        {:else}
+          <strong>No iPhone e no iPad</strong>, as notificações só funcionam com a Guarita instalada na tela inicial: no Safari,
+          toque em Compartilhar e depois em “Adicionar à Tela de Início”. Abra a Guarita pelo ícone e volte aqui.
+        {/if}
       </div>
     {/if}
 
     {#if !supported}
-      <p>Este navegador não aceita notificações da web{ios && !standalone ? ' fora do app instalado' : ''}. Use o Discord ou abra a Guarita no Chrome, Edge ou Firefox.</p>
+      <p>{tx(
+        `Este navegador não aceita notificações da web${ios && !standalone ? ' fora do app instalado' : ''}. Use o Discord ou abra a Guarita no Chrome, Edge ou Firefox.`,
+        `Este navegador no acepta notificaciones web${ios && !standalone ? ' fuera de la app instalada' : ''}. Usa Discord o abre la Guarita en Chrome, Edge o Firefox.`,
+      )}</p>
     {:else if subId}
       {#if subLost}
-        <p class="callout warn small" role="status">A inscrição deste aparelho tinha expirado no servidor e foi renovada. As regras antigas foram apagadas junto: crie de novo as que quiser.</p>
+        <p class="callout warn small" role="status">{tx(
+          'A inscrição deste aparelho tinha expirado no servidor e foi renovada. As regras antigas foram apagadas junto: crie de novo as que quiser.',
+          'La suscripción de este dispositivo había vencido en el servidor y se renovó. Las reglas anteriores se borraron con ella: vuelve a crear las que quieras.',
+        )}</p>
       {/if}
-      <p class="row"><span class="tag good">Ativado</span> <span class="small">Este aparelho recebe os avisos das regras abaixo.</span></p>
-      <div><button class="btn" type="button" onclick={deactivate}>Desativar avisos neste aparelho</button></div>
+      <p class="row"><span class="tag good">{tx('Ativado', 'Activado')}</span> <span class="small">{tx('Este aparelho recebe os avisos das regras abaixo.', 'Este dispositivo recibe los avisos de las reglas de abajo.')}</span></p>
+      <div><button class="btn" type="button" onclick={deactivate}>{tx('Desativar avisos neste aparelho', 'Desactivar avisos en este dispositivo')}</button></div>
     {:else}
       {#if subLost}
-        <p class="callout warn small" role="status">Os avisos deste aparelho foram desligados no servidor (a inscrição expirou ou parou de responder) e as regras dele foram apagadas. Ative de novo para voltar a receber.</p>
+        <p class="callout warn small" role="status">{tx(
+          'Os avisos deste aparelho foram desligados no servidor (a inscrição expirou ou parou de responder) e as regras dele foram apagadas. Ative de novo para voltar a receber.',
+          'Los avisos de este dispositivo se desactivaron en el servidor (la suscripción venció o dejó de responder) y sus reglas se borraron. Actívalos de nuevo para volver a recibirlos.',
+        )}</p>
       {/if}
       {#if permission === 'denied'}
-        <p class="callout warn small">As notificações da Guarita estão bloqueadas neste navegador. Libere nas configurações do site (ícone ao lado do endereço) e tente de novo.</p>
+        <p class="callout warn small">{tx(
+          'As notificações da Guarita estão bloqueadas neste navegador. Libere nas configurações do site (ícone ao lado do endereço) e tente de novo.',
+          'Las notificaciones de la Guarita están bloqueadas en este navegador. Permítelas en la configuración del sitio (ícono junto a la dirección) e intenta de nuevo.',
+        )}</p>
       {/if}
-      <p class="small">O navegador vai pedir permissão para mostrar notificações. Só usamos isso para os alertas que você criar; dá para desativar a qualquer momento.</p>
+      <p class="small">{tx(
+        'O navegador vai pedir permissão para mostrar notificações. Só usamos isso para os alertas que você criar; dá para desativar a qualquer momento.',
+        'El navegador te pedirá permiso para mostrar notificaciones. Solo lo usamos para las alertas que crees; puedes desactivarlas en cualquier momento.',
+      )}</p>
       <div>
         <button class="btn primary" type="button" onclick={activate} disabled={enabling}>
-          {enabling ? 'Ativando…' : 'Ativar avisos neste aparelho'}
+          {enabling ? tx('Ativando…', 'Activando…') : tx('Ativar avisos neste aparelho', 'Activar avisos en este dispositivo')}
         </button>
       </div>
     {/if}
-    {#if pushError}<p class="callout warn small" role="alert">Não deu para mudar os avisos: {pushError}</p>{/if}
+    {#if pushError}<p class="callout warn small" role="alert">{tx('Não deu para mudar os avisos', 'No se pudieron cambiar los avisos')}: {pushError}</p>{/if}
   </div>
 
   <!-- formulário -->
   <form class="card stack" onsubmit={submit} novalidate aria-labelledby="nova-regra">
-    <h2 class="first" id="nova-regra">Nova regra</h2>
+    <h2 class="first" id="nova-regra">{tx('Nova regra', 'Nueva regla')}</h2>
     {#if !subId}
-      <p class="muted small">Ative os avisos neste aparelho para criar regras.</p>
+      <p class="muted small">{tx('Ative os avisos neste aparelho para criar regras.', 'Activa los avisos en este dispositivo para crear reglas.')}</p>
     {:else if atLimit}
-      <p class="callout warn small">Este aparelho já tem {MAX_RULES} regras, o limite. Apague uma para criar outra.</p>
+      <p class="callout warn small">{tx(
+        `Este aparelho já tem ${MAX_RULES} regras, o limite. Apague uma para criar outra.`,
+        `Este dispositivo ya tiene ${MAX_RULES} reglas, el límite. Borra una para crear otra.`,
+      )}</p>
     {/if}
 
     <fieldset class="stack" disabled={!subId || atLimit}>
       <div class="field">
-        <label for="alerta-item">Item</label>
+        <label for="alerta-item">{tx('Item', 'Objeto')}</label>
         {#key pickerKey}
           <ItemPicker inputId="alerta-item" bind:itemId={form.itemId} bind:itemName={form.itemName} invalid={tried && !!errors.item} />
         {/key}
@@ -267,97 +323,97 @@
       </div>
 
       <div class="field">
-        <label for="alerta-qualidade">Qualidade</label>
+        <label for="alerta-qualidade">{tx('Qualidade', 'Calidad')}</label>
         <select id="alerta-qualidade" class="input" bind:value={form.quality}>
           {#each QUALITIES as o (o.q)}<option value={o.q}>{o.l}</option>{/each}
         </select>
       </div>
 
       <fieldset class="field">
-        <legend>O que você quer fazer</legend>
+        <legend>{tx('O que você quer fazer', 'Qué quieres hacer')}</legend>
         <div class="choices">
           <label class="choice"><input type="radio" name="lado" checked={form.side === 'sell'} onchange={() => setSide('sell')} />
-            <span><strong>Comprar barato</strong><br /><span class="muted small">olha as ordens de venda</span></span></label>
+            <span><strong>{tx('Comprar barato', 'Comprar barato')}</strong><br /><span class="muted small">{tx('olha as ordens de venda', 'mira las órdenes de venta')}</span></span></label>
           <label class="choice"><input type="radio" name="lado" checked={form.side === 'buy'} onchange={() => setSide('buy')} />
-            <span><strong>Vender caro</strong><br /><span class="muted small">olha as ordens de compra</span></span></label>
+            <span><strong>{tx('Vender caro', 'Vender caro')}</strong><br /><span class="muted small">{tx('olha as ordens de compra', 'mira las órdenes de compra')}</span></span></label>
         </div>
       </fieldset>
 
       <fieldset class="field">
-        <legend>Cidades</legend>
+        <legend>{tx('Cidades', 'Ciudades')}</legend>
         <div class="cities">
           {#each ALL_CITIES as c (c)}
             {@const bmLocked = c === BM_CITY && form.side === 'sell'}
             <label class="city" class:locked={bmLocked}>
               <input type="checkbox" checked={form.cities.includes(c)} disabled={bmLocked}
-                aria-describedby={bmLocked ? 'bm-nota' : undefined} onchange={(e) => toggleCity(c, e.currentTarget.checked)} /> {c}
+                aria-describedby={bmLocked ? 'bm-nota' : undefined} onchange={(e) => toggleCity(c, e.currentTarget.checked)} /> {cityName(c, getLocale())}
             </label>
           {/each}
         </div>
         {#if form.side === 'sell'}
-          <p id="bm-nota" class="muted small">O Black Market só compra; ele aparece em “Vender caro”.</p>
+          <p id="bm-nota" class="muted small">{tx('O Black Market só compra; ele aparece em “Vender caro”.', 'El Mercado Negro solo compra; aparece en “Vender caro”.')}</p>
         {/if}
         {#if tried && errors.cities}<p class="err small">{errors.cities}</p>{/if}
       </fieldset>
 
       <fieldset class="field">
-        <legend>Quando avisar</legend>
+        <legend>{tx('Quando avisar', 'Cuándo avisar')}</legend>
         <div class="choices">
-          <label class="choice"><input type="radio" name="cond" value="below" bind:group={form.kind} /> <span>Preço abaixo de</span></label>
-          <label class="choice"><input type="radio" name="cond" value="above" bind:group={form.kind} /> <span>Preço acima de</span></label>
-          <label class="choice"><input type="radio" name="cond" value="belowMedianPct" bind:group={form.kind} /> <span>% abaixo da mediana de 7 dias da cidade</span></label>
+          <label class="choice"><input type="radio" name="cond" value="below" bind:group={form.kind} /> <span>{tx('Preço abaixo de', 'Precio por debajo de')}</span></label>
+          <label class="choice"><input type="radio" name="cond" value="above" bind:group={form.kind} /> <span>{tx('Preço acima de', 'Precio por encima de')}</span></label>
+          <label class="choice"><input type="radio" name="cond" value="belowMedianPct" bind:group={form.kind} /> <span>{tx('% abaixo da mediana de 7 dias da cidade', '% por debajo de la mediana de 7 días de la ciudad')}</span></label>
         </div>
         <div class="value">
-          <label for="alerta-valor" class="visually-hidden">{form.kind === 'belowMedianPct' ? 'Porcentagem' : 'Preço em prata'}</label>
+          <label for="alerta-valor" class="visually-hidden">{form.kind === 'belowMedianPct' ? tx('Porcentagem', 'Porcentaje') : tx('Preço em prata', 'Precio en plata')}</label>
           <input id="alerta-valor" class="input num" inputmode={form.kind === 'belowMedianPct' ? 'decimal' : 'numeric'}
-            placeholder={form.kind === 'belowMedianPct' ? 'Ex.: 20' : 'Ex.: 12.000'} bind:value={form.value}
+            placeholder={form.kind === 'belowMedianPct' ? tx('Ex.: 20', 'Ej.: 20') : tx('Ex.: 12.000', `Ej.: ${fmtInt(12000, 'es')}`)} bind:value={form.value}
             aria-invalid={tried && !!errors.value} />
-          <span class="muted">{form.kind === 'belowMedianPct' ? '%' : 'prata'}</span>
+          <span class="muted">{form.kind === 'belowMedianPct' ? '%' : tx('prata', 'plata')}</span>
         </div>
         {#if tried && errors.value}<p class="err small">{errors.value}</p>{/if}
       </fieldset>
 
       <div class="field">
-        <label for="alerta-intervalo">Intervalo mínimo entre avisos</label>
+        <label for="alerta-intervalo">{tx('Intervalo mínimo entre avisos', 'Intervalo mínimo entre avisos')}</label>
         <select id="alerta-intervalo" class="input" bind:value={form.cooldownMin}>
-          {#each COOLDOWNS as m (m)}<option value={m}>{m < 60 ? `${m} minutos` : `${m / 60} ${m === 60 ? 'hora' : 'horas'}`}</option>{/each}
+          {#each COOLDOWNS as m (m)}<option value={m}>{m < 60 ? tx(`${m} minutos`, `${m} minutos`) : `${m / 60} ${m === 60 ? tx('hora', 'hora') : tx('horas', 'horas')}`}</option>{/each}
         </select>
       </div>
 
       <div class="row">
-        <button class="btn primary" type="submit" disabled={saving || (tried && !canSubmit)}>{saving ? 'Criando…' : 'Criar alerta'}</button>
-        <span class="muted small">{rules.length} de {MAX_RULES} regras usadas</span>
+        <button class="btn primary" type="submit" disabled={saving || (tried && !canSubmit)}>{saving ? tx('Criando…', 'Creando…') : tx('Criar alerta', 'Crear alerta')}</button>
+        <span class="muted small">{tx(`${rules.length} de ${MAX_RULES} regras usadas`, `${rules.length} de ${MAX_RULES} reglas usadas`)}</span>
       </div>
     </fieldset>
-    {#if saveError}<p class="callout warn small" role="alert">Não deu para criar a regra: {saveError}</p>{/if}
+    {#if saveError}<p class="callout warn small" role="alert">{tx('Não deu para criar a regra', 'No se pudo crear la regla')}: {saveError}</p>{/if}
     {#if saved}<p class="callout small" role="status">{saved}</p>{/if}
   </form>
 
   <!-- lista -->
   {#if subId}
     <div class="card stack">
-      <h2 class="first">Regras deste aparelho</h2>
+      <h2 class="first">{tx('Regras deste aparelho', 'Reglas de este dispositivo')}</h2>
       {#if rulesLoading && !rules.length}
         {#each [0, 1] as i (i)}<div class="skeleton" style:height="48px"></div>{/each}
       {:else if rulesError}
         <div class="callout warn small" role="alert">
-          Não deu para carregar as regras: {rulesError}
-          <button class="btn" type="button" onclick={() => subId && loadRules(subId)}>Tentar de novo</button>
+          {tx('Não deu para carregar as regras', 'No se pudieron cargar las reglas')}: {rulesError}
+          <button class="btn" type="button" onclick={() => subId && loadRules(subId)}>{tx('Tentar de novo', 'Intentar de nuevo')}</button>
         </div>
       {:else if !rules.length}
-        <p class="empty">Nenhuma regra ainda. Crie a primeira acima.</p>
+        <p class="empty">{tx('Nenhuma regra ainda. Crie a primeira acima.', 'Todavía no hay reglas. Crea la primera arriba.')}</p>
       {:else}
         <ul class="rules">
           {#each rules as r (r.id)}
             <li>
               <ItemIcon id={r.itemId} quality={r.quality} alt="" size={36} />
               <div class="desc">
-                <a href="/item/{encodeURIComponent(r.itemId)}" onclick={go}>{nameFor(r)}</a>
-                <span class="small">{ruleDetails(r)}</span>
-                <span class="muted small">{r.lastFiredAt ? `Último aviso ${fmtAgo(r.lastFiredAt)}` : 'Ainda não avisou'}</span>
+                <a href={href(`/item/${encodeURIComponent(r.itemId)}`)} onclick={go}>{nameFor(r)}</a>
+                <span class="small">{ruleDetails(r, getLocale())}</span>
+                <span class="muted small">{lastFiredText(r)}</span>
               </div>
-              <button class="btn" type="button" onclick={() => remove(r)} disabled={deleting === r.id} aria-label="Apagar a regra de {nameFor(r)}">
-                {deleting === r.id ? 'Apagando…' : 'Apagar'}
+              <button class="btn" type="button" onclick={() => remove(r)} disabled={deleting === r.id} aria-label={tx(`Apagar a regra de ${nameFor(r)}`, `Borrar la regla de ${nameFor(r)}`)}>
+                {deleting === r.id ? tx('Apagando…', 'Borrando…') : tx('Apagar', 'Borrar')}
               </button>
             </li>
           {/each}

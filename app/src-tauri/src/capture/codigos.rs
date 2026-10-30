@@ -1,13 +1,44 @@
 //! Tabela de códigos de evento e operação do Albion (mudam a cada patch). A fonte única é `app/capture-codes.json`:
 //! vai embutida no binário e o painel baixa a mesma do GitHub; se a de lá tiver `versao` maior, passa a valer
 //! (sem nova versão do app). De onde veio cada número: campo `fontes` do próprio JSON.
+//! A remota só vale com assinatura Ed25519 válida (`app/capture-codes.json.sig`, gerada por
+//! `scripts/sign-codes.mjs` com a chave privada do Doppler pessoal) sobre os bytes exatos baixados.
 
 use std::collections::HashMap;
 
+use base64::Engine as _;
+use ed25519_dalek::{Signature, VerifyingKey};
 use serde::Deserialize;
 
 /// O JSON embutido no build.
 pub const EMBUTIDA: &str = include_str!("../../../capture-codes.json");
+
+/// Chave pública Ed25519 (32 bytes crus em base64) que assina a tabela remota. A privada mora só no Doppler
+/// pessoal (`GUARITA_CODES_SIGN_KEY`); `node scripts/sign-codes.mjs --publica` mostra a pública dela.
+pub const CHAVE_PUBLICA_B64: &str = "TFrq3bFc1WelutzB6RQE1sGCfqu8WUrFsriZD3gIjds=";
+
+/// Mensagem (e registro no diagnóstico) quando a tabela remota não tem assinatura válida.
+pub const RECUSA_ASSINATURA: &str = "tabela remota recusada (assinatura)";
+
+/// Confere a assinatura (base64 de 64 bytes) de `bytes` com a chave pública embutida.
+pub fn verificar_assinatura(bytes: &[u8], assinatura_b64: Option<&str>) -> Result<(), String> {
+    let chave = base64::engine::general_purpose::STANDARD
+        .decode(CHAVE_PUBLICA_B64)
+        .ok()
+        .and_then(|b| <[u8; 32]>::try_from(b).ok())
+        .expect("CHAVE_PUBLICA_B64 inválida");
+    verificar_com(&chave, bytes, assinatura_b64)
+}
+
+/// Confere com uma chave dada (os testes usam um par próprio).
+pub fn verificar_com(chave: &[u8; 32], bytes: &[u8], assinatura_b64: Option<&str>) -> Result<(), String> {
+    let recusa = || RECUSA_ASSINATURA.to_string();
+    let sig = assinatura_b64.map(str::trim).filter(|s| !s.is_empty()).ok_or_else(recusa)?;
+    let sig = base64::engine::general_purpose::STANDARD.decode(sig).map_err(|_| recusa())?;
+    let sig = Signature::from_slice(&sig).map_err(|_| recusa())?;
+    let chave = VerifyingKey::from_bytes(chave).map_err(|_| recusa())?;
+    chave.verify_strict(bytes, &sig).map_err(|_| recusa())
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Entrada {
@@ -50,6 +81,13 @@ const PARAMETRO_CODIGO_MIN: u8 = 240;
 impl Tabela {
     pub fn embutida() -> Tabela {
         Tabela::de_json(EMBUTIDA).expect("capture-codes.json embutido inválido")
+    }
+
+    /// Tabela baixada do GitHub com a assinatura: primeiro a assinatura (sobre os bytes exatos), depois as
+    /// regras de `de_json_remota`. Sem assinatura válida → `RECUSA_ASSINATURA`.
+    pub fn de_json_remota_assinada(s: &str, assinatura_b64: Option<&str>, versao_embutida: u32) -> Result<Tabela, String> {
+        verificar_assinatura(s.as_bytes(), assinatura_b64)?;
+        Tabela::de_json_remota(s, versao_embutida)
     }
 
     /// Tabela baixada do GitHub: as mesmas regras da embutida e mais um teto de versão.
@@ -149,5 +187,75 @@ mod testes {
         assert!(com(&|v| v["versao"] = (base + SALTO_MAX_VERSAO + 1).into()).is_err());
         assert!(com(&|v| v["versao"] = u32::MAX.into()).is_err());
         assert!(com(&|v| v["parametroEvento"] = 2.into()).is_err());
+    }
+
+    /// A assinatura commitada confere com a tabela embutida e a chave pública embutida (falha aqui = alguém mudou
+    /// `capture-codes.json` sem rodar `npm run codes:sign`).
+    #[test]
+    fn assinatura_commitada_vale_para_a_tabela_atual() {
+        let sig = include_str!("../../../capture-codes.json.sig");
+        assert_eq!(verificar_assinatura(EMBUTIDA.as_bytes(), Some(sig)), Ok(()));
+        let t = Tabela::de_json_remota_assinada(EMBUTIDA, Some(sig), 0).unwrap();
+        assert_eq!(t.versao, Tabela::embutida().versao);
+    }
+
+    mod assinatura {
+        use super::*;
+        use ed25519_dalek::{Signer, SigningKey};
+
+        fn par() -> (SigningKey, [u8; 32]) {
+            let sk = SigningKey::from_bytes(&[7u8; 32]);
+            let pk = sk.verifying_key().to_bytes();
+            (sk, pk)
+        }
+
+        fn b64(b: &[u8]) -> String {
+            base64::engine::general_purpose::STANDARD.encode(b)
+        }
+
+        #[test]
+        fn valida_aceita() {
+            let (sk, pk) = par();
+            let sig = b64(&sk.sign(EMBUTIDA.as_bytes()).to_bytes());
+            assert_eq!(verificar_com(&pk, EMBUTIDA.as_bytes(), Some(&sig)), Ok(()));
+            // Fim de linha no arquivo .sig não atrapalha.
+            assert_eq!(verificar_com(&pk, EMBUTIDA.as_bytes(), Some(&format!("{sig}\r\n"))), Ok(()));
+        }
+
+        #[test]
+        fn byte_alterado_recusado() {
+            let (sk, pk) = par();
+            let sig = b64(&sk.sign(EMBUTIDA.as_bytes()).to_bytes());
+            let mut bytes = EMBUTIDA.as_bytes().to_vec();
+            let i = bytes.iter().position(|&b| b == b'5').unwrap();
+            bytes[i] = b'6';
+            assert_eq!(verificar_com(&pk, &bytes, Some(&sig)).unwrap_err(), RECUSA_ASSINATURA);
+            // Assinatura com um byte trocado também.
+            let mut s = sk.sign(EMBUTIDA.as_bytes()).to_bytes();
+            s[10] ^= 1;
+            assert!(verificar_com(&pk, EMBUTIDA.as_bytes(), Some(&b64(&s))).is_err());
+            // Assinada por outra chave.
+            let outra = SigningKey::from_bytes(&[9u8; 32]);
+            let sig_outra = b64(&outra.sign(EMBUTIDA.as_bytes()).to_bytes());
+            assert!(verificar_com(&pk, EMBUTIDA.as_bytes(), Some(&sig_outra)).is_err());
+        }
+
+        #[test]
+        fn sig_ausente_ou_lixo_recusado() {
+            let (_, pk) = par();
+            for sig in [None, Some(""), Some("  \n"), Some("não é base64"), Some("AAAA"), Some("<html>404</html>")] {
+                assert_eq!(verificar_com(&pk, EMBUTIDA.as_bytes(), sig).unwrap_err(), RECUSA_ASSINATURA, "{sig:?}");
+            }
+        }
+
+        /// Pela entrada do comando: tabela sem assinatura (ou com a de outra chave) não chega a `de_json_remota`.
+        #[test]
+        fn remota_sem_assinatura_da_chave_embutida_recusada() {
+            let base = Tabela::embutida().versao;
+            assert_eq!(Tabela::de_json_remota_assinada(EMBUTIDA, None, base).unwrap_err(), RECUSA_ASSINATURA);
+            let (sk, _) = par();
+            let sig = b64(&sk.sign(EMBUTIDA.as_bytes()).to_bytes());
+            assert_eq!(Tabela::de_json_remota_assinada(EMBUTIDA, Some(&sig), base).unwrap_err(), RECUSA_ASSINATURA);
+        }
     }
 }

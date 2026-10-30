@@ -3,10 +3,14 @@
   import { api } from '../lib/api';
   import { go } from '../lib/router';
   import type { PlayerHit } from '../../shared/types';
-  import { SCAMS, SCAM_REPORT_NOTE } from '../../shared/scams';
   import { fmtCompact, playerHref, playerQuery } from '../lib/player/format';
   import ErrorBox from '../lib/player/ErrorBox.svelte';
   import { nickQueries, similarNicks, type NickMatch } from '../lib/novato/similar';
+  import { nickKindLabel, nickReason, scamReportNote, scamsFor } from '../lib/institucional/golpes';
+  import { getLocale, href, tx } from '../lib/i18n/index.svelte';
+
+  // Catálogo na língua atual (o espanhol mora em src/lib/institucional/golpes.ts, pelo mesmo id).
+  const SCAMS = $derived(scamsFor(getLocale()));
 
   // params não usado
   let { params: _params = {} }: { params?: Record<string, string> } = $props();
@@ -34,7 +38,7 @@
       const ok = results.filter((r): r is PromiseFulfilledResult<{ players: PlayerHit[] }> => r.status === 'fulfilled');
       if (!ok.length) {
         const first = results[0];
-        throw first && first.status === 'rejected' ? first.reason : new Error('sem resposta');
+        throw first && first.status === 'rejected' ? first.reason : new Error(tx('sem resposta', 'sin respuesta'));
       }
       partial = ok.length < results.length;
       matches = similarNicks(q, ok.flatMap((r) => r.value.players ?? []));
@@ -54,8 +58,9 @@
   }
 
   function orgLine(h: PlayerHit): string {
-    const org = h.alliance ? `${h.guild || 'Sem guilda'} · [${h.alliance}]` : h.guild || 'Sem guilda';
-    return `${org} · fama de abate ${fmtCompact(h.killFame)}`;
+    const none = tx('Sem guilda', 'Sin gremio');
+    const org = h.alliance ? `${h.guild || none} · [${h.alliance}]` : h.guild || none;
+    return `${org} · ${tx('fama de abate', 'fama por asesinatos')} ${fmtCompact(h.killFame)}`;
   }
 
   // Link do índice abre o golpe (o <details> começa fechado) e leva o foco ao título dele: teclado e leitor de tela
@@ -83,21 +88,25 @@
   const exact = $derived(matches?.filter((m) => m.kind === 'exato') ?? []);
   const similar = $derived(matches?.filter((m) => m.kind !== 'exato') ?? []);
 
+  // Mesmo título que o _worker.js injeta (worker/seo.ts, FIXED_ROUTES e FIXED_ES).
   $effect(() => {
-    document.title = 'Golpes comuns · Guarita';
+    document.title = tx('Golpes comuns · Guarita', 'Estafas comunes · Guarita');
   });
 </script>
 
 <section class="page stack">
   <header>
-    <h1>Golpes comuns</h1>
-    <p class="muted">Os truques que mais pegam jogador novo no Albion, como reconhecer e como se proteger. No jogo, o que você entrega por vontade própria não volta.</p>
+    <h1>{tx('Golpes comuns', 'Estafas comunes')}</h1>
+    <p class="muted">{tx(
+      'Os truques que mais pegam jogador novo no Albion, como reconhecer e como se proteger. No jogo, o que você entrega por vontade própria não volta.',
+      'Los trucos que más atrapan a los jugadores nuevos en Albion, cómo reconocerlos y cómo protegerte. En el juego, lo que entregas por voluntad propia no vuelve.',
+    )}</p>
   </header>
 
-  <nav class="card" aria-label="Golpes do catálogo">
+  <nav class="card" aria-label={tx('Golpes do catálogo', 'Estafas del catálogo')}>
     <ul class="index">
       {#each SCAMS as s (s.id)}<li><a href="#golpe-{s.id}" onclick={() => openScam(s.id)}>{s.title}</a></li>{/each}
-      <li><a href="#nick">Checar nick parecido</a></li>
+      <li><a href="#nick">{tx('Checar nick parecido', 'Buscar nombres parecidos')}</a></li>
     </ul>
   </nav>
 
@@ -110,15 +119,15 @@
         </summary>
         <div class="scam-body stack">
           <div>
-            <h3 class="h4">Como funciona</h3>
+            <h3 class="h4">{tx('Como funciona', 'Cómo funciona')}</h3>
             <p>{s.how}</p>
           </div>
           <div>
-            <h3 class="h4">Sinais</h3>
+            <h3 class="h4">{tx('Sinais', 'Señales')}</h3>
             <ul>{#each s.signs as x (x)}<li>{x}</li>{/each}</ul>
           </div>
           <div>
-            <h3 class="h4">Como se proteger</h3>
+            <h3 class="h4">{tx('Como se proteger', 'Cómo protegerte')}</h3>
             <ul>{#each s.protect as x (x)}<li>{x}</li>{/each}</ul>
           </div>
         </div>
@@ -126,41 +135,43 @@
     {/each}
   </div>
 
-  <p class="callout info small">{SCAM_REPORT_NOTE}</p>
+  <p class="callout info small">{scamReportNote(getLocale())}</p>
 
   <section class="card stack" id="nick" aria-labelledby="nick-titulo">
-    <h2 class="h3" id="nick-titulo">Checar nick parecido</h2>
+    <h2 class="h3" id="nick-titulo">{tx('Checar nick parecido', 'Buscar nombres parecidos')}</h2>
     <p class="muted small">
-      Golpista costuma usar o nome de alguém conhecido com uma letra trocada: “I” maiúsculo no lugar de “l”, zero no lugar de “O”.
-      Digite o nome exato de quem você conhece e veja se aparecem nomes parecidos no servidor Americas.
+      {tx(
+        'Golpista costuma usar o nome de alguém conhecido com uma letra trocada: “I” maiúsculo no lugar de “l”, zero no lugar de “O”. Digite o nome exato de quem você conhece e veja se aparecem nomes parecidos no servidor Americas.',
+        'Los estafadores suelen usar el nombre de alguien conocido con una letra cambiada: una “I” mayúscula en lugar de una “l”, un cero en lugar de una “O”. Escribe el nombre exacto de quien conoces y mira si aparecen nombres parecidos en el servidor Americas.',
+      )}
     </p>
     <form class="stack" onsubmit={submit} role="search">
-      <label for="nick-input"><strong>Nome do personagem</strong></label>
+      <label for="nick-input"><strong>{tx('Nome do personagem', 'Nombre del personaje')}</strong></label>
       <div class="row nowrap">
         <input id="nick-input" class="input" type="search" autocomplete="off" spellcheck="false" minlength="3"
-          placeholder="Ex.: o nome do líder da sua guilda" bind:value={nick} aria-describedby="nick-ajuda" />
-        <button class="btn primary" type="submit" disabled={!valid || loading}>Checar</button>
+          placeholder={tx('Ex.: o nome do líder da sua guilda', 'Ej.: el nombre del líder de tu gremio')} bind:value={nick} aria-describedby="nick-ajuda" />
+        <button class="btn primary" type="submit" disabled={!valid || loading}>{tx('Checar', 'Buscar')}</button>
       </div>
       <p id="nick-ajuda" class="muted small">
-        {#if nick.trim() && !valid}Digite pelo menos 3 letras.{:else}O killboard oficial às vezes leva até 1 minuto para responder.{/if}
+        {#if nick.trim() && !valid}{tx('Digite pelo menos 3 letras.', 'Escribe al menos 3 letras.')}{:else}{tx('O killboard oficial às vezes leva até 1 minuto para responder.', 'El killboard oficial a veces tarda hasta 1 minuto en responder.')}{/if}
       </p>
     </form>
 
     <div aria-live="polite" class="stack">
       {#if loading}
         <div class="stack" role="status" aria-busy="true">
-          <p class="muted small">{slow ? 'O killboard oficial está lento agora. Continuamos esperando a resposta…' : 'Procurando nomes parecidos…'}</p>
+          <p class="muted small">{slow ? tx('O killboard oficial está lento agora. Continuamos esperando a resposta…', 'El killboard oficial está lento ahora. Seguimos esperando la respuesta…') : tx('Procurando nomes parecidos…', 'Buscando nombres parecidos…')}</p>
           {#each [0, 1, 2] as i (i)}<div class="skeleton" style:height="44px"></div>{/each}
         </div>
       {:else if error}
         <ErrorBox message={error} onretry={check} />
       {:else if matches}
         {#if exact.length}
-          <p class="small">Nome exato encontrado:</p>
+          <p class="small">{tx('Nome exato encontrado:', 'Nombre exacto encontrado:')}</p>
           <ul class="hits">
             {#each exact as m (m.hit.id)}
               <li>
-                <a class="hit card" href={playerHref(m.hit.id)} onclick={go}>
+                <a class="hit card" href={href(playerHref(m.hit.id))} onclick={go}>
                   <span class="name">{m.hit.name}</span>
                   <span class="muted small">{orgLine(m.hit)}</span>
                 </a>
@@ -168,31 +179,35 @@
             {/each}
           </ul>
         {:else}
-          <p class="muted small">O nome exato “{checked}” não apareceu na busca. Confira a grafia com a pessoa por outro canal.</p>
+          <p class="muted small">{tx(
+            `O nome exato “${checked}” não apareceu na busca. Confira a grafia com a pessoa por outro canal.`,
+            `El nombre exacto “${checked}” no apareció en la búsqueda. Confirma cómo se escribe con la persona por otro canal.`,
+          )}</p>
         {/if}
 
         {#if similar.length}
-          <p class="small"><strong>{similar.length} {similar.length === 1 ? 'nome parecido' : 'nomes parecidos'}</strong> com “{checked}”:</p>
+          <p class="small"><strong>{similar.length} {similar.length === 1 ? tx('nome parecido', 'nombre parecido') : tx('nomes parecidos', 'nombres parecidos')}</strong> {tx('com', 'con')} “{checked}”:</p>
           <ul class="hits">
             {#each similar as m (m.hit.id)}
               <li>
-                <a class="hit card" href={playerHref(m.hit.id)} onclick={go}>
+                <a class="hit card" href={href(playerHref(m.hit.id))} onclick={go}>
                   <span class="name mono">{m.hit.name}</span>
-                  <span class="small"><span class="tag {m.kind === 'homoglifo' ? 'warn' : 'info'}">{m.kind === 'homoglifo' ? 'Igual na tela' : m.kind === 'caixa' ? 'Muda a caixa' : 'Parecido'}</span> {m.reason}</span>
+                  <span class="small"><span class="tag {m.kind === 'homoglifo' ? 'warn' : 'info'}">{nickKindLabel(m.kind, getLocale())}</span> {nickReason(m, getLocale())}</span>
                   <span class="muted small">{orgLine(m.hit)}</span>
                 </a>
               </li>
             {/each}
           </ul>
         {:else}
-          <p class="empty">Nenhum nome parecido apareceu na busca.</p>
+          <p class="empty">{tx('Nenhum nome parecido apareceu na busca.', 'No apareció ningún nombre parecido en la búsqueda.')}</p>
         {/if}
 
-        {#if partial}<p class="muted small">Uma das buscas não respondeu; a lista pode estar incompleta.</p>{/if}
+        {#if partial}<p class="muted small">{tx('Uma das buscas não respondeu; a lista pode estar incompleta.', 'Una de las búsquedas no respondió; la lista puede estar incompleta.')}</p>{/if}
         <p class="callout warn small">
-          Nome parecido não quer dizer golpe: muita gente escolhe nomes semelhantes sem má intenção. Use isto só para
-          conferir com quem você está falando, comparando guilda e fama. A busca do killboard devolve poucos nomes e
-          só os que começam ou contêm o que foi digitado, então “nenhum parecido” não garante que não exista.
+          {tx(
+            'Nome parecido não quer dizer golpe: muita gente escolhe nomes semelhantes sem má intenção. Use isto só para conferir com quem você está falando, comparando guilda e fama. A busca do killboard devolve poucos nomes e só os que começam ou contêm o que foi digitado, então “nenhum parecido” não garante que não exista.',
+            'Un nombre parecido no significa estafa: mucha gente elige nombres similares sin mala intención. Usa esto solo para confirmar con quién estás hablando, comparando gremio y fama. La búsqueda del killboard devuelve pocos nombres y solo los que empiezan con lo que escribiste o lo contienen, así que “ningún parecido” no garantiza que no exista.',
+          )}
         </p>
       {/if}
     </div>

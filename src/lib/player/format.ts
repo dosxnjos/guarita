@@ -1,35 +1,62 @@
-// Formatação das telas de jogador e alertas: números pt-BR, datas em Brasília, rótulos PT-BR.
-// Tudo puro (sem window): os testes em tests/player-ui.test.ts rodam em Node.
+// Formatação das telas de jogador e alertas: números pt-BR (ou espanhol latino), datas em Brasília, rótulos PT-BR/ES.
+// Tudo puro (sem window): os testes em tests/player-ui.test.ts (e o espanhol em tests/player-i18n.test.ts) rodam em Node.
+// Línguas: como em src/lib/format.ts, as funções com texto ou número aceitam `loc` no fim; sem ele, usam a língua
+// atual do site (espelho não reativo em i18n/core.ts). Fora do navegador (testes, app de PC) é sempre pt.
 import { minutesSince } from '../../../shared/market';
 import type { Danger } from '../../../shared/types';
+import { weaponLabelEsFromPt } from '../../../shared/weapons';
+import { currentLocale, intlLocaleFor, type Locale } from '../i18n/core';
 
 const TZ = 'America/Sao_Paulo';
-const nf = new Intl.NumberFormat('pt-BR');
-const nf1 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
-const nfCompact = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
+type Nf = { int: Intl.NumberFormat; dec: Intl.NumberFormat; compact: Intl.NumberFormat };
+const NF = new Map<Locale, Nf>();
+function nf(loc: Locale): Nf {
+  let f = NF.get(loc);
+  if (!f) {
+    const l = intlLocaleFor(loc);
+    f = {
+      int: new Intl.NumberFormat(l),
+      dec: new Intl.NumberFormat(l, { maximumFractionDigits: 1 }),
+      compact: new Intl.NumberFormat(l, { notation: 'compact', maximumFractionDigits: 1 }),
+    };
+    NF.set(loc, f);
+  }
+  return f;
+}
+// Datas: os dígitos são os mesmos nas duas línguas (dd/mm/aaaa, 24 h), como em src/lib/format.ts.
 const dtf = new Intl.DateTimeFormat('pt-BR', {
   timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
+const isNum = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 
-/** Inteiro com separador de milhar (12.345); traço quando não há número. */
-export function fmtNum(n: number | null | undefined): string {
-  return typeof n === 'number' && Number.isFinite(n) ? nf.format(Math.round(n)) : '—';
+/** Inteiro com separador de milhar (12.345; es: 12,345); traço quando não há número. */
+export function fmtNum(n: number | null | undefined, loc: Locale = currentLocale()): string {
+  return isNum(n) ? nf(loc).int.format(Math.round(n)) : '—';
 }
 
-/** Número com até 1 casa decimal (1,5). */
-export function fmtDec(n: number | null | undefined): string {
-  return typeof n === 'number' && Number.isFinite(n) ? nf1.format(n) : '—';
+/** Número com até 1 casa decimal (1,5; es: 1.5). */
+export function fmtDec(n: number | null | undefined, loc: Locale = currentLocale()): string {
+  return isNum(n) ? nf(loc).dec.format(n) : '—';
 }
 
-/** Número curto para fama e prata grandes (1,2 mi; 350 mil). */
-export function fmtCompact(n: number | null | undefined): string {
-  if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
-  return Math.abs(n) < 10000 ? nf.format(Math.round(n)) : nfCompact.format(n);
+/**
+ * Número curto para fama e prata grandes (1,2 mi; 350 mil). Espanhol montado à mão, igual ao fmtSilver de
+ * src/lib/format.ts ("1.2 M", "350 mil", "2 mil M"): o compacto do Intl em es-419 dá "350 k" e "2000 M".
+ */
+export function fmtCompact(n: number | null | undefined, loc: Locale = currentLocale()): string {
+  if (!isNum(n)) return '—';
+  const f = nf(loc);
+  if (Math.abs(n) < 10000) return f.int.format(Math.round(n));
+  if (loc !== 'es') return f.compact.format(n);
+  const a = Math.abs(n);
+  if (a >= 1e9) return `${f.dec.format(n / 1e9)} mil M`;
+  if (a >= 1e6) return `${f.dec.format(n / 1e6)} M`;
+  return `${f.dec.format(n / 1e3)} mil`;
 }
 
 /** Fração 0–1 em porcentagem inteira (0.42 → "42%"). */
 export function fmtPct(f: number | null | undefined): string {
-  return typeof f === 'number' && Number.isFinite(f) ? `${Math.round(f * 100)}%` : '—';
+  return isNum(f) ? `${Math.round(f * 100)}%` : '—';
 }
 
 /** Data e hora em Brasília, formato brasileiro (29/10/2026 14:05). */
@@ -39,20 +66,23 @@ export function fmtDateBR(iso: string | null | undefined): string {
   return Number.isNaN(t) ? '—' : dtf.format(t).replace(',', '');
 }
 
-/** Minutos em texto curto: "agora", "há 5 min", "há 3 h", "há 2 dias". */
-export function fmtAgoMin(min: number | null | undefined): string {
-  if (typeof min !== 'number' || !Number.isFinite(min)) return 'sem data';
-  if (min < 1) return 'agora';
-  if (min < 60) return `há ${Math.round(min)} min`;
+/** Minutos em texto curto: "agora", "há 5 min", "há 3 h", "há 2 dias" (es: "ahora", "hace 5 min"…). */
+export function fmtAgoMin(min: number | null | undefined, loc: Locale = currentLocale()): string {
+  const E = loc === 'es';
+  if (!isNum(min)) return E ? 'sin fecha' : 'sem data';
+  if (min < 1) return E ? 'ahora' : 'agora';
+  const ago = E ? 'hace' : 'há';
+  if (min < 60) return `${ago} ${Math.round(min)} min`;
   const h = Math.floor(min / 60);
-  if (h < 48) return `há ${h} h`;
+  if (h < 48) return `${ago} ${h} h`;
   const d = Math.floor(h / 24);
+  if (E) return d < 60 ? `hace ${d} días` : `hace ${Math.floor(d / 30)} meses`;
   return d < 60 ? `há ${d} dias` : `há ${Math.floor(d / 30)} meses`;
 }
 
 /** "há X h" a partir de uma data ISO. */
-export function fmtAgo(iso: string | null | undefined, now = Date.now()): string {
-  return fmtAgoMin(minutesSince(iso ?? null, now));
+export function fmtAgo(iso: string | null | undefined, now = Date.now(), loc: Locale = currentLocale()): string {
+  return fmtAgoMin(minutesSince(iso ?? null, now), loc);
 }
 
 /** Classe da bolinha de idade (app.css): até 1 h fresh, até 6 h stale, mais velho cinza. */
@@ -69,37 +99,59 @@ export function dangerTone(label: Danger['label']): 'good' | 'warn' | 'bad' | ''
 }
 
 /** Frase de abertura do medidor de perigo. */
-export function dangerHeadline(label: Danger['label']): string {
+export function dangerHeadline(label: Danger['label'], loc: Locale = currentLocale()): string {
+  const E = loc === 'es';
   switch (label) {
     case 'tranquilo': return 'Tranquilo';
-    case 'atenção': return 'Atenção';
-    case 'perigoso': return 'Perigoso';
-    default: return 'Sem dado suficiente';
+    case 'atenção': return E ? 'Atención' : 'Atenção';
+    case 'perigoso': return E ? 'Peligroso' : 'Perigoso';
+    default: return E ? 'Sin datos suficientes' : 'Sem dado suficiente';
   }
 }
 
 export { QUALITY_LABEL, qualityLabel } from '../../../shared/quality';
 
+const norm = (k: string) => k.toLowerCase().replace(/[^a-z]/g, '');
+
 const SLOT: Record<string, string> = {
   mainhand: 'Arma', offhand: 'Mão secundária', head: 'Cabeça', armor: 'Peitoral', shoes: 'Botas', bag: 'Bolsa',
   cape: 'Capa', mount: 'Montaria', potion: 'Poção', food: 'Comida', inventory: 'Inventário',
 };
-/** Rótulo PT-BR do espaço de equipamento (aceita "MainHand", "mainhand", "main_hand"). */
-export function slotLabel(slot: string): string {
-  return SLOT[slot.toLowerCase().replace(/[^a-z]/g, '')] ?? slot;
+// Nomes dos espaços como o cliente em espanhol (glossário: peitoral = pecho, montaria = montura).
+const SLOT_ES: Record<string, string> = {
+  mainhand: 'Arma', offhand: 'Mano secundaria', head: 'Cabeza', armor: 'Pecho', shoes: 'Calzado', bag: 'Bolsa',
+  cape: 'Capa', mount: 'Montura', potion: 'Poción', food: 'Comida', inventory: 'Inventario',
+};
+/** Rótulo do espaço de equipamento (aceita "MainHand", "mainhand", "main_hand"). */
+export function slotLabel(slot: string, loc: Locale = currentLocale()): string {
+  return (loc === 'es' ? SLOT_ES : SLOT)[norm(slot)] ?? slot;
 }
 
 const PVE: Record<string, string> = {
   total: 'Total', royal: 'Reinos Reais', outlands: 'Terras Distantes', avalon: 'Estradas de Avalon',
   hellgate: 'Portões Infernais', corrupteddungeon: 'Masmorras Corrompidas', mists: 'Névoas',
 };
+// Glossário: Continente Real, Tierras Lejanas, Caminos de Avalon, Hellgate, mazmorra corrupta, Nieblas (nunca "Brumas").
+const PVE_ES: Record<string, string> = {
+  total: 'Total', royal: 'Continente Real', outlands: 'Tierras Lejanas', avalon: 'Caminos de Avalon',
+  hellgate: 'Hellgate', corrupteddungeon: 'Mazmorras corruptas', mists: 'Nieblas',
+};
 const GATHER: Record<string, string> = {
   all: 'Total', total: 'Total', fiber: 'Fibra', hide: 'Couro', ore: 'Minério', rock: 'Pedra', wood: 'Madeira',
   fish: 'Pesca', fishing: 'Pesca', farming: 'Plantação', crafting: 'Fabricação',
 };
-const norm = (k: string) => k.toLowerCase().replace(/[^a-z]/g, '');
-export const pveLabel = (k: string) => PVE[norm(k)] ?? k;
-export const gatherLabel = (k: string) => GATHER[norm(k)] ?? k;
+const GATHER_ES: Record<string, string> = {
+  all: 'Total', total: 'Total', fiber: 'Fibra', hide: 'Piel', ore: 'Mineral', rock: 'Piedra', wood: 'Madera',
+  fish: 'Pesca', fishing: 'Pesca', farming: 'Cultivo', crafting: 'Fabricación',
+};
+export const pveLabel = (k: string, loc: Locale = currentLocale()) => (loc === 'es' ? PVE_ES : PVE)[norm(k)] ?? k;
+export const gatherLabel = (k: string, loc: Locale = currentLocale()) => (loc === 'es' ? GATHER_ES : GATHER)[norm(k)] ?? k;
+
+// Família de arma em espanhol: tabela em shared/weapons.ts (o bot usa a mesma). A API manda só o rótulo PT (labelPt).
+/** Rótulo da família de arma na língua atual, a partir do rótulo PT da API (desconhecido: devolve o PT). */
+export function weaponLabel(labelPt: string, loc: Locale = currentLocale()): string {
+  return loc === 'es' ? weaponLabelEsFromPt(labelPt) : labelPt;
+}
 
 export interface Bar {
   key: string;
@@ -130,18 +182,19 @@ export function iconUrl(id: string, quality?: number, size = 64): string {
   return `https://render.albiononline.com/v1/item/${encodeURIComponent(id)}.png?size=${size}${q}`;
 }
 
-/** Caminho interno da página de item (com a qualidade quando não é a normal). */
+/** Caminho interno da página de item (com a qualidade quando não é a normal). Sem língua: a tela passa por href(). */
 export function itemHref(id: string, quality?: number): string {
   return `/item/${encodeURIComponent(id)}${quality && quality > 1 ? `?q=${quality}` : ''}`;
 }
 
+/** Caminho interno do dossiê. Sem língua: a tela passa por href(). */
 export function playerHref(id: string): string {
   return `/jogador/${encodeURIComponent(id)}`;
 }
 
 /** Plural simples: plural(1, 'kill', 'kills'). */
-export function plural(n: number, one: string, many: string): string {
-  return `${fmtNum(n)} ${n === 1 ? one : many}`;
+export function plural(n: number, one: string, many: string, loc: Locale = currentLocale()): string {
+  return `${fmtNum(n, loc)} ${n === 1 ? one : many}`;
 }
 
 /** Dado velho: o dossiê vem de cache; mais de 30 min já merece aviso. */

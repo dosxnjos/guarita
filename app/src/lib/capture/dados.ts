@@ -1,13 +1,17 @@
 // Dados de apoio da captura, baixados pelo painel e entregues ao Rust:
-// - tabela de códigos (app/capture-codes.json do repositório; vale a de versão maior que a embutida no app);
+// - tabela de códigos (app/capture-codes.json do repositório) e a assinatura dela (capture-codes.json.sig): o Rust
+//   só aceita com assinatura Ed25519 válida e versão maior que a embutida no app;
 // - lista de itens do ao-bin-dumps (formatted/items.txt: "  123: T4_BAG  : Adept's Bag"), para o índice numérico
 //   do loot virar o id do item;
 // - lista de mapas do ao-bin-dumps (formatted/world.txt: "3004: Martlock"), para o id do mapa virar nome.
 // Cópia local no Cache Storage (todas as janelas dividem); refeita a cada 24 h; sem rede, vale a cópia.
-// Escopo de rede: estas três URLs exatas, só na capability do painel (src-tauri/capabilities/painel.json).
+// Escopo de rede: estas quatro URLs exatas, só na capability do painel (src-tauri/capabilities/painel.json).
 import { isTauri } from '../windows';
 
 export const URL_CODIGOS = 'https://raw.githubusercontent.com/dosxnjos/guarita/main/app/capture-codes.json';
+export const URL_ASSINATURA = URL_CODIGOS + '.sig';
+/** Chave da cópia local do par tabela + assinatura (nunca é baixada; a 0.2.0 guardava a tabela em URL_CODIGOS). */
+export const CHAVE_CODIGOS_ASSINADOS = URL_CODIGOS + '?com-assinatura=1';
 export const URL_ITENS = 'https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/formatted/items.txt';
 export const URL_MAPAS = 'https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/formatted/world.txt';
 export const DADOS_IDADE_MAX_MS = 24 * 60 * 60_000;
@@ -115,6 +119,48 @@ export async function textoComCopia(
     return texto;
   } catch (e) {
     if (salvo) return salvo.texto;
+    throw e;
+  }
+}
+
+export interface TabelaBaixada {
+  json: string;
+  /** Conteúdo do `.sig` (base64); null quando não veio (404, rede). O Rust recusa sem ela. */
+  assinatura: string | null;
+  /** Guarda o par na cópia local; chamar só depois de o Rust aceitar (recusada, baixa de novo na próxima). */
+  guardar(): Promise<void>;
+}
+
+function lerPar(texto: string): { json: string; assinatura: string | null } | null {
+  try {
+    const v = JSON.parse(texto) as { json?: unknown; assinatura?: unknown };
+    if (typeof v.json !== 'string') return null;
+    return { json: v.json, assinatura: typeof v.assinatura === 'string' ? v.assinatura : null };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Tabela de códigos e assinatura, baixadas e guardadas juntas (uma cópia de cada com idades diferentes poderia
+ * juntar a tabela nova com a assinatura velha). Cópia nova → cópia; senão rede; rede falhou → cópia velha.
+ */
+export async function codigosAssinados(
+  deps: { baixar?: BaixarTexto; copia?: CopiaTexto; agora?: () => number } = {},
+): Promise<TabelaBaixada> {
+  const baixar = deps.baixar ?? baixarTexto;
+  const copia = deps.copia ?? copiaCacheStorage();
+  const agora = deps.agora ?? Date.now;
+  const nada = async () => {};
+  const salvo = await copia.ler(CHAVE_CODIGOS_ASSINADOS);
+  const anterior = salvo ? lerPar(salvo.texto) : null;
+  if (salvo && anterior && agora() - salvo.salvoEm < DADOS_IDADE_MAX_MS) return { ...anterior, guardar: nada };
+  try {
+    const [json, sig] = await Promise.all([baixar(URL_CODIGOS), baixar(URL_ASSINATURA).catch(() => null)]);
+    const par = { json, assinatura: sig?.trim() || null };
+    return { ...par, guardar: () => copia.gravar(CHAVE_CODIGOS_ASSINADOS, JSON.stringify(par), agora()) };
+  } catch (e) {
+    if (anterior) return { ...anterior, guardar: nada };
     throw e;
   }
 }

@@ -1,7 +1,9 @@
 <script lang="ts">
   // Medidor de perigo: arco de 0 a 100, cor pelo rótulo, motivos em lista.
+  // Os motivos vêm prontos da API em PT-BR (sem código); na versão em espanhol continuam em PT até a API mandar códigos.
   import type { Danger } from '../../../shared/types';
   import { dangerHeadline, dangerTone } from './format';
+  import { tx } from '../i18n/index.svelte';
   let { danger }: { danger: Danger } = $props();
 
   const score = $derived(Math.max(0, Math.min(100, Math.round(danger.score || 0))));
@@ -13,7 +15,7 @@
 
 <div class="meter {tone}">
   <div class="gauge" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}
-    aria-label="Perigo: {dangerHeadline(danger.label)}, {score} de 100">
+    aria-label={tx(`Perigo: ${dangerHeadline(danger.label)}, ${score} de 100`, `Peligro: ${dangerHeadline(danger.label)}, ${score} de 100`)}>
     <svg viewBox="0 0 200 110" aria-hidden="true">
       <path d="M20 100 A80 80 0 0 1 180 100" class="track" />
       <path d="M20 100 A80 80 0 0 1 180 100" class="fill" stroke-dasharray="{dash} {LEN}" />
@@ -24,13 +26,13 @@
     </div>
   </div>
   <div class="why">
-    <h3>Por quê</h3>
+    <h3>{tx('Por quê', 'Por qué')}</h3>
     {#if danger.reasons.length}
       <ul>{#each danger.reasons as r, i (i)}<li>{r}</li>{/each}</ul>
     {:else}
-      <p class="muted small">Poucas lutas recentes no killboard para formar opinião.</p>
+      <p class="muted small">{tx('Poucas lutas recentes no killboard para formar opinião.', 'Hay pocas peleas recientes en el killboard para formarse una opinión.')}</p>
     {/if}
-    <p class="muted small">Leitura baseada só nas últimas kills e mortes públicas. Não é previsão.</p>
+    <p class="muted small">{tx('Leitura baseada só nas últimas kills e mortes públicas. Não é previsão.', 'Lectura basada solo en los últimos asesinatos y muertes públicos. No es una predicción.')}</p>
   </div>
 </div>
 
