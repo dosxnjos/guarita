@@ -8,6 +8,13 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <title>Guarita</title>
+    <script>
+      // Aplica o tema escolhido (App.svelte, chave guarita.tema) antes de desenhar, para não piscar.
+      try {
+        var t = localStorage.getItem('guarita.tema');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

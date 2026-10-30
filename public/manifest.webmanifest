@@ -1,0 +1,27 @@
+{
+  "name": "Guarita: companheiro do Albion em português",
+  "short_name": "Guarita",
+  "description": "Preços do Albion Online com idade e confiança, alertas no celular, relógio do servidor Americas em horário de Brasília e dossiê de jogador.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#16130f",
+  "theme_color": "#16130f",
+  "categories": ["games", "utilities"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Relógio do Americas", "short_name": "Relógio", "url": "/relogio", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Meus alertas", "short_name": "Alertas", "url": "/alertas", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Dossiê de jogador", "short_name": "Dossiê", "url": "/jogador", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

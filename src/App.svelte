@@ -24,19 +24,71 @@
     return () => window.removeEventListener('popstate', on);
   });
   const View = $derived(VIEWS[route.name] ?? NaoEncontrado);
+
+  // Item da navegação ativo para cada rota (aria-current).
+  const SECTION: Record<string, string> = {
+    inicio: '/', item: '/', relogio: '/relogio', jogadores: '/jogador', dossie: '/jogador', autopsia: '/jogador',
+    alertas: '/alertas', janela: '/janela',
+  };
+  const NAV: [href: string, label: string][] = [
+    ['/', 'Mercado'], ['/relogio', 'Relógio'], ['/jogador', 'Dossiê'], ['/alertas', 'Alertas'], ['/janela', 'Janela'],
+  ];
+  const current = $derived(SECTION[route.name] ?? '');
+
+  // Tema: automático (segue o sistema), claro ou escuro; lembrado neste aparelho.
+  type Theme = 'auto' | 'light' | 'dark';
+  const THEME_KEY = 'guarita.tema';
+  const THEME_LABEL: Record<Theme, string> = { auto: 'Tema: automático', light: 'Tema: claro', dark: 'Tema: escuro' };
+  function readTheme(): Theme {
+    try {
+      const t = localStorage.getItem(THEME_KEY);
+      return t === 'light' || t === 'dark' ? t : 'auto';
+    } catch {
+      return 'auto';
+    }
+  }
+  let theme = $state<Theme>(readTheme());
+  $effect(() => {
+    const el = document.documentElement;
+    if (theme === 'auto') el.removeAttribute('data-theme');
+    else el.setAttribute('data-theme', theme);
+    try {
+      if (theme === 'auto') localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      /* sem armazenamento: vale só nesta visita */
+    }
+  });
+  function cycleTheme() {
+    theme = theme === 'auto' ? 'dark' : theme === 'dark' ? 'light' : 'auto';
+  }
+
+  // Ao trocar de tela, o foco vai para o conteúdo (leitor de tela anuncia a página nova).
+  let mainEl = $state<HTMLElement | null>(null);
+  let firstRoute = true;
+  $effect(() => {
+    void route;
+    if (firstRoute) {
+      firstRoute = false;
+      return;
+    }
+    mainEl?.focus({ preventScroll: true });
+  });
 </script>
 
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
 <header class="topbar">
-  <a class="brand" href="/" onclick={go}>Guarita</a>
-  <nav>
-    <a href="/" onclick={go}>Mercado</a>
-    <a href="/relogio" onclick={go}>Relógio</a>
-    <a href="/jogador" onclick={go}>Dossiê</a>
-    <a href="/alertas" onclick={go}>Alertas</a>
-    <a href="/janela" onclick={go}>Janela</a>
+  <a class="brand" href="/" onclick={go} aria-label="Guarita, início"><img src="/icons/icon.svg" alt="" width="26" height="26" /><span>Guarita</span></a>
+  <nav aria-label="Principal">
+    {#each NAV as [href, label]}
+      <a {href} onclick={go} aria-current={current === href ? 'page' : undefined}>{label}</a>
+    {/each}
   </nav>
+  <button type="button" class="theme-btn" onclick={cycleTheme} aria-label="{THEME_LABEL[theme]}. Trocar tema" title={THEME_LABEL[theme]}>
+    {theme === 'auto' ? '◐' : theme === 'dark' ? '☾' : '☀'}
+  </button>
 </header>
-<main class="wrap">
+<main class="wrap" id="conteudo" tabindex="-1" bind:this={mainEl} style="outline:none">
   <View params={route.params} />
 </main>
 <footer class="wrap footer">

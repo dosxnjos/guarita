@@ -1,16 +1,24 @@
 // Cliente tipado da API (contrato em shared/types.ts). Telas importam daqui, nunca fetch direto.
 import type { AlertRule, AutopsyResponse, ClockResponse, ItemResponse, PlayerDossier, PlayerSearchResponse, Quality, BookFillResponse, City } from '../../shared/types';
 
+/** Erro da API com o status HTTP (a tela decide pelo status, ex.: 404 de inscrição que sumiu). */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path, { headers: { accept: 'application/json' } });
   const body = await r.json().catch(() => ({ error: 'resposta inválida' }));
-  if (!r.ok) throw new Error((body as { error?: string }).error ?? `erro ${r.status}`);
+  if (!r.ok) throw new ApiError((body as { error?: string }).error ?? `erro ${r.status}`, r.status);
   return body as T;
 }
 async function send<T>(method: 'POST' | 'DELETE', path: string, data?: unknown): Promise<T> {
   const r = await fetch(path, { method, headers: { 'content-type': 'application/json' }, body: data ? JSON.stringify(data) : undefined });
   const body = await r.json().catch(() => ({ error: 'resposta inválida' }));
-  if (!r.ok) throw new Error((body as { error?: string }).error ?? `erro ${r.status}`);
+  if (!r.ok) throw new ApiError((body as { error?: string }).error ?? `erro ${r.status}`, r.status);
   return body as T;
 }
 

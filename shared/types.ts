@@ -162,6 +162,7 @@ export interface KillEvent {
   time: string;
   killer: EventSide;
   victim: EventSide;
+  /** Tamanho do grupo: max(numberOfParticipants, groupMemberCount); a gameinfo corta numberOfParticipants em 4. */
   participants: number;
   totalFame: number;
   /** Valor estimado do equipamento da vítima em prata (AODP), null se sem dado. */
@@ -187,7 +188,7 @@ export interface PlayerDossier {
   recentKills: KillEvent[];
   recentDeaths: KillEvent[];
   weapons: { type: string; labelPt: string; count: number }[];
-  /** Fração das kills recentes feitas sozinho (participants === 1). */
+  /** Fração das kills recentes feitas sozinho (um só causou dano e grupo de no máximo 1). */
   soloRate: number | null;
   avgGroup: number | null;
   avgIp: number | null;
@@ -200,8 +201,11 @@ export interface RebuyLine {
   slot: string;
   quality: number;
   cheapestCity: City | null;
+  /** Custo de repor o espaço inteiro (preço unitário × count). */
   price: number | null;
   ageMin: number | null;
+  /** Quantidade da peça (comida e poção vêm com mais de 1). Ausente = 1. */
+  count?: number;
 }
 
 export interface AutopsyResponse {
@@ -222,6 +226,8 @@ export type AlertCondition =
 export interface AlertRule {
   id: string;
   itemId: string;
+  /** Nome legível do item (PT-BR) enviado por quem criou a regra; o core usa na mensagem do alerta. */
+  itemName?: string;
   quality: Quality;
   cities: City[];
   side: 'sell' | 'buy';

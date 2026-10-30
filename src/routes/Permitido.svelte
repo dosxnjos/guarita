@@ -1,5 +1,120 @@
 <script lang="ts">
-  let { params = {} }: { params?: Record<string, string> } = $props();
+  // "Isso é permitido?": a régua da Guarita diante dos Termos da Sandbox Interactive, com as citações oficiais.
+  import { go } from '../lib/router';
+  let { params: _params = {} }: { params?: Record<string, string> } = $props();
+
+  $effect(() => {
+    document.title = 'Isso é permitido? · Guarita';
+  });
+
+  const POST_URL = 'https://forum.albiononline.com/index.php/Thread/124819';
 </script>
 
-<section class="page"><h1>Permitido</h1><p class="muted">Em construção.</p><pre>{JSON.stringify(params)}</pre></section>
+<section class="page stack">
+  <header>
+    <h1>Isso é permitido?</h1>
+    <p class="lead">Resposta curta: a Guarita só lê dados públicos fora do jogo. Ela não toca no cliente, não lê o tráfego
+      de rede e não te dá vantagem em tempo real dentro da partida.</p>
+  </header>
+
+  <div class="grid">
+    <div class="card yes">
+      <h2 class="first"><span class="tag good">Faz</span> O que a Guarita faz</h2>
+      <ul>
+        <li>Lê preços do <strong>Albion Data Project</strong>, projeto comunitário que agrega o mercado.</li>
+        <li>Lê o <strong>killboard oficial</strong> (API pública do site do jogo) para dossiês e autópsias.</li>
+        <li>Lê o <strong>status oficial do servidor</strong>.</li>
+        <li>Mostra tudo no navegador, no Discord ou numa notificação, fora do jogo.</li>
+        <li>Nesta versão, <strong>não captura tráfego de rede</strong> e <strong>não toca no jogo</strong> de forma alguma.</li>
+      </ul>
+    </div>
+    <div class="card no">
+      <h2 class="first"><span class="tag bad">Nunca</span> O que a Guarita nunca fará</h2>
+      <ul>
+        <li>Radar ou mapa de jogadores próximos.</li>
+        <li>Alerta disparado quando um jogador é avistado.</li>
+        <li>Inspeção automática de equipamento de outros jogadores.</li>
+        <li>Macro, automação de clique ou de teclado.</li>
+        <li>Leitura da memória do jogo.</li>
+        <li>Sobreposição (overlay) dentro do cliente do jogo.</li>
+        <li>RMT: troca de dinheiro real por prata, item ou vantagem.</li>
+      </ul>
+    </div>
+  </div>
+
+  <article class="card stack">
+    <h2 class="first">O que a Sandbox Interactive já disse</h2>
+    <div class="source">
+      <p>
+        <strong>21/02/2020</strong> · post oficial no fórum
+        <a href={POST_URL} target="_blank" rel="noopener">“Regarding 3rd Party Software and Network Traffic (aka: do not cheat.)”</a>
+      </p>
+      <p class="small muted">Trechos em inglês, como no original, com tradução livre.</p>
+      <blockquote>
+        <p lang="en">“any type of auto-inspect tool or any type of radar tool”</p>
+        <p class="small">Proibido: qualquer ferramenta de inspeção automática ou de radar.</p>
+      </blockquote>
+      <blockquote>
+        <p lang="en">“‘auto-scouting’ tool that generates a discord message if it spots a player”</p>
+        <p class="small">Proibido: ferramenta de “batedor automático” que manda mensagem no Discord ao avistar um jogador.</p>
+      </blockquote>
+      <blockquote>
+        <p lang="en">“displaying extra information to the player in the client”</p>
+        <p class="small">Proibido: mostrar informação extra ao jogador dentro do cliente.</p>
+      </blockquote>
+      <blockquote class="ok">
+        <p class="mixed">Sites que agregam dado de mercado são tolerados quando coletam <q lang="en">using technical means
+          approved by us ... not through an in-game modification or overlay ... if it does not provide a real-time
+          in-game advantage</q>.</p>
+        <p class="small">Tolerado: agregar preços por meios técnicos aprovados por eles, sem modificar o jogo nem sobrepor o
+          cliente, desde que não dê vantagem em tempo real dentro do jogo.</p>
+      </blockquote>
+    </div>
+    <div class="source">
+      <p><strong>2017</strong> · MadDave, desenvolvedor da Sandbox Interactive, sobre ferramentas que leem o tráfego de rede do jogo para análise</p>
+      <blockquote class="ok">
+        <p lang="en">“As long as you just look and analyze we are ok with it”</p>
+        <p class="small">Sobre ferramentas que só leem o tráfego de rede para análise: enquanto você só olha e analisa, tudo bem
+          para eles. A Guarita nem isso faz: ela não lê o tráfego do jogo.</p>
+      </blockquote>
+    </div>
+  </article>
+
+  <div class="card stack">
+    <h2 class="first"><span class="tag warn">Zona cinza</span> A janela flutuante</h2>
+    <p>A Guarita tem uma janela pequena que fica por cima das outras no computador (recurso do próprio navegador). Ela
+      mostra as mesmas informações do site, sem ler nada do jogo. Mesmo assim, uma janela por cima do jogo fica perto da
+      linha de “informação extra no cliente” que a SBI proíbe.</p>
+    <ul>
+      <li>Ela vem <strong>desligada</strong>. Só funciona se você ligar.</li>
+      <li>Ligar é decisão sua, e <strong>o risco é da sua conta</strong>.</li>
+      <li>Ela nunca mostra radar, jogador avistado nem nada em tempo real da partida. Por isso o dossiê de jogador fica
+        só no site, fora da janela.</li>
+    </ul>
+    <p class="small"><a href="/janela" onclick={go}>Ver a janela flutuante</a></p>
+  </div>
+
+  <div class="callout warn">
+    <p><strong>Tolerância não é permissão.</strong> A Sandbox Interactive pode mudar de posição a qualquer momento, e a
+      Guarita acompanha: se algo deixar de ser aceito, sai do ar. A Guarita não é afiliada à Sandbox Interactive GmbH nem
+      endossada por ela.</p>
+  </div>
+</section>
+
+<style>
+  header p { margin: 0; }
+  .lead { font-size: 18px; }
+  h2.first { margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  ul { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+  .yes { border-top: 4px solid var(--good); }
+  .no { border-top: 4px solid var(--bad); }
+  .source { display: grid; gap: 8px; }
+  .source > p { margin: 0; }
+  blockquote { margin: 0; padding: 8px 12px; border-left: 4px solid var(--bad); background: var(--surface-2); border-radius: 6px; }
+  blockquote.ok { border-left-color: var(--good); }
+  blockquote p { margin: 0; }
+  blockquote p[lang='en'], blockquote q { font-style: italic; overflow-wrap: anywhere; }
+  blockquote p + p { margin-top: 4px; }
+  .stack > p { margin: 0; }
+  .callout p { margin: 0; }
+</style>
