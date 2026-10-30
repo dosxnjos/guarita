@@ -1,5 +1,5 @@
 // Cliente tipado da API (contrato em shared/types.ts). Telas importam daqui, nunca fetch direto.
-import type { AlertRule, AutopsyResponse, ClockResponse, ItemResponse, PlayerDossier, PlayerSearchResponse, Quality, BookFillResponse, City, LossesResponse, GuildSummary, GuildSearchResponse, RiskQuote, GoldResponse, DataHealthResponse, Timer, TimerKind } from '../../shared/types';
+import type { AlertRule, AutopsyResponse, ClockResponse, ItemResponse, PlayerDossier, PlayerSearchResponse, Quality, BookFillResponse, City, LossesResponse, GuildSummary, GuildSearchResponse, RiskQuote, GoldResponse, DataHealthResponse, Timer, TimerKind, HojeResponse, ForecastResponse } from '../../shared/types';
 
 /** Erro da API com o status HTTP (a tela decide pelo status, ex.: 404 de inscrição que sumiu). */
 export class ApiError extends Error {
@@ -43,4 +43,9 @@ export const api = {
   timers: (owner: string) => get<{ timers: Timer[] }>(`/api/timers?owner=${encodeURIComponent(owner)}`),
   createTimer: (t: { owner: string; kind: TimerKind; label: string; endsAt: string }) => send<Timer>('POST', '/api/timers', t),
   deleteTimer: (owner: string, id: string) => send<{ ok: boolean }>('DELETE', `/api/timers/${encodeURIComponent(id)}?owner=${encodeURIComponent(owner)}`),
+  // Fase 3
+  hoje: (prata: number, minutos: number, premium: boolean) =>
+    get<HojeResponse>(`/api/hoje?prata=${prata}&minutos=${minutos}&premium=${premium ? 1 : 0}`),
+  forecast: (id: string, city: City, q: Quality = 1) =>
+    get<ForecastResponse>(`/api/forecast/${encodeURIComponent(id)}?city=${encodeURIComponent(city)}&q=${q}`),
 };

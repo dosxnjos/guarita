@@ -24,13 +24,18 @@
   import McpInfo from './routes/McpInfo.svelte';
   import Despertador from './routes/Despertador.svelte';
   import AppPc from './routes/AppPc.svelte';
+  // Fase 3
+  import Hoje from './routes/Hoje.svelte';
+  import Previsao from './routes/Previsao.svelte';
+  import Live from './routes/Live.svelte';
+  import Extensao from './routes/Extensao.svelte';
 
   const VIEWS: Record<string, any> = {
     inicio: Inicio, item: Item, relogio: Relogio, janela: Janela, jogadores: Jogadores, dossie: Dossie,
     autopsia: Autopsia, alertas: Alertas, apoie: Apoie, permitido: Permitido, 'nao-encontrado': NaoEncontrado,
     mais: Mais, perdas: Perdas, guilda: Guilda, guildas: Guildas, arriscar: Arriscar, golpes: Golpes,
     glossario: Glossario, ouro: Ouro, saude: Saude, mcp: McpInfo, despertador: Despertador,
-    app: AppPc,
+    app: AppPc, hoje: Hoje, previsao: Previsao, live: Live, extensao: Extensao,
   };
 
   let route = $state(match(location.pathname));
@@ -46,7 +51,7 @@
     inicio: '/', item: '/', relogio: '/relogio', jogadores: '/jogador', dossie: '/jogador', autopsia: '/jogador',
     alertas: '/alertas', janela: '/mais', perdas: '/perdas', mais: '/mais', guilda: '/mais', guildas: '/mais',
     arriscar: '/mais', golpes: '/mais', glossario: '/mais', ouro: '/mais', saude: '/mais', mcp: '/mais',
-    despertador: '/mais', app: '/app',
+    despertador: '/mais', app: '/app', hoje: '/mais', previsao: '/mais', live: '/mais', extensao: '/mais',
   };
   const NAV: [href: string, label: string][] = [
     ['/', 'Mercado'], ['/perdas', 'Perdas PvP'], ['/relogio', 'Relógio'], ['/jogador', 'Dossiê'], ['/alertas', 'Alertas'],

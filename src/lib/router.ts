@@ -28,6 +28,11 @@ const TABLE: [name: string, pattern: RegExp, keys: string[]][] = [
   ['mcp', /^\/mcp$/, []],
   ['despertador', /^\/despertador$/, []],
   ['app', /^\/app$/, []],
+  // Fase 3
+  ['hoje', /^\/hoje$/, []],
+  ['previsao', /^\/previsao$/, []],
+  ['live', /^\/live$/, []],
+  ['extensao', /^\/extensao$/, []],
 ];
 
 export function match(pathname: string): Match {

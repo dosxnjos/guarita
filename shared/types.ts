@@ -366,3 +366,45 @@ export interface Timer {
   /** Só nos já avisados: 'ok' = o serviço de push aceitou o aviso; 'falhou' = não deu para avisar. */
   delivery?: 'ok' | 'falhou';
 }
+
+// ---------- Fase 3 (roadmap/2026-10-30-guarita-fase3.md) ----------
+
+export type HojeTrilha = 'flip' | 'refino' | 'transporte';
+
+export interface HojeOpcao {
+  trilha: HojeTrilha;
+  titulo: string;
+  /** Passo a passo curto em PT-BR. */
+  passos: string[];
+  /** Lucro estimado em prata para o capital e o tempo informados (pode ser negativo: a tela mostra). */
+  lucro: number;
+  /** Prata investida no ciclo. */
+  capital: number;
+  minutos: number;
+  /** 0 a 100: quão confiável é a estimativa (idade do preço, volume, risco). */
+  confianca: number;
+  riscos: string[];
+  itens: { id: string; nome: string; qtd: number; compra: number | null; venda: number | null; cidadeCompra: City | null; cidadeVenda: City | null }[];
+}
+
+export interface HojeResponse {
+  prata: number;
+  minutos: number;
+  premium: boolean;
+  opcoes: HojeOpcao[];
+  fetchedAt: string;
+}
+
+export interface ForecastResponse {
+  id: string;
+  quality: Quality;
+  city: City;
+  /** Histórico diário usado (média de venda e volume). */
+  history: { date: string; avg: number; count: number }[];
+  /** Previsão para os próximos 1 a 3 dias com faixa P10–P90. */
+  forecast: { date: string; p10: number; p50: number; p90: number }[];
+  /** Erro médio absoluto em backtest: modelo vs ingênuo (repetir o último valor). */
+  backtest: { days: number; maeModel: number | null; maeNaive: number | null; beatsNaive: boolean | null };
+  method: string;
+  fetchedAt: string;
+}
