@@ -5,7 +5,10 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import worker from '../worker/index';
 import type { Env } from '../worker/env';
-import type { ClockResponse, ItemResponse, PlayerDossier, PlayerSearchResponse } from '../shared/types';
+import type {
+  ClockResponse, DataHealthResponse, GoldResponse, GuildSearchResponse, GuildSummary, ItemResponse, LossesResponse, PlayerDossier, PlayerSearchResponse,
+} from '../shared/types';
+import { MCP_PROTOCOL_VERSIONS } from '../worker/mcp/catalog';
 import { mockCaches } from './helpers/net';
 import { dispatch } from '../worker/discord/interactions';
 
@@ -38,7 +41,27 @@ function fakeEnv(): Env {
       },
     }),
   } as unknown as DurableObjectNamespace;
-  const CORE = { fetch: async () => Response.json({ ok: true }) } as unknown as Fetcher;
+  // KillLog falso com formas válidas (amostra pequena): a fumaça exercita preço (AODP) e nome reais nas perdas e a
+  // gameinfo real na guilda. O KillLog de verdade só se prova depois do deploy.
+  const CORE = {
+    async fetch(input: RequestInfo | URL) {
+      const u = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+      const today = new Date().toISOString().slice(0, 10);
+      if (u.pathname === '/internal/killlog/losses') {
+        return Response.json({ days: Number(u.searchParams.get('days')) || 1, deaths: 12, since: today, items: [{ type: 'T4_BAG', count: 5 }, { type: 'T6_2H_BOW', count: 3 }, { type: 'T5_MAIN_SWORD', count: 2 }] });
+      }
+      const g = /^\/internal\/killlog\/guild\/([^/]+)\/summary$/.exec(u.pathname);
+      if (g) {
+        return Response.json({
+          guild: decodeURIComponent(g[1]),
+          days: [{ day: today, kills: 2, deaths: 1 }],
+          totals: { kills: 2, deaths: 1 },
+          detail: { windowDays: 7, kills: 2, deaths: 1, topKillers: [{ id: 'NwcyH-y1Q924YlQkAkn7nw', name: 'CalangoPeto', kills: 2 }], weapons: [{ type: 'T6_2H_BOW', count: 2 }], hoursBrt: Array.from({ length: 24 }, (_, i) => (i === 21 ? 2 : 0)), coverageSince: today },
+        });
+      }
+      return Response.json({ error: 'rota não encontrada' }, { status: 404 });
+    },
+  } as unknown as Fetcher;
   const TIMERS = HUB; // stub em memória serve aos dois na fumaça
   return { ASSETS, HUB, CORE, TIMERS, DISCORD_PUBLIC_KEY: '', DISCORD_APP_ID: '', DISCORD_BOT_TOKEN: '', VAPID_PUBLIC: '' };
 }
@@ -58,6 +81,24 @@ async function call(path: string): Promise<{ status: number; ms: number; body: a
   const ms = Date.now() - t;
   console.log(`[fumaça] ${path} → ${res.status} em ${ms} ms`);
   return { status: res.status, ms, body, headers: res.headers };
+}
+
+async function post(path: string, data: unknown, headers: Record<string, string> = {}): Promise<{ status: number; body: any; headers: Headers }> {
+  const t = Date.now();
+  const res = await worker.fetch(
+    new Request(ORIGIN + path, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers }, body: JSON.stringify(data) }),
+    env,
+    ctx,
+  );
+  const text = await res.text();
+  let body: unknown = text;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    /* corpo vazio (202 de notificação) fica como texto */
+  }
+  console.log(`[fumaça] POST ${path} → ${res.status} em ${Date.now() - t} ms`);
+  return { status: res.status, body, headers: res.headers };
 }
 
 /** Upstream fora do ar: registra e segue (a tarefa pede registrar, não falhar). */
@@ -168,6 +209,145 @@ describe.skipIf(!RUN)('fumaça do worker contra as APIs reais', () => {
     expect(r.type).toBe(8);
     expect(r.data.choices.map((c) => c.value)).toContain('T4_BAG');
     console.log(`[fumaça] autocomplete "bolsa adepto": ${r.data.choices.slice(0, 3).map((c) => c.name).join(' | ')}`);
+  });
+
+  // ---------- Fase 2 ----------
+
+  it('/api/losses?days=1 e 7 (KillLog falso, preço e nome reais)', async () => {
+    for (const days of [1, 7]) {
+      const r = await call(`/api/losses?days=${days}&limit=10`);
+      if (upstreamDown(r, '/api/losses')) return;
+      expect(r.status).toBe(200);
+      const l = r.body as LossesResponse;
+      expect(l.days).toBe(days);
+      expect(Array.isArray(l.items)).toBe(true);
+      expect(typeof l.sampleKills).toBe('number');
+      expect(isIsoOrNull(l.fetchedAt)).toBe(true);
+      for (const i of l.items) {
+        expect(typeof i.id === 'string' && typeof i.name === 'string').toBe(true);
+        expect(isNumOrNull(i.price) && isNumOrNull(i.value) && isNumOrNull(i.ageMin)).toBe(true);
+        if (i.price !== null) expect(i.value).toBe(i.count * i.price);
+      }
+      const bag = l.items.find((i) => i.id === 'T4_BAG');
+      console.log(`[fumaça] perdas ${days}d: ${l.items.length} itens, bolsa "${bag?.name}" a ${bag?.price} (${bag?.ageMin} min)`);
+    }
+    // valor torto cai no padrão (1 dia), por desenho do módulo (a): clampParam
+    expect((await call('/api/losses?days=abc')).body.days).toBe(1);
+  }, 60_000);
+
+  it('/api/guild/B%20A%20G%20R%20E (gameinfo real)', async () => {
+    const r = await call('/api/guild/B%20A%20G%20R%20E');
+    if (upstreamDown(r, '/api/guild/:nome')) return;
+    expect(r.status).toBe(200);
+    const g = r.body as GuildSummary;
+    expect(g.name).toBe('B A G R E');
+    expect(g.hoursBrt).toHaveLength(24);
+    expect(Array.isArray(g.days) && Array.isArray(g.topKillers) && Array.isArray(g.weapons)).toBe(true);
+    // gameinfo pode estar lenta: com o KillLog de pé a rota devolve o histórico com os campos dela vazios
+    if (g.id) {
+      expect(typeof g.members === 'number' || g.members === null).toBe(true);
+      expect(isNumOrNull(g.killFame) && isNumOrNull(g.deathFame)).toBe(true);
+    } else console.warn('[fumaça] guilda: gameinfo não respondeu a tempo; só o KillLog veio');
+    console.log(`[fumaça] guilda: id ${g.id}, ${g.members} membros, aliança ${g.alliance}, killFame ${g.killFame}, armas ${g.weapons.map((w) => w.labelPt).join(', ')}`);
+  }, 180_000);
+
+  it('/api/guilds?q=B A G R E', async () => {
+    const r = await call('/api/guilds?q=B%20A%20G%20R%20E');
+    if (upstreamDown(r, '/api/guilds')) return;
+    expect(r.status).toBe(200);
+    const s = r.body as GuildSearchResponse;
+    expect(Array.isArray(s.guilds)).toBe(true);
+    console.log(`[fumaça] busca de guilda: ${s.guilds.slice(0, 5).map((x) => x.name).join(' | ')}`);
+  }, 120_000);
+
+  it('/api/gold?days=30 e 90 (date= libera mais de 720 pontos)', async () => {
+    const r = await call('/api/gold?days=30');
+    if (upstreamDown(r, '/api/gold')) return;
+    expect(r.status).toBe(200);
+    const g = r.body as GoldResponse;
+    expect(g.points.length).toBeGreaterThan(24);
+    for (let i = 1; i < g.points.length; i++) expect(g.points[i].at >= g.points[i - 1].at).toBe(true);
+    expect(['barato', 'normal', 'caro', 'sem dado']).toContain(g.verdict);
+    expect(isNumOrNull(g.current) && isNumOrNull(g.p10) && isNumOrNull(g.p50) && isNumOrNull(g.p90)).toBe(true);
+
+    const r90 = await call('/api/gold?days=90');
+    if (upstreamDown(r90, '/api/gold?days=90')) return;
+    const g90 = r90.body as GoldResponse;
+    const spanDays = (Date.parse(g90.points.at(-1)!.at) - Date.parse(g90.points[0].at)) / 86_400_000;
+    expect(spanDays).toBeGreaterThan(40);
+    console.log(`[fumaça] ouro: 30d ${g.points.length} pontos, atual ${g.current} (${g.verdict}); 90d ${g90.points.length} pontos, ${spanDays.toFixed(1)} dias`);
+    expect((await call('/api/gold?days=12')).status).toBe(400);
+  }, 60_000);
+
+  it('/api/data-health', async () => {
+    const r = await call('/api/data-health');
+    if (upstreamDown(r, '/api/data-health')) return;
+    expect(r.status).toBe(200);
+    const h = r.body as DataHealthResponse;
+    expect(h.basket).toBeGreaterThan(30);
+    expect(h.cities.length).toBeGreaterThan(0);
+    for (const c of h.cities) {
+      expect(isNumOrNull(c.medianAgeMin)).toBe(true);
+      expect(c.fresh1h + c.stale24h + c.missing).toBeLessThanOrEqual(h.basket);
+    }
+    console.log(`[fumaça] saúde: ${h.cities.map((c) => `${c.city} ${c.medianAgeMin}min/${c.missing} sem`).join('; ')}`);
+  }, 60_000);
+
+  it('POST /api/risk', async () => {
+    const r = await post('/api/risk', { items: [{ id: 'T4_BAG', quality: 1 }, { id: 'T4_2H_BOW', quality: 2 }] });
+    if (upstreamDown(r, '/api/risk')) return;
+    expect(r.status).toBe(200);
+    expect(r.body.items).toHaveLength(2);
+    expect(r.body.zones.length).toBeGreaterThanOrEqual(6);
+    console.log(`[fumaça] risco: total ${r.body.total}, ${r.body.missing} sem preço`);
+  }, 60_000);
+
+  it('POST /mcp: initialize, notificação, tools/list e tools/call relogio', async () => {
+    const init = await post('/mcp', { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'fumaca', version: '0' } } });
+    expect(init.status).toBe(200);
+    expect(init.body.result.protocolVersion).toBe('2025-06-18');
+    expect((MCP_PROTOCOL_VERSIONS as readonly string[]).includes(init.body.result.protocolVersion)).toBe(true);
+    expect(init.body.result.serverInfo.name).toBe('guarita');
+    expect(init.headers.get('access-control-allow-origin')).toBe('*');
+
+    const note = await post('/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, { 'mcp-protocol-version': '2025-06-18' });
+    expect(note.status).toBe(202);
+
+    const list = await post('/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/list' }, { 'mcp-protocol-version': '2025-06-18' });
+    const names = (list.body.result.tools as { name: string }[]).map((t) => t.name).sort();
+    expect(names).toEqual(['buscar_item', 'dossie_jogador', 'perdas_pvp', 'preco_item', 'relogio']);
+
+    const clock = await post('/mcp', { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'relogio', arguments: {} } }, { 'mcp-protocol-version': '2025-06-18' });
+    expect(clock.status).toBe(200);
+    expect(clock.body.result.isError).toBeFalsy();
+    expect(clock.body.result.structuredContent).toBeTruthy();
+    expect(clock.body.result.content[0].type).toBe('text');
+    console.log(`[fumaça] mcp relogio: ${String(clock.body.result.content[0].text).slice(0, 160).replace(/\n/g, ' / ')}`);
+
+    const item = await post('/mcp', { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'buscar_item', arguments: { consulta: 'bolsa adepto' } } });
+    expect(item.status).toBe(200);
+    expect(item.body.result.isError).toBeFalsy();
+    expect(JSON.stringify(item.body.result.structuredContent)).toContain('T4_BAG');
+  }, 60_000);
+
+  it('GET /mcp: cliente MCP recebe 405; navegador recebe a página', async () => {
+    const rpc = await worker.fetch(new Request(ORIGIN + '/mcp', { headers: { accept: 'text/event-stream' } }), env, ctx);
+    expect(rpc.status).toBe(405);
+    expect(rpc.headers.get('allow')).toContain('POST');
+    await rpc.body?.cancel();
+    const page = await worker.fetch(new Request(ORIGIN + '/mcp', { headers: { accept: 'text/html,application/xhtml+xml' } }), env, ctx);
+    expect(page.status).not.toBe(405);
+    await page.body?.cancel();
+    // prévia de link (Discord, WhatsApp) e curl simples mandam Accept */* ou nada: também recebem a página
+    for (const accept of ['*/*', '']) {
+      const r = await worker.fetch(new Request(ORIGIN + '/mcp', { headers: accept ? { accept } : {} }), env, ctx);
+      expect(r.status).not.toBe(405);
+      await r.body?.cancel();
+    }
+    // cliente MCP que manda só a versão do protocolo também vai ao servidor
+    const v = await worker.fetch(new Request(ORIGIN + '/mcp', { headers: { 'mcp-protocol-version': '2025-06-18' } }), env, ctx);
+    expect(v.status).toBe(405);
+    await v.body?.cancel();
   });
 
   it('/api/health e rota desconhecida', async () => {

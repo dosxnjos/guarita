@@ -23,12 +23,14 @@
   import Saude from './routes/Saude.svelte';
   import McpInfo from './routes/McpInfo.svelte';
   import Despertador from './routes/Despertador.svelte';
+  import AppPc from './routes/AppPc.svelte';
 
   const VIEWS: Record<string, any> = {
     inicio: Inicio, item: Item, relogio: Relogio, janela: Janela, jogadores: Jogadores, dossie: Dossie,
     autopsia: Autopsia, alertas: Alertas, apoie: Apoie, permitido: Permitido, 'nao-encontrado': NaoEncontrado,
     mais: Mais, perdas: Perdas, guilda: Guilda, guildas: Guildas, arriscar: Arriscar, golpes: Golpes,
     glossario: Glossario, ouro: Ouro, saude: Saude, mcp: McpInfo, despertador: Despertador,
+    app: AppPc,
   };
 
   let route = $state(match(location.pathname));
@@ -44,11 +46,11 @@
     inicio: '/', item: '/', relogio: '/relogio', jogadores: '/jogador', dossie: '/jogador', autopsia: '/jogador',
     alertas: '/alertas', janela: '/mais', perdas: '/perdas', mais: '/mais', guilda: '/mais', guildas: '/mais',
     arriscar: '/mais', golpes: '/mais', glossario: '/mais', ouro: '/mais', saude: '/mais', mcp: '/mais',
-    despertador: '/mais',
+    despertador: '/mais', app: '/app',
   };
   const NAV: [href: string, label: string][] = [
     ['/', 'Mercado'], ['/perdas', 'Perdas PvP'], ['/relogio', 'Relógio'], ['/jogador', 'Dossiê'], ['/alertas', 'Alertas'],
-    ['/mais', 'Mais'],
+    ['/app', 'App para PC'], ['/mais', 'Mais'],
   ];
   const current = $derived(SECTION[route.name] ?? '');
 
@@ -81,14 +83,15 @@
   }
 
   // Ao trocar de tela, o foco vai para o conteúdo (leitor de tela anuncia a página nova).
+  // Só quando a TELA muda: link de âncora (#golpe-x) também dispara popstate e recria `route` com o mesmo nome, e
+  // roubar o foco aí jogaria o leitor de tela de volta ao topo em vez do trecho escolhido.
   let mainEl = $state<HTMLElement | null>(null);
-  let firstRoute = true;
+  let lastView: string | null = null;
   $effect(() => {
-    void route;
-    if (firstRoute) {
-      firstRoute = false;
-      return;
-    }
+    const name = route.name;
+    const prev = lastView;
+    lastView = name;
+    if (prev === null || prev === name) return;
     mainEl?.focus({ preventScroll: true });
   });
 </script>

@@ -82,7 +82,7 @@
     </div>
 
     <div class="stats">
-      <div class="card stat"><span class="muted small">Fama de kill</span><strong class="num">{fmtCompact(data.killFame)}</strong></div>
+      <div class="card stat"><span class="muted small">Fama de abate</span><strong class="num">{fmtCompact(data.killFame)}</strong></div>
       <div class="card stat"><span class="muted small">Fama de morte</span><strong class="num">{fmtCompact(data.deathFame)}</strong></div>
       <div class="card stat"><span class="muted small">Razão kill/morte</span><strong class="num">{fmtDec(data.ratio)}</strong></div>
       <div class="card stat"><span class="muted small">IP médio recente</span><strong class="num">{fmtNum(data.avgIp)}</strong></div>

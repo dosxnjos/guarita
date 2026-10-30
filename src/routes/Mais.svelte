@@ -1,12 +1,16 @@
 <script lang="ts">
   import { go } from '../lib/router';
 
+  $effect(() => {
+    document.title = 'Tudo o que a Guarita faz · Guarita';
+  });
+
   const GROUPS: { title: string; items: [href: string, label: string, desc: string][] }[] = [
     {
       title: 'Mercado e economia',
       items: [
         ['/', 'Preço de item', 'Preço por cidade com idade, selo de confiança, veredito e flip para o Black Market.'],
-        ['/perdas', 'Perdas PvP', 'O que a guerra está destruindo: os itens mais perdidos e quanto valem.'],
+        ['/perdas', 'Perdas PvP', 'O que a guerra consome: os itens mais perdidos nas mortes e quanto valem.'],
         ['/ouro', 'Ouro e Premium', 'Cotação do ouro, se está barato agora e se o Premium compensa.'],
         ['/saude', 'Saúde do dado', 'Quão frescos estão os preços de cada cidade agora.'],
       ],
@@ -32,6 +36,7 @@
         ['/alertas', 'Alertas de preço', 'Aviso no celular ou no Discord quando o preço chegar onde você quer.'],
         ['/despertador', 'Despertador da ilha', 'Lembrete de colheita, animais e foco cheio.'],
         ['/relogio', 'Relógio do Americas', 'Servidor, bônus do dia, festividades e temporada em horário de Brasília.'],
+        ['/app', 'App para PC', 'A Guarita no Windows: janelas ao lado do jogo, voz, atalhos e avisos, só com o app aberto.'],
         ['/janela', 'Janela flutuante', 'Painel pequeno que fica por cima do jogo (desligado por padrão).'],
         ['/mcp', 'Guarita no Claude (MCP)', 'Pergunte preço e dossiê em linguagem natural pelo seu assistente de IA.'],
       ],

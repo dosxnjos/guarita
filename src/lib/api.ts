@@ -1,5 +1,5 @@
 // Cliente tipado da API (contrato em shared/types.ts). Telas importam daqui, nunca fetch direto.
-import type { AlertRule, AutopsyResponse, ClockResponse, ItemResponse, PlayerDossier, PlayerSearchResponse, Quality, BookFillResponse, City, LossesResponse, GuildSummary, RiskQuote, GoldResponse, DataHealthResponse, Timer, TimerKind } from '../../shared/types';
+import type { AlertRule, AutopsyResponse, ClockResponse, ItemResponse, PlayerDossier, PlayerSearchResponse, Quality, BookFillResponse, City, LossesResponse, GuildSummary, GuildSearchResponse, RiskQuote, GoldResponse, DataHealthResponse, Timer, TimerKind } from '../../shared/types';
 
 /** Erro da API com o status HTTP (a tela decide pelo status, ex.: 404 de inscrição que sumiu). */
 export class ApiError extends Error {
@@ -36,6 +36,7 @@ export const api = {
   // Fase 2
   losses: (days = 1) => get<LossesResponse>(`/api/losses?days=${days}`),
   guild: (name: string) => get<GuildSummary>(`/api/guild/${encodeURIComponent(name)}`),
+  searchGuilds: (q: string) => get<GuildSearchResponse>(`/api/guilds?q=${encodeURIComponent(q)}`),
   risk: (items: { id: string; quality: Quality }[]) => send<RiskQuote>('POST', '/api/risk', { items }),
   gold: (days = 30) => get<GoldResponse>(`/api/gold?days=${days}`),
   dataHealth: () => get<DataHealthResponse>('/api/data-health'),

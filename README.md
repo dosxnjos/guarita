@@ -22,7 +22,15 @@ Site: <https://guarita.pages.dev> · Isso é permitido? <https://guarita.pages.d
 | **Dossiê** | Busca um jogador pelo nome: fama, guilda, armas mais usadas, se costuma matar sozinho ou em grupo. |
 | **Autópsia da morte** | Tua última morte explicada: quem te matou, o que dá para aprender e quanto custa recomprar o equipamento. |
 | **Alertas** | Avisa quando um item passar do preço que você escolheu. Chega por notificação no navegador ou por mensagem no Discord. Checagem a cada 5 minutos. |
-| **Bot do Discord** | Os mesmos dados com comandos no teu servidor (preço, relógio, alertas). |
+| **Perdas PvP** | Os itens mais perdidos no PvP hoje e nos últimos 7 dias, com preço atual e o valor perdido nas mortes: dica do que vale craftar. |
+| **Guilda** | Resumo de uma guilda: kills e mortes por dia, quem mais mata, armas, horários de pico (Brasília), membros e fama. |
+| **Quanto vale arriscar** | Monte o set e veja quanto custa e o que você perde ao morrer em cada tipo de zona. |
+| **Golpes e glossário** | Golpes comuns explicados, checagem de nick parecido e as gírias do jogo (gank, regear, CTA, ZvZ…). |
+| **Ouro e Premium** | Gráfico do ouro (7, 30 e 90 dias), se está barato agora e uma calculadora de "o Premium compensa?". |
+| **Saúde do dado** | Quão frescos estão os preços em cada cidade, para saber quando confiar e onde falta scan. |
+| **Despertador** | Avisa no celular quando a plantação, os animais ou o foco ficam prontos. |
+| **Oráculo MCP** | Ligue a Guarita no Claude, no Cursor ou no VS Code e pergunte preço, relógio, dossiê e perdas. Só dado público. |
+| **Bot do Discord** | Os mesmos dados com comandos no teu servidor (preço, relógio, alertas, perdas) e o killfeed da tua guilda num canal, com botão de pedir regear. |
 | **Janela flutuante** | Uma janelinha que fica por cima das outras (Chrome). Vem **desligada**: leia o aviso antes de ligar. |
 | **Instalável** | Dá para instalar como aplicativo no celular ou no computador. |
 
@@ -84,7 +92,8 @@ Teste de fumaça das rotas contra as APIs reais (fora do `npm test`, depende de 
 Outros scripts:
 
 - `npm run data:items`: gera o índice compacto de itens em `public/data/items-index.json` a partir do ao-bin-dumps.
-- `npm run discord:register`: registra os comandos do bot (precisa das chaves do Doppler do mantenedor).
+- `npm run discord:register`: registra os comandos do bot (precisa das chaves do Doppler do mantenedor). Comando
+  novo: publique o core, depois o Pages, depois `npm run discord:register -- --global` (até 1 h para aparecer).
 - `npm run deploy`: publica no Pages da conta do mantenedor. Não use `wrangler` direto.
 
 ### Estrutura
@@ -98,15 +107,18 @@ guarita/
 │   ├── lib/              api.ts (cliente tipado), router.ts e utilitários do front
 │   └── routes/           uma tela por arquivo (Inicio, Item, Relogio, Dossie, Autopsia, Alertas, Janela…)
 ├── worker/               _worker.js do Pages
-│   ├── index.ts          entrada: /api/*, /discord e estáticos com fallback para index.html
+│   ├── index.ts          entrada: /api/*, /discord, /mcp e estáticos com fallback para index.html
 │   ├── env.ts            ligações e segredos
-│   ├── api/              router.ts e um arquivo por grupo de rotas (market, clock, player, alerts)
-│   ├── discord/          interactions.ts (entrada), verificação Ed25519 e comandos
+│   ├── api/              router.ts e um arquivo por grupo de rotas (market, clock, player, alerts; Fase 2 em
+│   │                     routesF2.ts → insightsA, risk, goldHealth, timers)
+│   ├── discord/          interactions.ts (entrada), verificação Ed25519, comandos e guild.ts (killfeed, regear)
+│   ├── mcp/              server.ts (JSON-RPC), tools.ts e catalog.ts (ferramentas do Oráculo MCP)
 │   └── lib/              aodp.ts (cliente do AODP) e apoio (itens, cache…)
 ├── shared/               código usado pelo front, pela API e pelo bot
 │   ├── types.ts          contrato da API
 │   ├── market.ts         taxas, cidades, conversões de data
-│   └── items.ts          índice e busca de itens
+│   ├── items.ts          índice e busca de itens
+│   └── zones.ts, scams.ts, glossary.ts   conteúdo do novato (zonas, golpes, glossário)
 ├── scripts/              build-worker.mjs, build-items.mjs, deploy.mjs…
 ├── tests/                testes vitest (*.test.ts)
 └── docs/                 ARQUITETURA.md, CONTRATO-API.md, ARMADILHAS.md
@@ -131,6 +143,12 @@ ficam em [shared/types.ts](shared/types.ts); a versão completa e legível está
 | `/api/player/:id` | `PlayerDossier` |
 | `/api/player/:id/autopsy` | `AutopsyResponse` |
 | `GET/POST /api/alerts`, `DELETE /api/alerts/:id` | alertas do dono (`owner`) |
+| `/api/losses?days=1..7&limit=` | `LossesResponse` (itens mais perdidos no PvP) |
+| `/api/guild/:nome` · `/api/guilds?q=` | `GuildSummary` · `GuildSearchResponse` |
+| `POST /api/risk` | `RiskQuote` (custo do set e perda por zona) |
+| `/api/gold?days=7\|30\|90` · `/api/data-health` | `GoldResponse` · `DataHealthResponse` |
+| `GET/POST /api/timers`, `DELETE /api/timers/:id` | timers do despertador do dono (`owner`) |
+| `POST /mcp` | servidor MCP (JSON-RPC 2.0, 5 ferramentas, só dado público) |
 | `POST /discord` | interações do Discord |
 
 A busca de itens acontece no navegador, sobre `/data/items-index.json`.

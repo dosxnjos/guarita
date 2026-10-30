@@ -3,7 +3,7 @@
 // Sem import de runtime aqui: o script de registro empacota este arquivo isolado com esbuild.
 
 /** Tipos de opção da API do Discord. */
-export const OPT = { SUB_COMMAND: 1, STRING: 3, INTEGER: 4, NUMBER: 10 } as const;
+export const OPT = { SUB_COMMAND: 1, SUB_COMMAND_GROUP: 2, STRING: 3, INTEGER: 4, CHANNEL: 7, NUMBER: 10 } as const;
 
 // Cópia literal de shared/quality.ts (este arquivo não importa nada em runtime; tests/discord.test.ts confere
 // que as duas tabelas são iguais).
@@ -44,6 +44,8 @@ export interface CommandOption {
   min_value?: number;
   max_value?: number;
   max_length?: number;
+  /** Só em opção CHANNEL: tipos de canal aceitos (0 = texto, 5 = anúncios). */
+  channel_types?: number[];
   options?: CommandOption[];
 }
 
@@ -80,6 +82,13 @@ const nome: CommandOption = {
   description: 'Nome do personagem no servidor Americas',
   required: true,
   max_length: 32,
+};
+
+const GUILD_NAME: CommandOption = {
+  type: OPT.STRING,
+  name: 'nome',
+  description: 'Nome exato da guilda no servidor Americas (com os espaços)',
+  max_length: 64,
 };
 
 const base = { type: 1 as const, integration_types: [0], contexts: [0, 1] };
@@ -158,6 +167,61 @@ export const COMMANDS: CommandDef[] = [
             max_length: 64,
           },
         ],
+      },
+    ],
+  },
+  {
+    ...base,
+    name: 'perdas',
+    description: 'Itens mais perdidos no PvP do Americas, com preço atual e valor perdido',
+    options: [
+      {
+        type: OPT.INTEGER,
+        name: 'dias',
+        description: 'Janela (padrão: hoje)',
+        choices: [
+          { name: 'Hoje', value: 1 },
+          { name: 'Últimos 7 dias', value: 7 },
+        ],
+      },
+    ],
+  },
+  {
+    ...base,
+    // Só em servidor: o killfeed e o regear vivem num canal da guilda.
+    contexts: [0],
+    name: 'guilda',
+    description: 'Killfeed, regear e resumo da sua guilda do Albion neste servidor',
+    options: [
+      {
+        type: OPT.SUB_COMMAND,
+        name: 'configurar',
+        description: 'Liga o killfeed de uma guilda num canal (exige Gerenciar Servidor)',
+        options: [
+          { ...GUILD_NAME, required: true },
+          {
+            type: OPT.CHANNEL,
+            name: 'canal',
+            description: 'Canal de texto onde as kills e mortes vão aparecer',
+            required: true,
+            channel_types: [0, 5],
+          },
+        ],
+      },
+      {
+        type: OPT.SUB_COMMAND_GROUP,
+        name: 'feed',
+        description: 'Liga ou desliga o killfeed deste servidor (exige Gerenciar Servidor)',
+        options: [
+          { type: OPT.SUB_COMMAND, name: 'ligar', description: 'Volta a postar as kills e mortes da guilda no canal configurado' },
+          { type: OPT.SUB_COMMAND, name: 'desligar', description: 'Pausa o killfeed sem apagar a configuração' },
+        ],
+      },
+      {
+        type: OPT.SUB_COMMAND,
+        name: 'resumo',
+        description: 'Kills, mortes, quem mais mata, armas e horários dos últimos dias',
+        options: [{ ...GUILD_NAME, description: 'Nome exato da guilda (padrão: a configurada neste servidor)' }],
       },
     ],
   },

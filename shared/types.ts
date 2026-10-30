@@ -259,7 +259,7 @@ export interface LossItem {
   count: number;
   /** Preço unitário atual (menor venda entre Royal + Caerleon), null sem dado. */
   price: number | null;
-  /** count × price: o tamanho da "demanda destruída" em prata. */
+  /** count × price: valor perdido nas mortes, em prata (parte é saqueada e volta ao mercado). */
   value: number | null;
   ageMin: number | null;
 }
@@ -292,6 +292,19 @@ export interface GuildSummary {
   fetchedAt: string;
 }
 
+/** Um resultado da busca de guilda (/api/guilds?q=). A busca da gameinfo é aproximada: confira o nome. */
+export interface GuildHit {
+  id: string;
+  name: string;
+  alliance: string | null;
+  deathFame: number | null;
+}
+
+export interface GuildSearchResponse {
+  guilds: GuildHit[];
+  fetchedAt: string;
+}
+
 export type ZoneKind = 'azul' | 'amarela' | 'vermelha' | 'preta' | 'avalon' | 'brumas';
 
 export interface RiskZone {
@@ -313,6 +326,7 @@ export interface RiskQuote {
 }
 
 export interface GoldResponse {
+  /** Do mais antigo para o mais recente. */
   points: { at: string; price: number }[];
   current: number | null;
   p10: number | null;
@@ -347,5 +361,8 @@ export interface Timer {
   label: string;
   endsAt: string;
   createdAt: string;
+  /** Quando o aviso saiu, ou quando o serviço desistiu de avisar (ver `delivery`). */
   firedAt?: string;
+  /** Só nos já avisados: 'ok' = o serviço de push aceitou o aviso; 'falhou' = não deu para avisar. */
+  delivery?: 'ok' | 'falhou';
 }

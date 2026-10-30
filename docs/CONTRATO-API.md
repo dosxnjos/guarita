@@ -186,3 +186,151 @@ AlertFire = { ruleId, itemId, city, price, seenAt: string|null, message }
 
 Interações do Discord. Verifica a assinatura Ed25519 (`X-Signature-Ed25519` e `X-Signature-Timestamp`) com a chave
 pública da aplicação; assinatura inválida recebe 401. PING recebe `{ "type": 1 }`.
+
+Comandos: `preco`, `relogio`, `dossie`, `morte`, `alerta`, `perdas`, `guilda`, `ajuda`
+(`scripts/register-commands.mjs`). Fase 2:
+
+- `/perdas dias:1|7`: os 10 itens mais perdidos, preço unitário, valor perdido e o tamanho da amostra.
+- `/guilda configurar nome canal` (Gerenciar Servidor ou administrador; só em servidor), `/guilda feed ligar|desligar`,
+  `/guilda resumo [nome]`. Um feed por servidor do Discord: configurar de novo substitui.
+- Botão "Pedir regear" no killfeed: `custom_id = regear:<eventId>:<victimId>` (formato combinado entre core e Pages).
+  Busca o evento em `/events/{id}` da gameinfo, precifica num lote do AODP e posta o pedido no canal. Pagamento e
+  aprovação ficam com a guilda; a Guarita não mexe em prata.
+
+## Fase 2
+
+Tipos em `shared/types.ts` (seção "Fase 2"). Cliente do front em `src/lib/api.ts`.
+
+### `GET /api/losses?days=1..7&limit=1..50`
+
+Itens mais perdidos no PvP do Americas, do KillLog próprio (amostra coletada desde 30/10/2026). `days` (padrão 1 =
+hoje UTC) e `limit` (padrão 50) fora da faixa ou tortos caem no padrão/limite. Preço atual: menor venda entre as
+cidades reais e Caerleon, qualidade 1, um lote só ao AODP; AODP fora → lista sem preço (não é erro). KillLog fora →
+502. `Cache-Control: max-age=300`.
+
+```ts
+LossesResponse = { days, since: string|null /* AAAA-MM-DD do 1º dia coletado */, sampleKills, items: LossItem[], fetchedAt }
+LossItem = { id, name /* rótulo PT-BR; o próprio id quando não acha o nome */, count,
+             price: number|null, value: number|null /* count × price */, ageMin: number|null }
+```
+
+### `GET /api/guild/:nome`
+
+Resumo da guilda pelo nome exato (sem diferença de maiúsculas). Junta o KillLog (`?detail=1`, 7 dias) e a gameinfo
+(busca + `/guilds/{id}`). 404 só se nenhuma das duas fontes achar a guilda; KillLog fora → 502; gameinfo fora com
+o KillLog de pé → 200 com `id`, `members`, `killFame`, `deathFame` e `alliance` nulos.
+
+```ts
+GuildSummary = { name, id: string|null, alliance: string|null, members: number|null,
+                 killFame: number|null, deathFame: number|null,
+                 days: { date /* AAAA-MM-DD */, kills, deaths }[],
+                 topKillers: { name, id, kills }[] /* até 10 */,
+                 weapons: { type /* arma mais usada da família: serve de ícone */, labelPt /* nome da família */, count }[],
+                 hoursBrt: number[] /* 24 posições, kills por hora de Brasília */,
+                 coverageSince: string|null, fetchedAt }
+```
+
+### `GET /api/guilds?q=`
+
+Busca de guilda na gameinfo (aproximada: "bagre" devolve Bagres, Bagreros…). Cache próprio (chave
+`gameinfo-guild/…`, separada da busca de jogador).
+
+```ts
+GuildSearchResponse = { guilds: GuildHit[] /* até 20 */, fetchedAt }
+GuildHit = { id, name, alliance: string|null, deathFame: number|null }
+```
+
+### `POST /api/risk`
+
+Corpo `{ items: { id, quality }[] }` (1 a 12 peças; id precisa existir no catálogo; qualidade 1–5). JSON torto,
+lista vazia ou grande demais, id mal formado ou inexistente → 400; outro método → 405. Um lote ao AODP (cidades reais
++ Caerleon), menor venda, mesma regra da recompra da autópsia. `Cache-Control: no-store`.
+
+```ts
+RiskQuote = { items: { id, quality, price: number|null, city: City|null, ageMin: number|null }[],
+              total, missing /* peças sem preço */, zones: RiskZone[], fetchedAt }
+RiskZone = { zone: 'azul'|'amarela'|'vermelha'|'preta'|'avalon'|'brumas', labelPt,
+             lose: 'nada'|'durabilidade'|'tudo', amount /* prata em risco; 0 quando só perde durabilidade */, note }
+```
+
+Regras das zonas em `shared/zones.ts` (fontes secundárias datadas no comentário; a tela pede para conferir no jogo).
+
+### `GET /api/gold?days=7|30|90`
+
+Série do ouro (AODP `gold.json`, pedido com `date=` para passar de 720 pontos). Sem `days` = 30; outro valor → 400;
+método ≠ GET/HEAD → 405; AODP fora → 502. Pontos fora de 1/3 a 3× a mediana são descartados. Veredito por quartil
+(`barato` < p25, `caro` > p75; menos de 24 pontos limpos = `sem dado`); a faixa desenhada é p10–p90. Cache 10 min.
+
+```ts
+GoldResponse = { points: { at, price }[] /* do mais antigo para o mais recente */,
+                 current: number|null, p10, p50, p90: number|null,
+                 verdict: 'barato'|'normal'|'caro'|'sem dado', fetchedAt }
+```
+
+### `GET /api/data-health`
+
+Idade dos preços por cidade numa cesta fixa de 42 itens (`HEALTH_BASKET` em `worker/api/goldHealth.ts`), um lote
+de `/prices`. Linhas cruas em cache 30 min; idades recalculadas a cada pedido. No Black Market vale a data da melhor
+ordem de compra e só os 27 equipamentos da cesta (ele não compra recurso refinado), mas o denominador ainda é `basket`.
+
+```ts
+DataHealthResponse = { basket, cities: DataHealthCity[], fetchedAt }
+DataHealthCity = { city, medianAgeMin: number|null, fresh1h /* < 1 h */, stale24h /* > 24 h */, missing }
+```
+
+### Despertador: `/api/timers`
+
+O dono é o id da inscrição push do aparelho, conferido no Hub antes de tudo (inscrição sumida → 404 com
+"inscrição" na mensagem). Corpo até 2 KB; `no-store`; 5xx do DO vira 502.
+
+- `POST /api/timers` `{ owner, kind, label, endsAt }` → `201 Timer`. `endsAt` entre 1 min e 30 dias no futuro
+  (folga de 30 s); rótulo até 60 caracteres (vazio = nome padrão do tipo); até 30 pendentes por dono (409).
+- `GET /api/timers?owner=` → `{ timers: Timer[] }` (pendentes primeiro; os já tocados ficam 7 dias, no máximo 30).
+- `DELETE /api/timers/:id?owner=` → `{ ok: true }` ou 404.
+
+```ts
+Timer = { id, owner, kind: 'plantacao'|'animal'|'foco'|'outro', label, endsAt, createdAt, firedAt?, delivery?: 'ok'|'falhou' }
+```
+
+`delivery` só vem nos já tocados: `'ok'` = o serviço de push aceitou o aviso; `'falhou'` = não deu para avisar
+(3 falhas passageiras, falha definitiva ou inscrição sem chaves no Hub) e `firedAt` é a hora da desistência. A tela
+mostra "não foi possível avisar em …" nesse caso.
+
+O DO `Timers` (guarita-core) toca pelo `alarm()`: busca endpoint e chaves no Hub (`GET /push/sub/:id`), manda o push
+(`url: '/despertador'`, `tag: 'timer-<id>'`) e relata ao Hub em `/engine/report`. Ao criar um timer, marca no Hub até
+quando a inscrição tem despertador (`POST /push/sub/:id/keep {until}`): a poda de inscrição ociosa (48 h sem alerta e
+sem entrega) não apaga a inscrição antes disso.
+
+### Oráculo MCP: `POST /mcp`
+
+Servidor MCP público e sem login, só dado público (nunca alertas, ids do Discord ou segredos; não lê o `env`).
+JSON-RPC 2.0 no transporte HTTP "streamable" só com respostas JSON: sem SSE, sem sessão (`Mcp-Session-Id` aceito e
+ignorado).
+
+- `POST /mcp`: `initialize` (devolve a versão pedida se for uma de `2025-11-25`, `2025-06-18`, `2025-03-26`,
+  `2024-11-05`; senão a primeira da lista), `ping`, `tools/list`, `tools/call`. Notificação → 202 sem corpo.
+- `OPTIONS /mcp` → 204 com CORS `*`. `GET` sem `text/html` no `Accept` (cliente MCP tentando SSE) e `DELETE` → 405
+  com `Allow: POST, OPTIONS`. `GET /mcp` de navegador é a página que explica como ligar.
+- Erros: -32700 JSON inválido; -32600 mensagem malformada/lote vazio; -32601 método desconhecido; -32602 ferramenta
+  inexistente ou `params` torto. Argumento inválido ou fonte fora → `result.isError: true` com texto em PT-BR.
+- `MCP-Protocol-Version` desconhecido → 400; corpo > 64 KB → 413; `Cache-Control: no-store`.
+- Limites: até 10 mensagens por lote e 2 `tools/call` por requisição (50 subrequests do plano grátis); 60
+  `tools/call` por minuto por IP (contado na memória do isolate pelo hash do IP; aproximado). Passou do limite →
+  `isError`, não HTTP 429.
+
+Ferramentas (`worker/mcp/catalog.ts`): `buscar_item {consulta}`, `preco_item {item, qualidade?}`, `relogio {}`,
+`dossie_jogador {nome}`, `perdas_pvp {dias?}`. Cada resposta traz resumo em texto PT-BR e `structuredContent`.
+
+## Rotas internas (guarita-core, só por binding)
+
+O Pages fala com o core por binding: nada aqui é alcançável da internet.
+
+- **KillLog** via service binding `CORE`, `GET /internal/killlog/<rota>` (só leitura; `/plan` e `/ingest` nunca
+  passam): `/stats`; `/losses?day=AAAA-MM-DD&limit=` (um dia); `/losses?days=1..7&limit=` (últimos N dias UTC com
+  o dia aberto, devolve `since`); `/player/:id/kills?limit=`; `/guild/:name/summary` (kills e mortes por dia) e
+  `?detail=1` (mais quem mais mata, armas cruas e kills por hora de Brasília em 7 dias; cache de 5 min no DO).
+- **Hub** (DO `HUB`): `GET /push/sub/:id` → `{ id, createdAt, lastOkAt, failCount, endpoint, p256dh, auth }` (endpoint e
+  chaves para o DO Timers; o Pages descarta o corpo). Killfeed: `POST /guild-feeds` (upsert),
+  `GET /guild-feeds?guild=<id do servidor>`, `PATCH /guild-feeds/:id {guild, enabled}`, `DELETE /guild-feeds/:id?guild=`,
+  `GET /guild-feeds/active` e `POST /guild-feeds/report {updates, disabled}` (cron).
+- **Timers** (DO `TIMERS`, um objeto por dono): `POST /timers`, `GET /timers?owner=`, `DELETE /timers/:id?owner=`.

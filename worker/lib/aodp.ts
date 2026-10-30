@@ -292,10 +292,14 @@ export async function aodpBookMeta(id: string, cities: City[], quality: Quality,
   return getJsonMeta(path, TTL.book, ctx, normalizeBook);
 }
 
-/** Preço do ouro (hora a hora), mais recente primeiro. */
-export async function aodpGold(count: number, ctx?: ExecutionContext): Promise<{ price: number; at: string }[]> {
+/**
+ * Preço do ouro (hora a hora), mais recente primeiro. Sem `date=` o AODP corta em 720 pontos (30 dias), mesmo com
+ * count maior; `sinceDay` (AAAA-MM-DD, granular por dia para não quebrar o cache) libera a série desde esse dia.
+ */
+export async function aodpGold(count: number, ctx?: ExecutionContext, sinceDay?: string): Promise<{ price: number; at: string }[]> {
   const n = Math.max(1, Math.min(5000, Math.floor(count) || 1));
-  return getJson(`/gold.json?count=${n}`, TTL.gold, ctx, normalizeGold);
+  const date = sinceDay && /^\d{4}-\d{2}-\d{2}$/.test(sinceDay) ? `&date=${sinceDay}` : '';
+  return getJson(`/gold.json?count=${n}${date}`, TTL.gold, ctx, normalizeGold);
 }
 
 /** Festividades do servidor west (evento sazonal, bônus de atividade, bônus de produção). */

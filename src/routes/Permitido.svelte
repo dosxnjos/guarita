@@ -81,6 +81,22 @@
   </article>
 
   <div class="card stack">
+    <h2 class="first"><span class="tag good">Faz</span> Killfeed, regear e Oráculo MCP</h2>
+    <ul>
+      <li><strong>Killfeed da guilda no Discord</strong> é histórico: repete kills e mortes que o killboard oficial já
+        publicou, com atraso de minutos. Não diz onde ninguém está e não avisa quando um inimigo aparece. Por isso não é
+        o “batedor automático” que a SBI proíbe.</li>
+      <li><strong>Pedir regear</strong> só monta a lista do equipamento perdido com o preço de mercado. Aprovar e pagar
+        fica com a guilda, dentro do jogo. A Guarita não guarda, não move e não vende prata.</li>
+      <li>O <a href="/mcp" onclick={go}>Oráculo MCP</a> deixa assistentes de IA consultarem a Guarita. Ele só lê o
+        mesmo dado público do site (preços, relógio, killboard) e nunca mostra alertas, ids do Discord ou dado de quem
+        usa a Guarita.</li>
+      <li>As <strong>perdas PvP</strong> e a <strong>página da guilda</strong> usam uma amostra do killboard público
+        guardada pela Guarita. São estatísticas do passado, não posição de jogadores.</li>
+    </ul>
+  </div>
+
+  <div class="card stack">
     <h2 class="first"><span class="tag warn">Zona cinza</span> A janela flutuante</h2>
     <p>A Guarita tem uma janela pequena que fica por cima das outras no computador (recurso do próprio navegador). Ela
       mostra as mesmas informações do site, sem ler nada do jogo. Mesmo assim, uma janela por cima do jogo fica perto da

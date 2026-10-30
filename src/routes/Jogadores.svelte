@@ -108,7 +108,7 @@
                 {p.guild || 'Sem guilda'}{#if p.alliance} · [{p.alliance}]{/if}
               </span>
               <span class="fame small">
-                <span><span class="muted">Fama de kill</span> <span class="num">{fmtCompact(p.killFame)}</span></span>
+                <span><span class="muted">Fama de abate</span> <span class="num">{fmtCompact(p.killFame)}</span></span>
                 <span><span class="muted">Fama de morte</span> <span class="num">{fmtCompact(p.deathFame)}</span></span>
               </span>
             </a>

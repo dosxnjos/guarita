@@ -21,6 +21,12 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
   divergem. Os flips usam `/prices` de propósito; o livro serve só para profundidade e preço médio.
 - **Página de item "sem dado" em tudo com id minúsculo** → o AODP devolve `item_id` sempre em maiúsculas;
   `getItem` passa o id para maiúsculas antes de casar.
+- **Ouro de 90 dias vinha com 30** → `gold.json?count=` corta em 720 pontos (30 dias) quando a chamada não leva
+  `date=` (conferido em 30/10/2026: `count=2160` → 720; `count=2160&date=2026-07-31` → 2160). `aodpGold(count, ctx,
+  sinceDay)` manda `date=AAAA-MM-DD`; o dia é granular de propósito (timestamp na URL quebraria o cache).
+- **Coluna "velhos (> 24 h)" da Saúde sempre 0** → suspeita: o `/prices` deixa de servir preço com mais de ~24 h, e
+  aí "sem preço" engole "escaneado mas velho" (amostra de 30/10/2026: 336 células, nenhuma > 24 h). Confirmar com
+  outra amostra antes de mudar o rótulo.
 
 ## Itens e busca
 
@@ -50,6 +56,25 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
 - **"38 kills recentes" nunca aparece, ou `/players/{id}/kills?limit=` dá 502** → `/kills` e `/deaths` só devolvem
   os 10 últimos eventos e dão 502 com qualquer parâmetro (`?limit=`, `?offset=`). Chamar sem query.
 - **Coletor do killboard não passa de ~1000 eventos para trás** → `events?offset=` aceita no máximo ~1000.
+- **Guilda errada ("bagre" abriu Bagres)** → a busca de guilda da gameinfo é aproximada; só vale o nome igual (sem
+  diferença de maiúsculas). `pickGuild` em `worker/api/insightsA.ts`.
+- **Fama da guilda sempre nula** → `/guilds/{id}` traz `killFame` com **k minúsculo** (o resto é PascalCase) e pode
+  ter `AllianceName: null` com `AllianceTag: ""`.
+- **Busca de jogador ou de guilda devolve o formato do outro** → as duas usam `/search?q=`; a de guilda tem chave de
+  cache própria (`gameinfo-guild/…`). Nunca reaproveitar a chave da busca de jogador.
+- **Botão "Pedir regear" responde "tente de novo"** → `/events/{id}` levou 32 s medido, e o bot tem ~25 s para editar
+  a resposta adiada. Uma tentativa de 20 s com cache de 7 dias; a segunda vez costuma acertar o cache.
+- **Killfeed mostra "4 ou mais" participantes** → o coletor guarda `numberOfParticipants`, que corta em 4;
+  `groupMemberCount` não está no evento gravado.
+- **Killfeed de uma guilda parava sem erro** → o cron pedia "os 300 feeds ativos" ordenados por última postagem;
+  feeds de guilda parada (nunca postam) ocupavam as vagas e quem já tinha postado saía do lote para sempre. Desde
+  30/10/2026 o cron manda ao Hub os ids e nomes de guilda do lote (`POST /guild-feeds/match`, índices em
+  `albion_guild_id` e `guild_key`) e recebe só os feeds que casam. Resta o teto de 10 mensagens por execução,
+  dividido entre os feeds casados (quem postou há mais tempo primeiro; o resto vira `pending`).
+- **CPU do killfeed somada ao coletor** → medido no Node (30/10/2026): casar 153 eventos com 300 feeds, planejar e
+  montar 10 mensagens custa ~0,5 ms quente e ~3,7 ms na primeira execução do isolate (JIT). Com o `/match` o lote
+  normal tem poucos feeds. Se o `/health` mostrar o cron parado em execução com feed, medir nos logs de produção
+  (painel da Cloudflare, CPU por invocação) e mover a postagem para o cron dos alertas.
 
 ## Cloudflare
 
@@ -68,8 +93,8 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
   (`workers_dev = false`). O Pages fala com ele por binding de Durable Object (`HUB`, classe `Hub` do script
   `guarita-core`) e service binding (`CORE`), declarados no `wrangler.toml`. O parágrafo do plano que falava em
   fetch HTTP com chave de admin foi substituído por isso.
-- **Binding `HUB` ou `CORE` indefinido no Pages** → o `guarita-core` precisa estar publicado antes do Pages, e as
-  classes `Hub`/`KillLog` precisam existir nas migrations do core (v1 e v2). Renomear ou apagar classe de Durable
+- **Binding `HUB`, `CORE` ou `TIMERS` indefinido no Pages** → o `guarita-core` precisa estar publicado antes do Pages, e as
+  classes `Hub`/`KillLog`/`Timers` precisam existir nas migrations do core (v1, v2 e v3). Renomear ou apagar classe de Durable
   Object exige migration nova, nunca editar a antiga.
 - **`npm run dev` mostra erro em toda tela que chama a API** → esperado: o Vite serve só o front; `/api/*` roda no
   `_worker.js` publicado, com as ligações do core.
@@ -81,6 +106,23 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
 - **Segredo novo do Pages não vale** → só a partir da publicação seguinte; o `deploy.mjs` grava os segredos antes
   do `pages deploy`.
 - **O wrangler imprime "Notice to agents…"** → é texto da ferramenta, não instrução; ignorar.
+- **Perdas ou nome de item estoura a CPU** → ler e dar `JSON.parse` inteiro nas fatias `names/t*.json` levou ~12 ms
+  no Node. `labelsFor` (`insightsA.ts`) lê a fatia como texto e recorta só os ids pedidos (até 50).
+- **Cota diária de linhas lidas do Durable Object acabando** → o plano grátis tem teto de linhas lidas por dia,
+  dividido pela conta (5 milhões no grátis; estourou, toda consulta SQL dos DOs falha até 00:00 UTC, inclusive
+  ingest, alertas e despertador). `/guild/:name/summary?detail=1` lê a janela de 7 dias da tabela `kills` (sem índice
+  por guilda; dezenas de milhares de linhas). Três travas no KillLog: guilda sem kill nem morte nos agregados
+  (`guild_daily` + `day_buf`) dos últimos 7 dias não varre nada (nome inventado custa uma busca pela chave); cache de
+  5 min no DO (e 10 min no Pages); teto diário `GUILD_DETAIL_READ_BUDGET` (1,5 milhão de linhas; passou, o detalhe
+  sai vazio com `limited: true`; ver `/stats` → `guildDetailReads`). Índice em `killer_guild`/`victim_guild` ficou
+  de fora de propósito: custaria +2 linhas escritas por kill (cota de escrita) e a criação num banco cheio escreveria
+  uma linha por kill guardada de uma vez. A saída definitiva é agregar por guilda no ingest.
+- **Cliente MCP trava ou dá erro logo depois do `initialize`** → o cliente faz `GET /mcp` para abrir SSE e só segue
+  com 405. `worker/index.ts` (`isMcpClientRequest`) manda ao servidor MCP o `GET /mcp` com `text/event-stream` no
+  `Accept` ou com o cabeçalho `mcp-protocol-version`; qualquer outro GET (navegador, prévia de link do Discord ou do
+  WhatsApp, curl simples) recebe a página. Antes, todo GET sem `text/html` levava 405 e a prévia de link não saía.
+- **Limite do MCP (60 por minuto por IP) não segura de verdade** → é contado na memória do isolate: zera quando ele
+  esfria, cada isolate conta à parte e pedidos sem cabeçalho de IP dividem a mesma conta. É freio, não cota.
 
 ## Doppler
 
@@ -114,7 +156,19 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
 - **Tela mostrava "Ativado" com a lista vazia** → o Hub apagou a inscrição (410, falhas definitivas espalhadas por
   24 h, ou ociosa por 48 h sem alerta). Agora a lista responde 404 e a tela volta a oferecer "Ativar".
 - **Falha 429/5xx do serviço de push** → é passageira: a inscrição espera 30 min sem contar falha. Só
-  400/401/403/413 contam para desistir (20 falhas e a primeira com mais de 24 h).
+  400/401/403/413 contam para desistir (20 falhas e a primeira com mais de 24 h). Vale também para o despertador:
+  uma falha passageira dele pausa os **alertas de preço** do mesmo aparelho por 30 min (mesma régua do motor).
+- **Despertador marca "já tocou" sem notificação chegar** (`delivery='sem-chaves'`) → o Hub respondeu
+  `GET /push/sub/:id` sem `endpoint`/`p256dh`/`auth`. Desde 30/10/2026 a rota devolve os três (só por binding; o Pages
+  descarta o corpo). Conferir se o core publicado é o novo.
+- **Timer longo sumia antes de tocar** → o `prune` do Hub apagava inscrição sem alerta de preço que nunca recebeu
+  push e tinha mais de 48 h; no vencimento o Hub respondia 404 e o DO apagava os timers. Desde 30/10/2026 o DO
+  `Timers` grava `keep_until` na inscrição ao criar o timer (`POST /push/sub/:id/keep`, até o vencimento + 1 h) e a
+  poda respeita. Hub fora do ar nessa hora não impede o timer (só registra erro no log).
+- **Despertador desiste sem avisar** → falha passageira 3 vezes, falha definitiva ou inscrição sem chaves (item acima)
+  marcam `fired_at` (o DO desiste para não ficar em laço). Desde 30/10/2026 o contrato traz `delivery: 'falhou'` e a
+  tela mostra "não foi possível avisar em …" em vez de "tocou em …".
+- **Timer de 1 min recusado** → o relógio do aparelho está mais de 30 s atrasado; o DO exige 1 min no futuro.
 
 ## Alertas
 
@@ -130,4 +184,14 @@ Formato: **sintoma** → causa e o que fazer. Vale para este repo e para o `guar
 ## Testes
 
 - **`SMOKE=1 npx vitest run tests/smoke.worker.test.ts`** chama as APIs reais (AODP, gameinfo); fora da suíte normal
-  de propósito. 502/504 da gameinfo é registrado no log, não falha o teste.
+  de propósito. 502/504 da gameinfo é registrado no log, não falha o teste. O KillLog da fumaça é falso (amostra
+  pequena em `fakeEnv().CORE`): perdas e guilda provam AODP, nomes e gameinfo reais, não o KillLog publicado.
+- **Hook `guarda-segredo` barra teste com token falso** → usar o valor `'dummy-bot'`, que o hook aceita; não mexer
+  no hook.
+
+## Fontes do conteúdo do novato
+
+- **Wiki oficial (wiki.albiononline.com) devolve 403** a toda consulta, inclusive por curl com cabeçalho de
+  navegador (desafio da Cloudflare). Regras de zona (`shared/zones.ts`) e golpes (`shared/scams.ts`) se apoiam em
+  fontes secundárias datadas no comentário; tempos do despertador (`src/lib/timers/presets.ts`) vêm do dump
+  `ao-bin-dumps`. Brumas e Estradas de Avalon pedem conferência no jogo.

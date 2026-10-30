@@ -116,6 +116,15 @@ describe('chamadas', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('ouro com sinceDay manda date= (sem ele o AODP corta em 720 pontos); dia mal formado é ignorado', async () => {
+    mockCaches();
+    const calls = mockFetch(aodpFixtureRoute);
+    await aodpGold(2184, undefined, '2026-07-31');
+    expect(calls[0].url).toContain('/gold.json?count=2184&date=2026-07-31');
+    await aodpGold(24, undefined, '2026-07-31T10:00:00Z');
+    expect(calls[1].url).toMatch(/\/gold\.json\?count=24$/);
+  });
+
   it('429 sem cache vira erro claro com o RateLimit-Reset', async () => {
     mockCaches();
     mockFetch(() => jsonRes({}, 429, { 'RateLimit-Reset': '37' }));

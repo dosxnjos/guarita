@@ -123,7 +123,7 @@
           {#if killer.guild}<span class="muted small">{killerOrg(killer.guild, killer.alliance)}</span>{/if}
         </div>
         <dl class="facts">
-          <div><dt>Fama de kill</dt><dd class="num">{fmtCompact(killer.killFame)}</dd></div>
+          <div><dt>Fama de abate</dt><dd class="num">{fmtCompact(killer.killFame)}</dd></div>
           <div><dt>Razão kill/morte</dt><dd class="num">{fmtDec(killer.ratio)}</dd></div>
           <div><dt>IP médio</dt><dd class="num">{fmtNum(killer.avgIp)}</dd></div>
           <div><dt>Arma mais usada</dt><dd>{killer.weapons[0]?.labelPt ?? '—'}</dd></div>

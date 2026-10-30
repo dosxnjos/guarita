@@ -27,6 +27,7 @@ const TABLE: [name: string, pattern: RegExp, keys: string[]][] = [
   ['saude', /^\/saude$/, []],
   ['mcp', /^\/mcp$/, []],
   ['despertador', /^\/despertador$/, []],
+  ['app', /^\/app$/, []],
 ];
 
 export function match(pathname: string): Match {

@@ -1,24 +1,21 @@
-// Módulos (a) e (d) da Fase 2: perdas PvP, guilda, ouro, saúde do dado. Exporta funções para o bot e o MCP.
+// Fachada da Fase 2 para o bot e o MCP: (a) perdas PvP e guilda (./insightsA.ts), (c) risco do set (./risk.ts),
+// (d) ouro e saúde do dado (./goldHealth.ts). As rotas HTTP ficam em ./routesF2.ts.
 import type { Env } from '../env';
+import { getRisk as riskQuote } from './risk';
+import { getLosses as lossesA, getGuild as guildA } from './insightsA';
 import type { DataHealthResponse, GoldResponse, GuildSummary, LossesResponse, RiskQuote, Quality } from '../../shared/types';
 
-/** (a) Itens mais perdidos no PvP nos últimos `days` dias (1–7). */
-export async function getLosses(_env: Env, _ctx: ExecutionContext, _days: number, _limit = 50): Promise<LossesResponse> {
-  throw new Error('não implementado: módulo (a) da Fase 2');
+/** (a) Itens mais perdidos no PvP nos últimos `days` dias (1–7). Implementação em ./insightsA.ts. */
+export async function getLosses(env: Env, ctx: ExecutionContext, days: number, limit = 50): Promise<LossesResponse> {
+  return lossesA(env, ctx, days, limit);
 }
-/** (a) Resumo da guilda pelo nome exato. */
-export async function getGuild(_env: Env, _ctx: ExecutionContext, _name: string): Promise<GuildSummary> {
-  throw new Error('não implementado: módulo (a) da Fase 2');
+/** (a) Resumo da guilda pelo nome exato. Implementação em ./insightsA.ts. */
+export async function getGuild(env: Env, ctx: ExecutionContext, name: string): Promise<GuildSummary> {
+  return guildA(env, ctx, name);
 }
 /** (c) Custo do set e o que se perde por zona. */
-export async function getRisk(_env: Env, _ctx: ExecutionContext, _items: { id: string; quality: Quality }[]): Promise<RiskQuote> {
-  throw new Error('não implementado: módulo (c) da Fase 2');
+export async function getRisk(env: Env, ctx: ExecutionContext, items: { id: string; quality: Quality }[]): Promise<RiskQuote> {
+  return riskQuote(env, ctx, items); // implementação em ./risk.ts (módulo c)
 }
-/** (d) Série do ouro e veredito. */
-export async function getGold(_env: Env, _ctx: ExecutionContext, _days: number): Promise<GoldResponse> {
-  throw new Error('não implementado: módulo (d) da Fase 2');
-}
-/** (d) Saúde do dado do AODP por cidade. */
-export async function getDataHealth(_env: Env, _ctx: ExecutionContext): Promise<DataHealthResponse> {
-  throw new Error('não implementado: módulo (d) da Fase 2');
-}
+// (d) Série do ouro e veredito · saúde do dado do AODP por cidade: implementados em goldHealth.ts.
+export { getGold, getDataHealth } from './goldHealth';

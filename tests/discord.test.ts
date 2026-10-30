@@ -50,6 +50,8 @@ import {
   type Interaction,
 } from '../worker/discord/interactions';
 import { COMMANDS, QUALITY_NAMES } from '../worker/discord/commands';
+import { CoreError, GuildNotFound } from '../worker/api/insightsA';
+import { GameinfoError } from '../worker/lib/gameinfo';
 import { QUALITY_LABEL } from '../shared/quality';
 import {
   AMBER,
@@ -440,6 +442,17 @@ describe('/ajuda e desconhecido', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(friendly(new Error('TypeError: x is undefined at /secret'))).not.toMatch(/secret/);
   });
+  it('erros preparados do resumo de guilda: nome, histórico fora e gameinfo por tipo', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(friendly(new GuildNotFound('BAGRE'))).toMatch(/Guilda “BAGRE” não encontrada.*nome precisa ser exato/);
+    // "erro 502" do KillLog não vira "a fonte do Albion demorou"
+    const core = friendly(new CoreError('O histórico do killboard respondeu com erro 502.'));
+    expect(core).toMatch(/histórico de kills da Guarita está indisponível/);
+    expect(core).not.toMatch(/demorou/);
+    expect(friendly(new GameinfoError('timeout', 'gameinfo: sem resposta em 15000 ms'))).toMatch(/demorou demais/);
+    expect(friendly(new GameinfoError('upstream', 'gameinfo HTTP 500'))).toMatch(/instável/);
+    expect(friendly(new GameinfoError('not_found', 'x'))).toMatch(/Não encontrei/);
+  });
 });
 
 // ---------- definições dos comandos ----------
@@ -455,7 +468,8 @@ describe('commands', () => {
       (o.options ?? []).forEach((x) => walk(x as typeof o));
     };
     COMMANDS.forEach(walk);
-    expect(COMMANDS.map((c) => c.name).sort()).toEqual(['ajuda', 'alerta', 'dossie', 'morte', 'preco', 'relogio']);
+    // guilda e perdas: Fase 2 (casos próprios em tests/discord-guild.test.ts).
+    expect(COMMANDS.map((c) => c.name).sort()).toEqual(['ajuda', 'alerta', 'dossie', 'guilda', 'morte', 'perdas', 'preco', 'relogio']);
   });
   it('qualidades com os mesmos nomes do site (shared/quality.ts)', () => {
     expect(QUALITY_NAMES).toEqual(QUALITY_LABEL);

@@ -4,8 +4,8 @@ Dois repositórios, tudo no plano grátis da Cloudflare (conta pessoal):
 
 - **`guarita`** (este, público, MIT): site e PWA, API de leitura, bot do Discord.
 - **`guarita-core`** (privado): Worker com dois crons de 5 em 5 minutos, cada um na sua invocação (motor de
-  alertas nos minutos 0, 5, 10…; coletor experimental do killboard 2 min depois) e os Durable Objects com SQLite
-  `Hub` e `KillLog`.
+  alertas nos minutos 0, 5, 10…; coletor do killboard 2 min depois, que também posta o killfeed das guildas no
+  Discord) e os Durable Objects com SQLite `Hub`, `KillLog` e `Timers`.
 
 ## Diagrama
 
@@ -19,27 +19,33 @@ Dois repositórios, tudo no plano grátis da Cloudflare (conta pessoal):
  │   arquivos estáticos (dist/) + /data/items-index.json        │
  │   dist/_worker.js  ← worker/index.ts                         │
  │     /api/*   → worker/api/router.ts (market, clock,          │
- │                player, alerts)                               │
+ │                player, alerts; Fase 2: routesF2.ts)          │
  │     /discord → worker/discord/interactions.ts                │
+ │     /mcp     → worker/mcp/server.ts (POST; GET de           │
+ │                navegador = página)                           │
  └──────┬──────────────┬───────────────┬──────────────┬─────────┘
         │ binding DO   │ service       │ fetch +      │ fetch +
-        │ HUB          │ binding CORE  │ Cache API    │ Cache API
+        │ HUB, TIMERS  │ binding CORE  │ Cache API    │ Cache API
         ▼              ▼               ▼              ▼
  ┌──────────────────────────┐   AODP (Americas)   gameinfo + serverstatus
  │ guarita-core (privado)   │   preços, histórico, jogadores, kills,
  │  Durable Object Hub      │   livro, ouro,       mortes, status
  │  (SQLite: alertas,       │   festividades
  │   inscrições push,       │        ▲                   ▲
- │   registro do cron)      │        │                   │
+ │   guild_feeds, cron)     │        │                   │
  │  Durable Object KillLog  │        │                   │
- │  (SQLite: kills)         │        │                   │
- │                          │        │                   │
+ │  (SQLite: kills,         │        │                   │
+ │   losses_daily, guilda)  │        │                   │
+ │  Durable Object Timers   │        │                   │
+ │  (1 por dono; alarm()    │        │                   │
+ │   → push do despertador) │        │                   │
  │  cron 0,5,10… ───────────┼────────┘ runAlerts         │
  │     │                    │   (lê regras no Hub,       │
  │     │                    │    preço em lote no AODP)  │
  │     ├─ dispara push (VAPID) e DM no Discord           │
  │  cron 2,7,12… pollKillboard ──────────────────────────┘
  │        (se KILLBOARD_ENABLED = "1") → KillLog         │
+ │        → postGuildFeeds (killfeed no canal, ≤10 msgs) │
  │     resumo do cron → Hub /cron-mark                   │
  └───────────────────────────────────────────────────────┘
 ```
@@ -57,6 +63,27 @@ O navegador também carrega os ícones direto de `render.albiononline.com` (com 
   AODP em lote, e dispara push no navegador (VAPID) ou DM no Discord, respeitando o intervalo mínimo da regra.
 - **Busca de item:** no navegador, sobre o índice estático `/data/items-index.json` (gerado do ao-bin-dumps).
 - **Sem login:** o dono de um alerta é o id da inscrição push do aparelho ou o id do usuário no Discord.
+
+### Fase 2 (30/10/2026)
+
+- **Perdas PvP e guilda** (`/api/losses`, `/api/guild/:nome`, `/api/guilds`; `worker/api/insightsA.ts`): leem o
+  `KillLog` pelo `CORE` (`/losses?days=`, `/guild/:name/summary?detail=1`), precificam num lote do AODP e completam a
+  guilda pela gameinfo. Nome do item recortado do texto de `names/t*.json` (sem `JSON.parse` do arquivo).
+- **Killfeed da guilda** (core: `src/feed.ts`, `src/guildFeeds.ts`; Pages: `worker/discord/guild.ts`): `/guilda
+  configurar` grava o feed no Hub (`guild_feeds`); o cron do killboard, depois de gravar no KillLog, pede ao Hub só
+  os feeds das guildas do lote (`POST /guild-feeds/match`), casa os eventos novos com eles e posta no canal (até 10 mensagens por execução, 4 por feed; o resto vira "+N eventos").
+  Histórico do killboard com atraso de minutos, nunca aviso de inimigo por perto.
+- **Novato** (`/arriscar` + `POST /api/risk`, `/golpes`, `/glossario`): dados estáticos em `shared/zones.ts`,
+  `shared/scams.ts`, `shared/glossary.ts`; a checagem de nick parecido roda no navegador sobre a busca de jogador.
+- **Ouro e saúde do dado** (`/api/gold`, `/api/data-health`; `worker/api/goldHealth.ts`): `gold.json` com `date=` e
+  um lote de `/prices` numa cesta fixa de 42 itens.
+- **Oráculo MCP** (`POST /mcp`; `worker/mcp/`): JSON-RPC sem sessão, reaproveita `getItem`, `getClock`,
+  `searchPlayers`/`getDossier`, `getLosses` e `acSearch`. Só dado público; limite por IP na memória do isolate.
+- **Despertador** (`/api/timers`; core `src/timers.ts`): o Pages confere o dono no Hub e repassa ao DO `Timers` do
+  dono (`idFromName(owner)`), que agenda o próprio `alarm()` no próximo vencimento, busca endpoint e chaves no Hub
+  e manda o push. Sem cron extra.
+- **Ordem de publicação:** core (migration v3 cria `Timers`; o Hub cria `guild_feeds` sozinho) → Pages →
+  `npm run discord:register -- --global` (os comandos novos levam até 1 h para aparecer).
 
 ## Limites que moldam o desenho
 

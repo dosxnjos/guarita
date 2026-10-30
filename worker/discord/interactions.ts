@@ -14,10 +14,32 @@ import {
   type ItemTuple,
 } from '../../shared/items';
 import { acLabel, acSearch } from '../lib/acIndex';
+import { GameinfoError } from '../lib/gameinfo';
 import { getItem } from '../api/market';
 import { getClock } from '../api/clock';
 import { searchPlayers, getDossier, getAutopsy } from '../api/player';
 import { createAlert, listAlerts, deleteAlert, type NewAlert } from '../api/alerts';
+import { getGuild, getLosses } from '../api/insights';
+import { CoreError, GuildNotFound } from '../api/insightsA';
+import {
+  FEED_CHANNEL_TYPES,
+  FeedError,
+  botPost,
+  canManageGuild,
+  channelProblem,
+  channelInGuild,
+  disabledRegearComponents,
+  botDelete,
+  botPostMessage,
+  feedWarning,
+  findAlbionGuild,
+  getGuildFeed,
+  loadRegear,
+  parseRegearId,
+  saveGuildFeed,
+  setGuildFeedEnabled,
+  type GuildFeed,
+} from './guild';
 import { MEDIAN_PCT_MAX, MEDIAN_PCT_MIN } from '../../shared/alertLimits';
 import { verifyDiscordRequest } from './verify';
 import { ALERT_CITIES, CONDITIONS, type ConditionKey } from './commands';
@@ -30,9 +52,16 @@ import {
   renderAutopsy,
   renderClock,
   renderDossier,
+  renderFeedConfigured,
+  renderFeedToggled,
+  renderFeedWelcome,
+  renderGuildChoices,
+  renderGuildSummary,
   renderHelp,
+  renderLosses,
   renderPlayerList,
   renderPreco,
+  renderRegear,
   type MessageData,
   type NameOf,
 } from './render';
@@ -45,9 +74,11 @@ export const FAST_BUDGET_MS = 2200;
 export const DEFAULT_COOLDOWN_MIN = 60;
 /** Teto do trabalho adiado (o ctx.waitUntil do Cloudflare corta em ~30 s depois da resposta). */
 export const DELIVER_DEADLINE_MS = 25_000;
+/** Timeout de cada tentativa da busca de guilda no /guilda configurar (2 × 7 s + POST de 8 s cabem nos 25 s). */
+export const CONFIGURE_SEARCH_TIMEOUT_MS = 7_000;
 
-const IT = { PING: 1, COMMAND: 2, AUTOCOMPLETE: 4 } as const;
-const R = { PONG: 1, MESSAGE: 4, DEFERRED: 5, AUTOCOMPLETE: 8 } as const;
+const IT = { PING: 1, COMMAND: 2, COMPONENT: 3, AUTOCOMPLETE: 4 } as const;
+const R = { PONG: 1, MESSAGE: 4, DEFERRED: 5, UPDATE_MESSAGE: 7, AUTOCOMPLETE: 8 } as const;
 const EPHEMERAL = 64;
 
 // ---------- tipos mínimos da interação ----------
@@ -64,13 +95,28 @@ export interface Interaction {
   application_id: string;
   type: number;
   token: string;
-  data?: { name: string; options?: InteractionOption[] };
-  member?: { user?: { id: string } };
-  user?: { id: string };
+  data?: {
+    name?: string;
+    options?: InteractionOption[];
+    /** Componente (type 3): id do botão e tipo do componente. */
+    custom_id?: string;
+    component_type?: number;
+    /** Canais escolhidos em opção CHANNEL (tipo do canal vem aqui). */
+    resolved?: { channels?: Record<string, { id: string; type: number; name?: string }> };
+  };
+  /** Servidor onde a interação aconteceu (ausente em DM). */
+  guild_id?: string;
+  channel_id?: string;
+  /** permissions: bitfield em string com as permissões do membro no canal. */
+  member?: { user?: { id: string; username?: string; global_name?: string | null }; nick?: string | null; permissions?: string };
+  user?: { id: string; username?: string; global_name?: string | null };
+  /** Mensagem do botão clicado (type 3). */
+  message?: { id: string; channel_id?: string; components?: unknown[] };
 }
 export interface InteractionResponse {
   type: number;
-  data?: MessageData | { choices: { name: string; value: string }[] } | { flags: number };
+  /** `{ components }`: UPDATE_MESSAGE (7) do botão de regear, que troca só os componentes da mensagem clicada. */
+  data?: MessageData | { choices: { name: string; value: string }[] } | { flags: number } | { components: unknown[] };
 }
 
 /** Erro com mensagem pronta para o usuário (validação, nada encontrado). */
@@ -106,6 +152,12 @@ export async function dispatch(i: Interaction, env: Env, ctx: ExecutionContext):
       } catch (err) {
         return { type: R.MESSAGE, data: notice(friendly(err)) };
       }
+    case IT.COMPONENT:
+      try {
+        return component(i, env, ctx);
+      } catch (err) {
+        return { type: R.MESSAGE, data: notice(friendly(err)) };
+      }
     default:
       return { type: R.MESSAGE, data: notice('Interação não suportada por este bot.') };
   }
@@ -118,9 +170,17 @@ function logEmpty(err: unknown): [] {
 
 // ---------- opções ----------
 
-/** Subcomando escolhido (ex.: "criar" em /alerta criar) e as opções efetivas. */
+/**
+ * Subcomando escolhido (ex.: "criar" em /alerta criar) e as opções efetivas. Em grupo de subcomandos, `sub` vem
+ * com o grupo na frente (ex.: "feed ligar" em /guilda feed ligar).
+ */
 export function readOptions(i: Interaction): { sub: string | null; opts: InteractionOption[] } {
   const top = i.data?.options ?? [];
+  const group = top.find((o) => o.type === 2);
+  if (group) {
+    const inner = (group.options ?? []).find((o) => o.type === 1);
+    return { sub: inner ? `${group.name} ${inner.name}` : group.name, opts: inner?.options ?? [] };
+  }
   const sub = top.find((o) => o.type === 1);
   return sub ? { sub: sub.name, opts: sub.options ?? [] } : { sub: null, opts: top };
 }
@@ -251,6 +311,16 @@ async function command(i: Interaction, env: Env, ctx: ExecutionContext): Promise
     }
     case 'alerta':
       return alertCommand(i, sub, opts, env, ctx);
+    case 'perdas': {
+      const days = Number(opt<number>(opts, 'dias') ?? 1) === 7 ? 7 : 1;
+      return fastOrDeferred(i, ctx, async () => {
+        const r = await getLosses(env, ctx, days, 10);
+        const needNames = r.items.slice(0, 10).filter((it) => !it.name || it.name === it.id).map((it) => it.id);
+        return renderLosses(r, await labelsFor(env, needNames));
+      });
+    }
+    case 'guilda':
+      return guildCommand(i, sub, opts, env, ctx);
     case 'ajuda':
       return { type: R.MESSAGE, data: renderHelp() };
     default:
@@ -343,6 +413,186 @@ async function alertCommand(
   }
 }
 
+// ---------- /guilda e o botão de regear (Fase 2, módulo b) ----------
+
+/** Nome de guilda digitado: espaços repetidos viram um (o nome real pode ter espaços, ex.: "B A G R E"). */
+export function guildNameOpt(v: unknown, required: boolean): string | null {
+  const s = String(v ?? '').trim().replace(/\s+/g, ' ');
+  if (!s) {
+    if (required) throw new UserError('Informe o nome exato da guilda.');
+    return null;
+  }
+  if (s.length < 2 || s.length > 64) throw new UserError('O nome da guilda precisa ter de 2 a 64 caracteres.');
+  return s;
+}
+
+function requireManage(i: Interaction): void {
+  if (!canManageGuild(i.member?.permissions)) {
+    throw new UserError('Só quem tem a permissão Gerenciar Servidor pode configurar o killfeed da guilda.');
+  }
+}
+
+/** Nome de quem clicou, para o rótulo do botão desligado. */
+function displayName(i: Interaction): string {
+  const u = i.member?.user ?? i.user;
+  return i.member?.nick || u?.global_name || u?.username || 'um membro';
+}
+
+/** Discord aceitou a mensagem de teste? 403/404 viram texto de orientação; o resto, erro genérico. */
+function assertPosted(status: number, channelId: string): void {
+  const problem = channelProblem(status, channelId);
+  if (problem) throw new UserError(problem);
+  if (status < 200 || status >= 300) throw new Error(`discord: não consegui postar no canal (${status})`);
+}
+
+async function guildCommand(
+  i: Interaction,
+  sub: string | null,
+  opts: InteractionOption[],
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<InteractionResponse> {
+  const guildId = i.guild_id;
+  const owner = ownerOf(i);
+  if (!guildId || !i.member || !owner) throw new UserError('Use /guilda dentro de um servidor do Discord.');
+  switch (sub) {
+    case 'configurar': {
+      requireManage(i);
+      const name = guildNameOpt(opt<string>(opts, 'nome'), true) as string;
+      const channelId = String(opt<string>(opts, 'canal') ?? '');
+      if (!/^\d{15,22}$/.test(channelId)) throw new UserError('Escolha um canal de texto do servidor.');
+      // A opção CHANNEL do Discord sempre traz o canal em resolved: sem ele, o pedido não veio do seletor do servidor.
+      const ch = i.data?.resolved?.channels?.[channelId];
+      if (!ch) throw new UserError('Escolha um canal de texto deste servidor na lista do comando.');
+      if (!(FEED_CHANNEL_TYPES as readonly number[]).includes(ch.type)) {
+        throw new UserError('Escolha um canal de texto ou de anúncios (não de voz, fórum ou categoria).');
+      }
+      return deferred(
+        i,
+        ctx,
+        async () => {
+          // Em paralelo: a busca na gameinfo (2 tentativas de 7 s, para caber no prazo de 25 s com o POST de 8 s) e a
+          // conferência de que o canal é deste servidor (defesa em profundidade além da validação do Discord).
+          const [found, sameGuild] = await Promise.all([
+            findAlbionGuild(ctx, name, CONFIGURE_SEARCH_TIMEOUT_MS),
+            channelInGuild(env, channelId, guildId),
+          ]);
+          if (sameGuild === false) throw new UserError('Esse canal não é deste servidor. Escolha um canal de texto daqui.');
+          if (Array.isArray(found)) return renderGuildChoices(found, name);
+          // A mensagem de boas-vindas prova que o bot está no servidor e pode escrever no canal.
+          const posted = await botPostMessage(env, channelId, renderFeedWelcome(found.name, owner));
+          assertPosted(posted.status, channelId);
+          try {
+            await saveGuildFeed(env, { guildIdDiscord: guildId, channelId, guildName: found.name, albionGuildId: found.id, createdBy: owner });
+          } catch (err) {
+            // O feed não foi salvo: tira do canal o aviso de "killfeed ligado", que seria mentira.
+            if (posted.id) await botDelete(env, channelId, posted.id);
+            throw err;
+          }
+          return renderFeedConfigured(found, channelId);
+        },
+        true,
+      );
+    }
+    case 'feed ligar':
+    case 'feed desligar': {
+      requireManage(i);
+      const enable = sub === 'feed ligar';
+      return fastOrDeferred(
+        i,
+        ctx,
+        async () => {
+          const feed: GuildFeed | null = await getGuildFeed(env, guildId);
+          if (!feed) throw new UserError('Este servidor ainda não tem guilda configurada. Use /guilda configurar.');
+          if (enable) assertPosted(await botPost(env, feed.channelId, renderFeedWelcome(feed.guildName, owner)), feed.channelId);
+          const updated = await setGuildFeedEnabled(env, feed, enable);
+          return renderFeedToggled(updated.guildName, updated.channelId, enable);
+        },
+        true,
+      );
+    }
+    case 'resumo': {
+      const typed = guildNameOpt(opt<string>(opts, 'nome'), false);
+      return deferred(i, ctx, async () => {
+        const feed = await getGuildFeed(env, guildId).catch((err: unknown) => {
+          console.warn('discord: feed da guilda indisponível', String(err));
+          return null;
+        });
+        const name = typed ?? feed?.guildName;
+        if (!name) throw new UserError('Informe o nome da guilda ou configure uma com /guilda configurar.');
+        return renderGuildSummary(await getGuild(env, ctx, name), feedWarning(feed));
+      });
+    }
+    default:
+      throw new UserError('Use /guilda configurar, /guilda feed ligar, /guilda feed desligar ou /guilda resumo.');
+  }
+}
+
+/** Botão "Pedir regear" (custom_id regear:<evento>:<vítima>) das mortes postadas pelo killfeed. */
+function component(i: Interaction, env: Env, ctx: ExecutionContext): InteractionResponse {
+  const parsed = parseRegearId(i.data?.custom_id);
+  if (!parsed) return { type: R.MESSAGE, data: notice('Este botão não é mais válido.') };
+  const clicker = ownerOf(i);
+  if (!clicker || !i.guild_id) return { type: R.MESSAGE, data: notice('Use o botão dentro do servidor da guilda.') };
+  const work = async (): Promise<MessageData> => {
+    const r = await loadRegear(ctx, parsed.eventId, parsed.victimId).catch((err: unknown) => {
+      if (err instanceof GameinfoError && err.kind === 'not_found') throw new UserError('Essa morte não está mais no killboard oficial.');
+      throw err;
+    });
+    const nameOf = await labelsFor(env, r.rebuy.map((x) => x.id));
+    return renderRegear(
+      {
+        time: r.event.time,
+        victim: { id: r.event.victim.id, name: r.event.victim.name, guild: r.event.victim.guild },
+        killer: { name: r.event.killer.name, guild: r.event.killer.guild },
+        rebuy: r.rebuy,
+        rebuyTotal: r.rebuyTotal,
+      },
+      clicker,
+      nameOf,
+    );
+  };
+  const original = i.message?.components;
+  if (Array.isArray(original) && original.length) {
+    // Desliga o botão NA RESPOSTA ao clique (type 7, antes de qualquer espera): um segundo clique, do mesmo membro ou
+    // de outro, não gera outro pedido nem outra ida à gameinfo. A lista sai depois, num followup público.
+    ctx.waitUntil(deliverRegear(i, work, original));
+    return { type: R.UPDATE_MESSAGE, data: { components: disabledRegearComponents(original, `Regear pedido por ${displayName(i)}`) } };
+  }
+  // Mensagem sem componentes (não deveria acontecer num clique de botão): adiado, sem desligar nada.
+  return deferred(i, ctx, work);
+}
+
+/**
+ * Entrega do regear depois do type 7: sucesso → followup público com a lista; erro → aviso efêmero para quem clicou e
+ * o botão volta ligado (PATCH em @original, que num clique é a própria mensagem do feed). Nunca usa deliver(): o
+ * caminho de erro dele apaga @original, que aqui é a mensagem do killfeed.
+ */
+async function deliverRegear(i: Interaction, work: () => Promise<MessageData>, original: unknown[], deadlineMs = DELIVER_DEADLINE_MS): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<JobResult>(
+    (res) => (timer = setTimeout(() => res({ ok: false, err: new Error('timeout: fonte demorou demais') }), deadlineMs)),
+  );
+  const job = Promise.resolve()
+    .then(work)
+    .then(
+      (data) => ({ ok: true as const, data }),
+      (err: unknown) => ({ ok: false as const, err }),
+    );
+  const r = await Promise.race([job, late]);
+  clearTimeout(timer);
+  try {
+    if (r.ok) {
+      await webhook(i, 'POST', '', r.data);
+      return;
+    }
+    await webhook(i, 'POST', '', notice(friendly(r.err), true));
+    await webhook(i, 'PATCH', '/messages/@original', { components: original });
+  } catch (err) {
+    console.error('discord: entrega do regear falhou', err);
+  }
+}
+
 export function parseCondition(key: unknown, valor: unknown): AlertCondition {
   const v = Number(valor);
   if (typeof key !== 'string' || !Object.hasOwn(CONDITIONS, key)) throw new UserError('Escolha uma condição da lista.');
@@ -390,7 +640,19 @@ export function buildAlert(owner: string, itemId: string, city: City, quality: Q
 
 /** Texto amigável para qualquer erro (nunca detalhe interno). */
 export function friendly(err: unknown): string {
-  if (err instanceof UserError) return err.message;
+  if (err instanceof UserError || err instanceof FeedError || err instanceof GuildNotFound) return err.message;
+  // Antes da regex abaixo: "erro 502" do KillLog não é a gameinfo demorando.
+  if (err instanceof CoreError) {
+    console.error('discord: KillLog', err.message);
+    return 'O histórico de kills da Guarita está indisponível agora. Tente de novo em alguns minutos.';
+  }
+  if (err instanceof GameinfoError) {
+    console.error('discord: gameinfo', err.kind, err.message);
+    if (err.kind === 'not_found') return 'Não encontrei isso no killboard oficial do Albion.';
+    if (err.kind === 'timeout') return 'O killboard oficial do Albion demorou demais para responder. Tente de novo em alguns minutos.';
+    if (err.kind === 'upstream') return 'O killboard oficial do Albion está instável agora. Tente de novo em alguns minutos.';
+    return 'Não consegui completar o pedido agora. Tente de novo em instantes.';
+  }
   console.error('discord: erro no comando', err);
   const msg = err instanceof Error ? err.message : String(err);
   if (/não implementado/i.test(msg)) return 'Esta função ainda está sendo preparada. Tente de novo mais tarde.';

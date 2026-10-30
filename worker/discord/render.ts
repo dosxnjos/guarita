@@ -8,8 +8,10 @@ import type {
   City,
   CityQuote,
   Flip,
+  GuildSummary,
   ItemResponse,
   KillEvent,
+  LossesResponse,
   PlayerDossier,
   PlayerHit,
   Verdict,
@@ -527,9 +529,204 @@ export function renderHelp(): MessageData {
         { name: '/dossie nome', value: 'Dossiê público de um jogador: perigo, guilda, fama, armas, solo ou grupo e últimas lutas.' },
         { name: '/morte nome', value: 'Autópsia da última morte: quem matou, lições e quanto custa repor o equipamento.' },
         { name: '/alerta criar · listar · apagar', value: 'Alerta de preço por mensagem direta, checado a cada 5 minutos.' },
+        { name: '/perdas dias', value: 'Itens mais perdidos no PvP (hoje ou 7 dias) com preço atual e valor perdido.' },
+        {
+          name: '/guilda configurar · feed · resumo',
+          value:
+            'Killfeed da guilda num canal (kills e mortes do killboard, com minutos de atraso), botão “Pedir regear” nas mortes ' +
+            'e resumo dos últimos dias. Configurar e ligar/desligar exigem Gerenciar Servidor.',
+        },
         { name: 'Isso é permitido?', value: `Veja como a Guarita respeita os Termos do jogo: ${SITE}/permitido` },
       ],
     },
     { ephemeral: true, link: { label: 'Abrir a Guarita', url: SITE } },
   );
+}
+
+// ---------- Fase 2: /perdas ----------
+
+/** "2026-10-30" → "30/10" (dia UTC do jogo, sem conversão de fuso). */
+export function fmtDay(day: string | null | undefined): string {
+  const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(day ?? '');
+  return m ? `${m[3]}/${m[2]}` : '—';
+}
+
+export function renderLosses(r: LossesResponse, nameOf: NameOf): MessageData {
+  const url = `${SITE}/perdas${r.days > 1 ? `?dias=${r.days}` : ''}`;
+  const janela = r.days <= 1 ? 'hoje' : `últimos ${r.days} dias`;
+  const lines = r.items.slice(0, 10).map((it, k) => {
+    const name = it.name && it.name !== it.id ? it.name : nameOf(it.id);
+    const price = it.price != null ? `${fmtInt(it.price)} cada` : 'sem preço';
+    const value = it.value != null ? ` · **${fmtInt(it.value)}** prata` : '';
+    // Nome vem do dump de itens (nosso), não de jogador: sem escape, igual à autópsia.
+    return `${k + 1}. **${name}** · perdido ${fmtInt(it.count)}× · ${price}${value}`;
+  });
+  const coverage =
+    `Amostra de ${fmtInt(r.sampleKills)} mortes do killboard do Americas, coletadas pela Guarita` +
+    (r.since ? ` desde ${fmtDay(r.since)}` : '') +
+    (r.days <= 1 ? '. “Hoje” é o dia do jogo, que vira às 21:00 de Brasília.' : '.');
+  return message(
+    {
+      title: `Itens mais perdidos no PvP · ${janela}`,
+      url,
+      description: [
+        lines.length ? lines.join('\n') : 'Ainda não há mortes coletadas nessa janela.',
+        '',
+        coverage,
+        'Valor = vezes perdido × preço atual (menor venda nas cidades reais e Caerleon): quanto as mortes colocaram em jogo. Parte do que cai é saqueada e volta ao mercado.',
+      ].join('\n'),
+      timestamp: r.fetchedAt,
+    },
+    { link: { label: 'Ver na Guarita', url } },
+  );
+}
+
+// ---------- Fase 2: /guilda ----------
+
+export function guildUrl(name: string): string {
+  return `${SITE}/guilda/${encodeURIComponent(name)}`;
+}
+
+/** As `n` horas com mais kills (horário de Brasília), ex.: "21h (14), 22h (9)". */
+export function peakHours(hoursBrt: number[], n = 3): string | null {
+  const top = hoursBrt
+    .map((count, hour) => ({ hour, count }))
+    .filter((h) => h.count > 0)
+    .sort((a, b) => b.count - a.count || a.hour - b.hour)
+    .slice(0, n);
+  return top.length ? top.map((h) => `${h.hour}h (${fmtInt(h.count)})`).join(', ') : null;
+}
+
+export function renderGuildSummary(g: GuildSummary, warning: string | null = null): MessageData {
+  const url = guildUrl(g.name);
+  const head: string[] = [g.alliance ? `Aliança **${esc(g.alliance)}**` : 'Sem aliança'];
+  if (g.members != null) head.push(`${fmtInt(g.members)} membros`);
+  const fame: string[] = [];
+  if (g.killFame != null) fame.push(`fama de abate ${fmtInt(g.killFame)}`);
+  if (g.deathFame != null) fame.push(`fama de morte ${fmtInt(g.deathFame)}`);
+  const desc = [head.join(' · ')];
+  if (fame.length) desc.push(cap(fame.join(' · ')) + '.');
+  if (warning) desc.push('', warning);
+
+  const fields: EmbedField[] = [];
+  const days = [...g.days].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7);
+  if (days.length) {
+    const k = days.reduce((s, d) => s + d.kills, 0);
+    const d = days.reduce((s, x) => s + x.deaths, 0);
+    fields.push({
+      name: `Últimos ${days.length} ${days.length === 1 ? 'dia' : 'dias'}: ${fmtInt(k)} kills, ${fmtInt(d)} mortes`,
+      value: days.map((x) => `${fmtDay(x.date)}: ${fmtInt(x.kills)} kills · ${fmtInt(x.deaths)} mortes`).join('\n'),
+    });
+  } else {
+    fields.push({ name: 'Últimos dias', value: 'Nenhuma kill ou morte da guilda na amostra coletada.' });
+  }
+  if (g.topKillers.length) {
+    fields.push({
+      name: 'Quem mais mata',
+      value: g.topKillers.slice(0, 5).map((p) => `• [${esc(p.name)}](${playerUrl(p.id)}) · ${fmtInt(p.kills)} kills`).join('\n'),
+      inline: true,
+    });
+  }
+  if (g.weapons.length) {
+    fields.push({
+      name: 'Armas mais usadas',
+      value: g.weapons.slice(0, 5).map((w) => `• ${w.labelPt || w.type} (${fmtInt(w.count)}×)`).join('\n'),
+      inline: true,
+    });
+  }
+  const peak = peakHours(g.hoursBrt);
+  if (peak) fields.push({ name: 'Horários com mais kills (Brasília)', value: peak });
+  fields.push({
+    name: 'De onde vem',
+    value:
+      'Amostra do killboard público do Americas coletada pela Guarita' +
+      (g.coverageSince ? ` desde ${fmtDay(g.coverageSince)}` : '') +
+      '; membros e fama pela API oficial.',
+  });
+  return message(
+    { title: `Guilda ${g.name}`, url, description: desc.join('\n'), fields, timestamp: g.fetchedAt },
+    { link: { label: 'Página da guilda', url } },
+  );
+}
+
+/** Nome sem correspondência exata: lista as parecidas (ou diz que não achou). Efêmera. */
+export function renderGuildChoices(guilds: { name: string; alliance: string }[], query: string): MessageData {
+  if (!guilds.length) return notice(`Nenhuma guilda chamada “${clamp(query, 40)}” no killboard do Americas. Confira o nome exato, com os espaços.`);
+  const lines = guilds.slice(0, 5).map((g) => `• ${esc(g.name)}${g.alliance ? ` · aliança ${esc(g.alliance)}` : ''}`);
+  return notice(`Nenhuma guilda com o nome exato “${clamp(query, 40)}”. Repita o comando com um destes nomes:\n${lines.join('\n')}`);
+}
+
+/** Mensagem postada no canal ao configurar (também prova que o bot consegue escrever ali). */
+export function renderFeedWelcome(guildName: string, userId: string): MessageData {
+  return message({
+    title: `Killfeed da guilda ${guildName} ligado neste canal`,
+    url: guildUrl(guildName),
+    description:
+      'As kills e mortes da guilda registradas no killboard oficial aparecem aqui com alguns minutos de atraso. ' +
+      'É histórico, não aviso de inimigo por perto.\n\n' +
+      'Em cada morte, o botão “Pedir regear” monta a lista de recompra do equipamento para os oficiais. ' +
+      'A Guarita não paga nem transfere prata: aprovação e pagamento ficam com a guilda.\n\n' +
+      `Configurado por <@${userId}>.`,
+  });
+}
+
+export function renderFeedConfigured(guild: { name: string; alliance: string }, channelId: string): MessageData {
+  return message(
+    {
+      title: 'Killfeed configurado',
+      url: guildUrl(guild.name),
+      description:
+        `Guilda **${esc(guild.name)}**${guild.alliance ? ` (aliança ${esc(guild.alliance)})` : ''} no canal <#${channelId}>.\n\n` +
+        'A coleta roda a cada 5 minutos, com o atraso do próprio killboard, e guarda uma amostra das mortes do Americas: ' +
+        'nem toda luta da guilda aparece. Em rodadas cheias, parte dos eventos vira um resumo “+N eventos” para não lotar o canal.\n\n' +
+        'Para pausar: `/guilda feed desligar`. Para trocar de guilda ou de canal, use `/guilda configurar` de novo.',
+    },
+    { ephemeral: true },
+  );
+}
+
+export function renderFeedToggled(guildName: string, channelId: string, enabled: boolean): MessageData {
+  return notice(
+    enabled
+      ? `Killfeed da guilda **${esc(guildName)}** ligado em <#${channelId}>.`
+      : `Killfeed da guilda **${esc(guildName)}** desligado. Para voltar: \`/guilda feed ligar\`.`,
+  );
+}
+
+// ---------- Fase 2: regear ----------
+
+export interface RegearView {
+  time: string;
+  victim: { id: string; name: string; guild: string };
+  killer: { name: string; guild: string };
+  rebuy: { id: string; quality: number; price: number | null; cheapestCity: string | null; count?: number }[];
+  rebuyTotal: number | null;
+}
+
+/** Pedido de regear postado no canal, mencionando quem clicou (a menção não notifica ninguém). */
+export function renderRegear(r: RegearView, clickerId: string, nameOf: NameOf): MessageData {
+  const total = r.rebuyTotal != null ? `${fmtInt(r.rebuyTotal)} prata` : 'sem preço suficiente';
+  const lines = r.rebuy.slice(0, 12).map((x) => {
+    const qty = (x.count ?? 1) > 1 ? ` ×${fmtInt(x.count)}` : '';
+    const where = x.price != null && x.cheapestCity ? `${fmtInt(x.price)} em ${x.cheapestCity}` : 'sem preço';
+    return `• ${nameOf(x.id)}${qty} (${qualityName(Math.max(1, x.quality))} ou melhor): ${where}`;
+  });
+  const missing = r.rebuy.filter((x) => x.price == null).length;
+  const notes = ['Menor preço de venda nas cidades reais e Caerleon (Albion Online Data Project); confira no jogo antes de comprar.'];
+  if (missing) notes.push(`${missing} ${missing === 1 ? 'item ficou' : 'itens ficaram'} sem preço e fora do total.`);
+  notes.push('A Guarita só monta a lista: aprovação e pagamento ficam com a guilda.');
+  const m = message({
+    title: `Pedido de regear de ${r.victim.name}: total ${total}`,
+    url: playerUrl(r.victim.id),
+    description:
+      `**${esc(r.victim.name)}**${r.victim.guild ? ` [${esc(r.victim.guild)}]` : ''} morreu para **${esc(r.killer.name)}**` +
+      `${r.killer.guild ? ` [${esc(r.killer.guild)}]` : ''} em ${fmtDateBr(r.time)} (horário de Brasília).`,
+    color: 0xe74c3c,
+    fields: [
+      { name: 'Lista de recompra', value: lines.length ? lines.join('\n') : 'A vítima não tinha equipamento registrado.' },
+      { name: 'Observações', value: notes.join('\n') },
+    ],
+    timestamp: r.time,
+  });
+  return { ...m, content: `<@${clickerId}> pediu regear.` };
 }
